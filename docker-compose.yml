@@ -1,0 +1,33 @@
+version: "3.8"
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    environment:
+      BOT_TOKEN:   "${BOT_TOKEN}"
+      BOT_ALIAS:   "${BOT_ALIAS}"
+      DB_DSN:      "postgresql+asyncpg://admin:secret@db/app"
+      SECRET_KEY:  "${SECRET_KEY}"
+    depends_on: [db]
+    ports: ["80:8000"]
+    restart: unless-stopped
+
+  bot:
+    build: ./bot
+    environment:
+      BOT_TOKEN: "${BOT_TOKEN}"
+      PANEL_URL: "http://localhost:8000/login"
+    depends_on: [web]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
