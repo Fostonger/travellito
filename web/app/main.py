@@ -1,20 +1,24 @@
-import os, hmac, time, secrets
+import time
 from jose import jwt
-from fastapi import FastAPI, Request, HTTPException, Depends, Response
-from fastapi.responses import HTMLResponse
+from fastapi import File, UploadFile, BackgroundTasks, Depends, FastAPI, Request, HTTPException, Response
+from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from fastapi.responses import HTMLResponse
+import qrcode, io, requests, os, stripe
 from aiogram.utils.auth_widget import check_integrity
-from .models import Base, User       # see next section
+from .api_buy import router as buy_router
+from .models import Tour, Agency, Purchase, TourImage, Base, User
+from sqlalchemy import select
+from .deps import Session, engine, SessionDep
+from qrcode.image.pil import PilImage
+from .storage import upload_image
+from .storage import presigned
 
 TOKEN     = os.getenv("BOT_TOKEN")
-DB_DSN    = os.getenv("DB_DSN")     # postgresql+asyncpg://user:pass@db/app
 SECRET    = os.getenv("SECRET_KEY") # random 32 bytes
 templates = Jinja2Templates(directory="templates")
 
 app = FastAPI()
-engine = create_async_engine(DB_DSN, echo=False, pool_size=5)
-Session = async_sessionmaker(engine, expire_on_commit=False)
 
 # ---- helpers ------------------------------------------------------------
 def sign(payload: dict) -> str:
@@ -26,6 +30,10 @@ async def current_user(req: Request):
         raise HTTPException(401)
     return jwt.decode(token, SECRET, algorithms=["HS256"])
 
+app.include_router(buy_router)
+
+stripe.api_key = os.getenv("STRIPE_SK")            # add to compose
+
 # ---- routes -------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
@@ -36,6 +44,10 @@ async def startup():
 def login_page(request: Request):
     return templates.TemplateResponse("login.html",
             {"request": request, "TELEGRAM_BOT_ALIAS": os.getenv("BOT_ALIAS")})
+
+@app.get("/admin/upload", response_class=HTMLResponse)
+def upload_page(request: Request):
+    return templates.TemplateResponse("tour_form.html", {"request": request})
 
 @app.get("/auth/telegram")
 async def telegram_auth(request: Request, resp: Response):
@@ -51,3 +63,90 @@ async def telegram_auth(request: Request, resp: Response):
 @app.get("/admin", dependencies=[Depends(current_user)])
 def admin_home():
     return {"status": "Welcome to the admin panel"}
+
+# ---------- QR code ----------
+@app.get("/landlord/{landlord_id}/qrcode", response_class=Response)
+async def landlord_qr(landlord_id: int):
+    url = f"https://t.me/{os.getenv('BOT_ALIAS')}?start=ref_{landlord_id}"
+    img = qrcode.make(url, image_factory=PilImage)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(),
+                    media_type="image/png")
+
+# ---------- Simple HTML form to upload a tour ----------
+class TourIn(BaseModel):
+    agency_id: int
+    title: str
+    description: str
+    price: float
+
+@app.post("/admin/tours")
+async def create_tour(
+    data: TourIn,
+    images: list[UploadFile] = File(default=[]),
+    user=Depends(current_user)
+):
+    async with Session() as s, s.begin():
+        tour = Tour(**data.dict())
+        s.add(tour)
+        await s.flush()
+        for img in images:
+            key = upload_image(img)
+            s.add(TourImage(tour_id=tour.id, key=key))
+    return {"id": tour.id}
+
+# ---------- Background pull from 3rd-party API ----------
+async def sync_agency(agency_id: int):
+    async with Session() as s:
+        agency = await s.get(Agency, agency_id)
+        r = requests.get(f"{agency.api_base}/tours").json()   # demo
+        for item in r:
+            stmt = select(Tour).where(Tour.external_id == item["id"])
+            db_tour = await s.scalar(stmt)
+            if not db_tour:
+                db_tour = Tour(agency_id=agency.id)
+            db_tour.title = item["title"]
+            db_tour.description = item["description"]
+            db_tour.price = item["price"]
+            s.add(db_tour)
+
+@app.post("/admin/agency/{aid}/sync")
+async def manual_sync(aid: int, bg: BackgroundTasks):
+    bg.add_task(sync_agency, aid)
+    return {"scheduled": True}
+
+# ---------- Stripe webhook ----------
+@app.post("/webhook/stripe")
+async def stripe_hook(request: Request):
+    sig  = request.headers["Stripe-Signature"]
+    evt  = stripe.Webhook.construct_event(
+        await request.body(),
+        sig,
+        os.getenv("STRIPE_WH_SEC")
+    )
+    if evt["type"] == "checkout.session.completed":
+        data = evt["data"]["object"]
+        user_id     = int(data["client_reference_id"])
+        landlord_id = int(data["metadata"]["landlord_id"])
+        tour_id     = int(data["metadata"]["tour_id"])
+        qty         = int(data["metadata"]["qty"])
+        amount      = float(data["amount_total"] / 100)
+        async with Session() as s, s.begin():
+            s.add(Purchase(user_id=user_id, landlord_id=landlord_id,
+                           tour_id=tour_id, qty=qty, amount=amount))
+    return {"ok": True}
+
+@app.get("/tours/{tid}")
+async def tour_detail(tid: int, sess: SessionDep):
+    tour = await sess.get(Tour, tid)
+    return {
+        "id": tour.id,
+        "title": tour.title,
+        "description": tour.description,
+        "price": str(tour.price),
+        "images": [presigned(img.key) for img in tour.images]
+    }
+
+from fastapi.staticfiles import StaticFiles
+app.mount("/static", StaticFiles(directory="static"), name="static")
