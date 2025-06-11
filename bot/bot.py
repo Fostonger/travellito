@@ -2,7 +2,7 @@ import asyncio, os, textwrap
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.types import (
     Message, InlineKeyboardButton, InlineKeyboardMarkup,
-    CallbackQuery, InputMediaPhoto
+    CallbackQuery, InputMediaPhoto, BufferedInputFile
 )
 from aiogram.filters.callback_data import CallbackData
 import aiohttp
@@ -50,10 +50,17 @@ async def show_tour(call: CallbackQuery, callback_data: TourCB):
     tid = callback_data.tid
     async with aiohttp.ClientSession() as cli:
         tour = await (await cli.get(f"{API_BASE}/tours/{tid}")).json()
-    media = [InputMediaPhoto(url) for url in tour["images"]] or None
+
+        media_items = []
+        for idx, url in enumerate(tour["images"], start=1):
+            async with cli.get(url) as img_resp:
+                img_bytes = await img_resp.read()
+            file = BufferedInputFile(img_bytes, filename=f"tour_{tid}_{idx}.jpg")
+            media_items.append(InputMediaPhoto(media=file))
+
     desc = textwrap.shorten(tour["description"], 1024)
-    if media:
-        await call.message.answer_media_group(media)
+    if media_items:
+        await call.message.answer_media_group(media_items)
     await call.message.answer(
         f"*{tour['title']}*\n\n{desc}\n\nPrice: {tour['price']}€",
         reply_markup=InlineKeyboardMarkup(
@@ -69,7 +76,7 @@ async def show_tour(call: CallbackQuery, callback_data: TourCB):
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_tour(call: CallbackQuery):
     tid = int(call.data.split("_")[1])
-    # create Stripe checkout session via API
+    # call backend `/buy` endpoint to create a payment session (provider TBD)
     async with aiohttp.ClientSession() as cli:
         r = await cli.post(f"{API_BASE}/buy", json={
             "tour_id": tid,

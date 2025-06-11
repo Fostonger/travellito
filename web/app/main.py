@@ -1,14 +1,15 @@
 import time
 from jose import jwt
-from fastapi import File, UploadFile, BackgroundTasks, Depends, FastAPI, Request, HTTPException, Response
+from fastapi import File, UploadFile, BackgroundTasks, Depends, FastAPI, Request, HTTPException, Response, Form
 from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
-import qrcode, io, requests, os, stripe
+import qrcode, io, requests, os, json
 from aiogram.utils.auth_widget import check_integrity
 from .api_buy import router as buy_router
-from .models import Tour, Agency, Purchase, TourImage, Base, User
+from .models import Tour, Agency, TourImage, Base, User
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from .deps import Session, engine, SessionDep
 from qrcode.image.pil import PilImage
 from .storage import upload_image
@@ -31,8 +32,6 @@ async def current_user(req: Request):
     return jwt.decode(token, SECRET, algorithms=["HS256"])
 
 app.include_router(buy_router)
-
-stripe.api_key = os.getenv("STRIPE_SK")            # add to compose
 
 # ---- routes -------------------------------------------------------------
 @app.on_event("startup")
@@ -83,17 +82,36 @@ class TourIn(BaseModel):
 
 @app.post("/admin/tours")
 async def create_tour(
-    data: TourIn,
+    data: str = Form(...),
     images: list[UploadFile] = File(default=[]),
     user=Depends(current_user)
 ):
+    """Create a tour from the multipart form payload coming from the admin UI.
+
+    The UI sends a field called `data` that contains JSON-encoded tour information
+    (see `templates/tour_form.html`). We parse it, validate with the `TourIn`
+    schema and persist the record. Images are stored in S3/MinIO via
+    `upload_image`.
+    """
+    payload = json.loads(data)
+    tour_in = TourIn(**payload)
+
     async with Session() as s, s.begin():
-        tour = Tour(**data.dict())
+        # Ensure agency exists – create a placeholder if missing so we don't hit a
+        # FK violation when admins forget to create agencies first.
+        agency = await s.get(Agency, tour_in.agency_id)
+        if not agency:
+            agency = Agency(id=tour_in.agency_id, name=f"Agency #{tour_in.agency_id}")
+            s.add(agency)
+
+        tour = Tour(**tour_in.dict())
         s.add(tour)
         await s.flush()
+
         for img in images:
             key = upload_image(img)
             s.add(TourImage(tour_id=tour.id, key=key))
+
     return {"id": tour.id}
 
 # ---------- Background pull from 3rd-party API ----------
@@ -116,37 +134,47 @@ async def manual_sync(aid: int, bg: BackgroundTasks):
     bg.add_task(sync_agency, aid)
     return {"scheduled": True}
 
-# ---------- Stripe webhook ----------
-@app.post("/webhook/stripe")
-async def stripe_hook(request: Request):
-    sig  = request.headers["Stripe-Signature"]
-    evt  = stripe.Webhook.construct_event(
-        await request.body(),
-        sig,
-        os.getenv("STRIPE_WH_SEC")
-    )
-    if evt["type"] == "checkout.session.completed":
-        data = evt["data"]["object"]
-        user_id     = int(data["client_reference_id"])
-        landlord_id = int(data["metadata"]["landlord_id"])
-        tour_id     = int(data["metadata"]["tour_id"])
-        qty         = int(data["metadata"]["qty"])
-        amount      = float(data["amount_total"] / 100)
-        async with Session() as s, s.begin():
-            s.add(Purchase(user_id=user_id, landlord_id=landlord_id,
-                           tour_id=tour_id, qty=qty, amount=amount))
-    return {"ok": True}
+# ---------- Payment webhook ----------
+# NOTE: Stripe has been removed from the project. A new payment provider will
+# be integrated in the future. Keep this placeholder so that routing does not
+# break if referenced elsewhere.
+@app.post("/webhook/payment")
+async def payment_hook():
+    raise HTTPException(501, "Payment integration pending")
 
 @app.get("/tours/{tid}")
 async def tour_detail(tid: int, sess: SessionDep):
-    tour = await sess.get(Tour, tid)
+    """Return full tour data including presigned image URLs.
+
+    Uses `selectinload` to eagerly fetch `tour.images` within the same DB round-trip,
+    avoiding the async-unfriendly lazy loading that triggered `MissingGreenlet`.
+    """
+    stmt = (
+        select(Tour)
+        .options(selectinload(Tour.images))
+        .where(Tour.id == tid)
+    )
+    tour = await sess.scalar(stmt)
+    if not tour:
+        raise HTTPException(404, "Tour not found")
+
     return {
         "id": tour.id,
         "title": tour.title,
         "description": tour.description,
         "price": str(tour.price),
-        "images": [presigned(img.key) for img in tour.images]
+        "images": [presigned(img.key) for img in tour.images],
     }
+
+# ---------- Tours listing for bot ----------
+@app.get("/tours")
+async def list_tours(sess: SessionDep):
+    """Return a lightweight list of tours for the Telegram bot UI."""
+    result = await sess.execute(select(Tour.id, Tour.title))
+    return [
+        {"id": tid, "title": title}
+        for tid, title in result
+    ]
 
 from fastapi.staticfiles import StaticFiles
 app.mount("/static", StaticFiles(directory="static"), name="static")
