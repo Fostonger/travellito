@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { t, fmtPrice } from '../i18n';
 
 export default function MyBookings() {
   const [bookings, setBookings] = useState([]);
@@ -23,17 +24,17 @@ export default function MyBookings() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2>My Bookings</h2>
+      <h2>{t('my_bookings')}</h2>
       <ul>
         {bookings.map((b: any) => (
           <li key={b.id}>
-            #{b.id} – {b.amount} € &nbsp;
-            <button onClick={() => handleCancel(b.id)}>Cancel</button>
+            #{b.id} – {fmtPrice(b.amount)} &nbsp;
+            <button onClick={() => handleCancel(b.id)}>{t('cancel')}</button>
           </li>
         ))}
       </ul>
       <p>
-        <Link to="/">Back</Link>
+        <Link to="/">{t('back')}</Link>
       </p>
     </div>
   );

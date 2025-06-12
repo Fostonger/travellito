@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { t, fmtPrice } from '../i18n';
 
 interface Tour {
   id: number;
@@ -29,20 +30,20 @@ export default function App() {
     load();
   }, []);
 
-  if (loading) return <p>Loading…</p>;
+  if (loading) return <p>{t('loading')}</p>;
 
   return (
     <div style={{ padding: 16 }}>
-      <h2>Available Tours</h2>
+      <h2>{t('available_tours')}</h2>
       <ul>
         {tours.map((t) => (
           <li key={t.id} style={{ margin: '12px 0' }}>
-            <Link to={`/tour/${t.id}`}>{t.title}</Link> – {t.price_net} €
+            <Link to={`/tour/${t.id}`}>{t.title}</Link> – {fmtPrice(t.price_net)}
           </li>
         ))}
       </ul>
       <p>
-        <Link to="/bookings">My Bookings</Link>
+        <Link to="/bookings">{t('my_bookings')}</Link>
       </p>
     </div>
   );

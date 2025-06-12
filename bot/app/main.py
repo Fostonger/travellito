@@ -109,7 +109,8 @@ router.message.middleware(RateLimitMiddleware())
 async def cmd_start(msg: Message):
     # Manager bot skips WebApp and only offers broadcast command
     if BOT_MODE == "manager":
-        await msg.answer("👋 Hi Manager! Use /my_tours to send updates to your tourists.")
+        lang = _detect_lang(msg)
+        await msg.answer(_("manager_greet", lang))
         return
 
     # Preserve the raw payload (after /start) – contains QR metadata like
@@ -118,18 +119,21 @@ async def cmd_start(msg: Message):
     if msg.text and len(msg.text.split(maxsplit=1)) == 2:
         args = msg.text.split(maxsplit=1)[1]
 
+    lang = _detect_lang(msg)
     launch_url = settings.WEBAPP_URL
     if args:
         # Append raw payload so the WebApp can handle landlord attribution & city filter
-        launch_url += f"?start={args}"
+        launch_url += f"?start={args}&lang={lang}"
+    else:
+        launch_url += f"?lang={lang}"
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🌍 Browse Tours", web_app=WebAppInfo(url=launch_url))]
+            [InlineKeyboardButton(text=_("browse_btn", lang), web_app=WebAppInfo(url=launch_url))]
         ]
     )
 
-    await msg.answer("👋 Hi! Tap the button below to browse tours.", reply_markup=kb)
+    await msg.answer(_("greet", lang), reply_markup=kb)
 
 
 @router.message()
@@ -315,4 +319,89 @@ async def on_broadcast_msg(msg: Message, state: FSMContext):
     else:
         await msg.answer("✅ Broadcast scheduled! Tourists will receive your message shortly.")
 
-    await state.clear() 
+    await state.clear()
+
+
+# ---------------------------------------------------------------------------
+#  Basic i18n helper (ru / en)
+# ---------------------------------------------------------------------------
+
+# In-memory user preference.  For MVP we keep it simple; migrate to Redis/DB
+# if persistence across restarts becomes important.
+_user_lang_pref: dict[int, str] = {}
+
+_MESSAGES = {
+    "ru": {
+        "greet": "👋 Привет! Нажмите кнопку ниже, чтобы посмотреть экскурсии.",
+        "browse_btn": "🌍 Смотреть экскурсии",
+        "manager_greet": "👋 Здравствуйте, менеджер! Используйте /my_tours для рассылки сообщений туристам.",
+        "lang_prompt": "🌐 Выберите язык / Choose language",
+        "lang_set": "✅ Язык переключён на {lang}",
+    },
+    "en": {
+        "greet": "👋 Hi! Tap the button below to browse tours.",
+        "browse_btn": "🌍 Browse Tours",
+        "manager_greet": "👋 Hi Manager! Use /my_tours to send updates to your tourists.",
+        "lang_prompt": "🌐 Choose your language",
+        "lang_set": "✅ Language switched to {lang}",
+    },
+}
+
+
+def _detect_lang(msg: "Message | CallbackQuery") -> str:
+    """Return language code 'ru' or 'en' for *msg* with fallbacks."""
+    uid = msg.from_user.id if msg.from_user else None  # type: ignore[attr-defined]
+    # 1) Explicit preference
+    if uid and uid in _user_lang_pref:
+        return _user_lang_pref[uid]
+    # 2) Telegram UI language (e.g. 'ru', 'en', 'en-US')
+    code: str | None = msg.from_user.language_code if msg.from_user else None  # type: ignore[attr-defined]
+    if code and code.lower().startswith("ru"):
+        return "ru"
+    return "en"
+
+
+# Helper to pull a translated string
+def _(key: str, lang: str) -> str:
+    return _MESSAGES.get(lang, _MESSAGES["en"]).get(key, key)
+
+
+# ---------------------------------------------------------------------------
+#  Language selection command & callbacks
+# ---------------------------------------------------------------------------
+
+class LangCB(CallbackData, prefix="lang"):
+    code: str  # 'ru' | 'en'
+
+
+# /lang command -- lets a user override auto-detected language
+@router.message(F.text == "/lang")
+async def cmd_lang(msg: Message):
+    lang = _detect_lang(msg)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Русский", callback_data=LangCB(code="ru").pack()),
+                InlineKeyboardButton(text="English", callback_data=LangCB(code="en").pack()),
+            ]
+        ]
+    )
+    await msg.answer(_("lang_prompt", lang), reply_markup=kb)
+
+
+@router.callback_query(LangCB.filter())
+async def on_lang_cb(cb: CallbackQuery, callback_data: LangCB):
+    _user_lang_pref[cb.from_user.id] = callback_data.code  # type: ignore[arg-type]
+    # Confirmation alert (no message edit needed)
+    text = _("lang_set", callback_data.code).format(
+        lang="Русский" if callback_data.code == "ru" else "English"
+    )
+    await cb.answer(text, show_alert=True)
+    # Optionally delete keyboard to reduce clutter
+    try:
+        await cb.message.edit_reply_markup(reply_markup=None)  # type: ignore[func-returns-value]
+    except Exception:
+        pass
+
+
+        pass 

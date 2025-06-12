@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { t, fmtPrice } from '../i18n';
 
 export default function TourDetail() {
   const { id } = useParams();
@@ -25,24 +26,24 @@ export default function TourDetail() {
     load();
   }, [id]);
 
-  if (loading) return <p>Loading…</p>;
-  if (!tour) return <p>Not found</p>;
+  if (loading) return <p>{t('loading')}</p>;
+  if (!tour) return <p>{t('not_found')}</p>;
 
   return (
     <div style={{ padding: 16 }}>
       <h2>{tour.title}</h2>
       <p>{tour.description}</p>
-      <h3>Upcoming departures</h3>
+      <h3>{t('upcoming_departures')}</h3>
       <ul>
         {departures.map((d: any) => (
           <li key={d.id}>
-            {new Date(d.starts_at).toLocaleString()} – seats left: {d.seats_left}{' '}
-            <button onClick={() => nav('/checkout', { state: { tourId: id, departure: d } })}>Book</button>
+            {new Date(d.starts_at).toLocaleString()} – {t('seats_left')}: {d.seats_left}{' '}
+            <button onClick={() => nav('/checkout', { state: { tourId: id, departure: d } })}>{t('book')}</button>
           </li>
         ))}
       </ul>
       <p>
-        <Link to="/">Back</Link>
+        <Link to="/">{t('back')}</Link>
       </p>
     </div>
   );

@@ -1,37 +1,37 @@
 <!-- Landlord Dashboard -->
 {% extends "base.html" %}
-{% block title %}My Apartments{% endblock %}
+{% block title %}Мои квартиры{% endblock %}
 {% block body %}
 <div class="max-w-5xl mx-auto my-10 p-8 bg-white/90 rounded-2xl shadow-xl backdrop-blur">
-  <h1 class="text-3xl font-extrabold mb-6 text-emerald-700">Welcome, {{ landlord.name or 'Partner' }}</h1>
+  <h1 class="text-3xl font-extrabold mb-6 text-emerald-700">Добро пожаловать, {{ landlord.name or 'Партнёр' }}</h1>
 
   <!-- Metrics -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
     <div class="p-6 rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-50 shadow">
-      <h3 class="text-xl font-semibold text-emerald-800 mb-2">All-time</h3>
+      <h3 class="text-xl font-semibold text-emerald-800 mb-2">За всё время</h3>
       <p class="text-5xl font-black text-emerald-700">{{ total_qty }}</p>
-      <p class="text-gray-600">tickets</p>
-      <p class="mt-2 text-xl text-gray-800">€ {{ total_amount }}</p>
+      <p class="text-gray-600">билетов</p>
+      <p class="mt-2 text-xl text-gray-800">₽ {{ total_amount }}</p>
     </div>
     <div class="p-6 rounded-xl bg-gradient-to-br from-cyan-100 to-cyan-50 shadow">
-      <h3 class="text-xl font-semibold text-cyan-800 mb-2">Last 30 days</h3>
+      <h3 class="text-xl font-semibold text-cyan-800 mb-2">Последние 30 дней</h3>
       <p class="text-5xl font-black text-cyan-700">{{ last_qty }}</p>
-      <p class="text-gray-600">tickets</p>
-      <p class="mt-2 text-xl text-gray-800">€ {{ last_amount }}</p>
+      <p class="text-gray-600">билетов</p>
+      <p class="mt-2 text-xl text-gray-800">₽ {{ last_amount }}</p>
     </div>
   </div>
 
   <!-- Apartments table -->
   <div class="flex justify-between items-center mb-4">
-    <h2 class="text-2xl font-bold">Apartments</h2>
-    <a href="/partner/apartments/new" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">+ Add Apartment</a>
+    <h2 class="text-2xl font-bold">Квартиры</h2>
+    <a href="/partner/apartments/new" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">+ Добавить квартиру</a>
   </div>
   <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200">
       <thead class="bg-gray-50">
         <tr>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">City</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Название</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Город</th>
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QR</th>
         </tr>
       </thead>
@@ -41,12 +41,12 @@
           <td class="px-4 py-2 whitespace-nowrap">{{ a.name or 'Apartment #' ~ a.id }}</td>
           <td class="px-4 py-2 whitespace-nowrap">{{ a.city }}</td>
           <td class="px-4 py-2 whitespace-nowrap">
-            <a href="/partner/apartments/{{ a.id }}/qrcode" target="_blank" class="text-emerald-600 hover:underline">Download</a>
+            <a href="/partner/apartments/{{ a.id }}/qrcode" target="_blank" class="text-emerald-600 hover:underline">Скачать</a>
           </td>
         </tr>
         {% endfor %}
         {% if apartments|length == 0 %}
-        <tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No apartments yet</td></tr>
+        <tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">Квартиры ещё не добавлены</td></tr>
         {% endif %}
       </tbody>
     </table>

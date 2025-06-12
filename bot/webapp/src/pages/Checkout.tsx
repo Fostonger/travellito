@@ -2,12 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { t, fmtPrice } from '../i18n';
 
 export default function Checkout() {
   const nav = useNavigate();
   const { state } = useLocation() as any;
   if (!state?.tourId || !state.departure) {
-    return <p>Missing context</p>;
+    return <p>{t('missing_ctx')}</p>;
   }
   const tourId = state.tourId;
   const departure = state.departure;
@@ -51,16 +52,16 @@ export default function Checkout() {
       departure_id: departure.id,
       items,
     });
-    alert('Booking confirmed!');
+    alert(t('booking_confirmed'));
     nav('/bookings');
   };
 
   return (
     <div style={{ padding: 16 }}>
-      <h2>Checkout – {new Date(departure.starts_at).toLocaleString()}</h2>
+      <h2>{t('checkout', { date: new Date(departure.starts_at).toLocaleString() })}</h2>
       {categories.map((c: any) => (
         <div key={c.id} style={{ marginBottom: 8 }}>
-          {c.name} – {c.price_net} € &times;{' '}
+          {c.name} – {fmtPrice(c.price_net)} &times;{' '}
           <input
             type="number"
             min="0"
@@ -72,11 +73,11 @@ export default function Checkout() {
       ))}
       {quote && (
         <p>
-          <strong>Total:</strong> {quote.total_net} € – seats left: {quote.seats_left}
+          <strong>{t('total')}</strong> {fmtPrice(quote.total_net)} – {t('seats_left')}: {quote.seats_left}
         </p>
       )}
       <button disabled={!quote} onClick={handleConfirm}>
-        Confirm Booking
+        {t('confirm')}
       </button>
     </div>
   );
