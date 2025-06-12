@@ -7,7 +7,11 @@ from fastapi import HTTPException
 #  Redis connection (shared pooled client)
 # ---------------------------------------------------------------------------
 
-REDIS_DSN = os.getenv("REDIS_DSN", "redis://redis:6379/0")
+# Accept both REDIS_DSN (preferred) and REDIS_URL (legacy/dev) to avoid misconfiguration.
+# Falls back to the local network default when neither is provided.
+# This lets docker-compose.override.yml (which sets REDIS_URL) work out-of-the-box
+# while keeping a single canonical env var for production deployments.
+REDIS_DSN = os.getenv("REDIS_DSN") or os.getenv("REDIS_URL") or "redis://redis:6379/0"
 _redis = aioredis.from_url(REDIS_DSN, encoding="utf-8", decode_responses=True)
 
 # ---------------------------------------------------------------------------
