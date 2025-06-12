@@ -1,37 +1,40 @@
-import time
-from jose import jwt
-from fastapi import File, UploadFile, BackgroundTasks, Depends, FastAPI, Request, HTTPException, Response, Form
+from fastapi import File, UploadFile, BackgroundTasks, Depends, FastAPI, Request, HTTPException, Response, Form, Body
 from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 import qrcode, io, requests, os, json
-from aiogram.utils.auth_widget import check_integrity
-from .api_buy import router as buy_router
-from .models import Tour, Agency, TourImage, Base, User
-from sqlalchemy import select
+from .models import Tour, Agency, TourImage, Base, User, Landlord, Apartment, Purchase, Setting
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from .deps import Session, engine, SessionDep
 from qrcode.image.pil import PilImage
-from .storage import upload_image
-from .storage import presigned
+from .storage import upload_image, presigned, client, BUCKET
+from .security import current_user
+from datetime import datetime, timedelta
+from .api import api_router
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
-TOKEN     = os.getenv("BOT_TOKEN")
-SECRET    = os.getenv("SECRET_KEY") # random 32 bytes
 templates = Jinja2Templates(directory="templates")
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 app = FastAPI()
 
-# ---- helpers ------------------------------------------------------------
-def sign(payload: dict) -> str:
-    return jwt.encode(payload, SECRET, algorithm="HS256")
+# Attach rate-limiter to app
+app.state.limiter = limiter
 
-async def current_user(req: Request):
-    token = req.cookies.get("session")
-    if not token:
-        raise HTTPException(401)
-    return jwt.decode(token, SECRET, algorithms=["HS256"])
+@app.exception_handler(RateLimitExceeded)
+async def ratelimit_handler(request: Request, exc: RateLimitExceeded):
+    return PlainTextResponse("Too many requests", status_code=429)
 
-app.include_router(buy_router)
+# Apply a sensible default limit to all endpoints (can be overridden per-route)
+app.middleware("http")(limiter.middleware)
+
+app.include_router(api_router)
+
+# Mount new API routers
 
 # ---- routes -------------------------------------------------------------
 @app.on_event("startup")
@@ -39,39 +42,91 @@ async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Ensure platform default settings exist
+    async with Session() as s, s.begin():
+        default_setting = await s.get(Setting, "default_max_commission")
+        if default_setting is None:
+            s.add(Setting(key="default_max_commission", value=10))
+
+    # Start periodic task to lock departures past free-cancellation cutoff
+    async def _cutoff_loop():
+        while True:
+            async with Session() as sess:
+                now = datetime.utcnow()
+                # Fetch still-modifiable departures joined with their tours
+                stmt = select(Departure).join(Tour).where(Departure.modifiable == True)
+                deps = (await sess.scalars(stmt)).unique().all()
+                changed = False
+                for dep in deps:
+                    cutoff = dep.starts_at - timedelta(hours=dep.tour.free_cancellation_cutoff_h)
+                    if now >= cutoff:
+                        dep.modifiable = False
+                        changed = True
+                if changed:
+                    await sess.commit()
+            # Sleep 1 hour before next sweep
+            await asyncio.sleep(3600)
+
+    asyncio.create_task(_cutoff_loop())
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse("login.html",
             {"request": request, "TELEGRAM_BOT_ALIAS": os.getenv("BOT_ALIAS")})
 
-@app.get("/admin/upload", response_class=HTMLResponse)
-def upload_page(request: Request):
-    return templates.TemplateResponse("tour_form.html", {"request": request})
+@app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def admin_dashboard(request: Request):
+    """Render the main admin dashboard (summary metrics)."""
+    return templates.TemplateResponse("admin/dashboard.html", {"request": request})
 
-@app.get("/auth/telegram")
-async def telegram_auth(request: Request, resp: Response):
-    data = dict(request.query_params)
-    if not check_integrity(TOKEN, data):
-        raise HTTPException(400, "Bad signature")
-    async with Session() as s, s.begin():
-        user = await User.get_or_create(s, data)   # custom helper
-    resp.set_cookie("session", sign({"u": user.id, "exp": time.time()+86400}),
-                    httponly=True, secure=True)
-    return {"ok": True}
+# ---------- Admin HTML pages ----------
+@app.get("/admin/tours", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def admin_tours(request: Request):
+    return templates.TemplateResponse("admin/tours.html", {"request": request})
 
-@app.get("/admin", dependencies=[Depends(current_user)])
-def admin_home():
-    return {"status": "Welcome to the admin panel"}
+@app.get("/admin/agencies", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def admin_agencies(request: Request):
+    return templates.TemplateResponse("admin/agencies.html", {"request": request})
 
-# ---------- QR code ----------
-@app.get("/landlord/{landlord_id}/qrcode", response_class=Response)
-async def landlord_qr(landlord_id: int):
-    url = f"https://t.me/{os.getenv('BOT_ALIAS')}?start=ref_{landlord_id}"
-    img = qrcode.make(url, image_factory=PilImage)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return Response(content=buf.getvalue(),
-                    media_type="image/png")
+@app.get("/admin/landlords", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def admin_landlords(request: Request):
+    return templates.TemplateResponse("admin/landlords.html", {"request": request})
+
+@app.get("/admin/settings", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def admin_settings(request: Request):
+    return templates.TemplateResponse("admin/settings.html", {"request": request})
+
+# ---------- Lightweight JSON APIs consumed by the admin UI ----------
+@app.get("/admin/metrics", dependencies=[Depends(current_user)])
+async def admin_metrics(sess: SessionDep):
+    tours = await sess.scalar(select(func.count()).select_from(Tour))
+    agencies = await sess.scalar(select(func.count()).select_from(Agency))
+    landlords = await sess.scalar(select(func.count()).select_from(Landlord))
+    return {"tours": tours or 0, "agencies": agencies or 0, "landlords": landlords or 0}
+
+@app.get("/admin/api/tours", dependencies=[Depends(current_user)])
+async def api_list_tours(sess: SessionDep):
+    result = await sess.execute(select(Tour.id, Tour.title, Tour.price, Tour.max_commission_pct))
+    return [
+        {"id": tid, "title": title, "price": str(price), "max_commission": str(maxc)}
+        for tid, title, price, maxc in result
+    ]
+
+@app.get("/admin/api/agencies", dependencies=[Depends(current_user)])
+async def api_agencies(sess: SessionDep):
+    result = await sess.execute(select(Agency.id, Agency.name, Agency.api_base))
+    return [
+        {"id": aid, "name": name, "api_base": api_base}
+        for aid, name, api_base in result
+    ]
+
+@app.get("/admin/api/landlords", dependencies=[Depends(current_user)])
+async def api_landlords(sess: SessionDep):
+    result = await sess.execute(select(Landlord.id, Landlord.name))
+    return [
+        {"id": lid, "name": name}
+        for lid, name in result
+    ]
 
 # ---------- Simple HTML form to upload a tour ----------
 class TourIn(BaseModel):
@@ -79,6 +134,10 @@ class TourIn(BaseModel):
     title: str
     description: str
     price: float
+    duration_minutes: int | None = None
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 @app.post("/admin/tours")
 async def create_tour(
@@ -134,47 +193,159 @@ async def manual_sync(aid: int, bg: BackgroundTasks):
     bg.add_task(sync_agency, aid)
     return {"scheduled": True}
 
-# ---------- Payment webhook ----------
-# NOTE: Stripe has been removed from the project. A new payment provider will
-# be integrated in the future. Keep this placeholder so that routing does not
-# break if referenced elsewhere.
-@app.post("/webhook/payment")
-async def payment_hook():
-    raise HTTPException(501, "Payment integration pending")
+# ----------------------------------------------------------------------
+#                       LANDLORD / PARTNER PAGES
+# ----------------------------------------------------------------------
 
-@app.get("/tours/{tid}")
-async def tour_detail(tid: int, sess: SessionDep):
-    """Return full tour data including presigned image URLs.
+# Helper to fetch the landlord linked to the current user (one-to-one for now)
 
-    Uses `selectinload` to eagerly fetch `tour.images` within the same DB round-trip,
-    avoiding the async-unfriendly lazy loading that triggered `MissingGreenlet`.
-    """
-    stmt = (
-        select(Tour)
-        .options(selectinload(Tour.images))
-        .where(Tour.id == tid)
+async def current_landlord(sess: SessionDep, user=Depends(current_user)) -> Landlord:
+    stmt = select(Landlord).where(Landlord.user_id == user["u"])
+    landlord = await sess.scalar(stmt)
+    if not landlord:
+        raise HTTPException(403, "No landlord account linked to this user")
+    return landlord
+
+# ------------------ Dashboard ------------------
+
+@app.get("/partner", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def landlord_dashboard(request: Request, sess: SessionDep, landlord: Landlord = Depends(current_landlord)):
+    # Aggregated metrics
+    now = datetime.utcnow()
+    last_30 = now - timedelta(days=30)
+
+    # All-time metrics
+    res_all = await sess.execute(
+        # Sum gross commission earnings instead of tourist net price
+        select(
+            func.coalesce(func.sum(Purchase.qty), 0),
+            func.coalesce(
+                func.sum(Purchase.amount_gross * (func.coalesce(Purchase.commission_pct, 0) / 100)),
+                0,
+            ),
+        )
+        .where(Purchase.landlord_id == landlord.id)
     )
-    tour = await sess.scalar(stmt)
-    if not tour:
-        raise HTTPException(404, "Tour not found")
+    total_qty, total_amount = res_all.one()
 
-    return {
-        "id": tour.id,
-        "title": tour.title,
-        "description": tour.description,
-        "price": str(tour.price),
-        "images": [presigned(img.key) for img in tour.images],
-    }
+    # Last-30-days metrics
+    res_30 = await sess.execute(
+        select(
+            func.coalesce(func.sum(Purchase.qty), 0),
+            func.coalesce(
+                func.sum(Purchase.amount_gross * (func.coalesce(Purchase.commission_pct, 0) / 100)),
+                0,
+            ),
+        )
+        .where(Purchase.landlord_id == landlord.id, Purchase.ts >= last_30)
+    )
+    last_qty, last_amount = res_30.one()
 
-# ---------- Tours listing for bot ----------
-@app.get("/tours")
-async def list_tours(sess: SessionDep):
-    """Return a lightweight list of tours for the Telegram bot UI."""
-    result = await sess.execute(select(Tour.id, Tour.title))
-    return [
-        {"id": tid, "title": title}
-        for tid, title in result
-    ]
+    # Apartments list
+    apts_stmt = select(Apartment).where(Apartment.landlord_id == landlord.id)
+    apartments = (await sess.scalars(apts_stmt)).all()
+
+    return templates.TemplateResponse("landlord_dashboard.html", {
+        "request": request,
+        "landlord": landlord,
+        "total_qty": total_qty,
+        "total_amount": total_amount,
+        "last_qty": last_qty,
+        "last_amount": last_amount,
+        "apartments": apartments,
+    })
+
+# ------------------ Apartment Form ------------------
+
+@app.get("/partner/apartments/new", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+async def new_apartment_form(request: Request):
+    return templates.TemplateResponse("apartment_form.html", {"request": request})
+
+
+class ApartmentIn(BaseModel):
+    name: str | None = None
+    city: str
+
+
+@app.post("/partner/apartments")
+async def create_apartment(data: ApartmentIn, sess: SessionDep, landlord: Landlord = Depends(current_landlord)):
+    apt = Apartment(
+        landlord_id=landlord.id,
+        name=data.name,
+        city=data.city,
+    )
+    sess.add(apt)
+    await sess.commit()
+    await sess.refresh(apt)
+    return {"id": apt.id}
+
+
+# ------------------ QR code per apartment ------------------
+# Example payload: apt_<id>_<city>_<ref>
+
+@app.get("/partner/apartments/{apt_id}/qrcode", response_class=Response, dependencies=[Depends(current_user)])
+async def apartment_qr(apt_id: int, landlord: Landlord = Depends(current_landlord), sess: SessionDep):
+    apt = await sess.get(Apartment, apt_id)
+    if not apt or apt.landlord_id != landlord.id:
+        raise HTTPException(404)
+
+    ref = landlord.referral_code or str(landlord.id)
+    payload = f"apt_{apt.id}_{apt.city}_{ref}"
+    url = f"https://t.me/{os.getenv('BOT_ALIAS')}?start={payload}"
+
+    img = qrcode.make(url, image_factory=PilImage)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+# ----------------- Platform settings (DB-backed) -----------------
+
+@app.get("/admin/api/settings", dependencies=[Depends(current_user)])
+async def get_settings(sess: SessionDep):
+    rows = (await sess.scalars(select(Setting))).all()
+    return {row.key: row.value for row in rows}
+
+class SettingBody(BaseModel):
+    key: str
+    value: float | int | str | bool
+
+@app.post("/admin/api/settings", dependencies=[Depends(current_user)])
+async def update_settings(data: SettingBody, sess: SessionDep):
+    async with sess.begin():
+        setting: Setting | None = await sess.get(Setting, data.key)
+        if setting is None:
+            setting = Setting(key=data.key, value=data.value)
+            sess.add(setting)
+        else:
+            setting.value = data.value
+    return {"ok": True}
 
 from fastapi.staticfiles import StaticFiles
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ----------------------------------------------------------------------
+#                           HEALTH CHECK
+# ----------------------------------------------------------------------
+
+@app.get("/healthz")
+async def healthz(sess: SessionDep):
+    """Return simple JSON telling if DB and S3 are reachable.
+
+    Format: {"db": "ok"|"error", "s3": "ok"|"error"}
+    """
+    status = {"db": "ok", "s3": "ok"}
+
+    # --- DB ------------------------------------------------------------
+    try:
+        await sess.scalar(select(1))
+    except Exception as exc:  # pragma: no cover – surface error downstream
+        status["db"] = "error"
+
+    # --- S3 ------------------------------------------------------------
+    try:
+        # lightweight call; returns bool or raises
+        client.bucket_exists(BUCKET)
+    except Exception:
+        status["s3"] = "error"
+
+    return status

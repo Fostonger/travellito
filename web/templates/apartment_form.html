@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Add Apartment{% endblock %}
+{% block body %}
+<div class="max-w-xl mx-auto my-12 p-8 bg-white/90 rounded-2xl shadow-xl backdrop-blur">
+  <h1 class="text-3xl font-extrabold mb-6 text-emerald-700">New Apartment</h1>
+  <form id="aptForm" class="space-y-6">
+    <div>
+      <label class="block mb-2 font-medium">Name (optional)</label>
+      <input name="name" class="w-full rounded-lg border border-emerald-300 p-2.5 focus:ring-2 focus:ring-emerald-500">
+    </div>
+    <div>
+      <label class="block mb-2 font-medium">City</label>
+      <input name="city" required class="w-full rounded-lg border border-emerald-300 p-2.5 focus:ring-2 focus:ring-emerald-500">
+    </div>
+    <button class="w-full py-3 mt-4 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition">Save</button>
+  </form>
+  <p id="msg" class="text-center mt-4"></p>
+</div>
+<script>
+  document.getElementById('aptForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const payload = {
+      name: form.name.value || null,
+      city: form.city.value
+    };
+    const res = await fetch('/partner/apartments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const out = await res.json();
+    document.getElementById('msg').textContent = res.ok ? `✅ Apartment #${out.id} created!` : `❌ ${out.detail || 'Error'}`;
+    if (res.ok) {
+      setTimeout(() => window.location.href = '/partner', 1200);
+    }
+  });
+</script>
+{% endblock %} 

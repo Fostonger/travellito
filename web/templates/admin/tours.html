@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Manage Tours{% endblock %}
+{% block body %}
+<div class="max-w-7xl mx-auto px-6 py-10">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-extrabold text-indigo-700">Tours</h1>
+    <!-- Link removed: legacy /admin/upload no longer exists -->
+  </div>
+  <div class="overflow-x-auto bg-white rounded-xl shadow">
+    <table class="min-w-full divide-y divide-gray-200" id="toursTable">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price (€)</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Commission (%)</th>
+          <th class="px-6 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200" id="toursBody">
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+async function loadTours() {
+  const res = await fetch('/admin/api/tours');
+  if (!res.ok) return;
+  const tours = await res.json();
+  const body = document.getElementById('toursBody');
+  body.innerHTML = '';
+  tours.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${t.id}</td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${t.title}</td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${t.price}</td>
+      <td class="px-6 py-4 whitespace-nowrap">
+        <input type="number" min="0" max="100" step="0.1" value="${t.max_commission}" class="max-w-[80px] border rounded px-2 py-1 text-sm" />
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap">
+        <button class="saveBtn px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm" data-id="${t.id}">Save</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  if (e.target.matches('.saveBtn')) {
+    const id = e.target.dataset.id;
+    const input = e.target.parentElement.parentElement.querySelector('input');
+    const pct = parseFloat(input.value);
+    const res = await fetch(`/admin/tours/${id}/max_commission`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pct})
+    });
+    if (res.ok) {
+      e.target.textContent = 'Saved';
+      setTimeout(() => e.target.textContent = 'Save', 1500);
+    } else {
+      alert('Error saving');
+    }
+  }
+});
+
+loadTours();
+</script>
+{% endblock %} 
