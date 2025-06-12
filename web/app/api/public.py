@@ -270,4 +270,49 @@ async def price_quote(payload: QuoteIn, sess: SessionDep = Depends(), user=Depen
         net_price = _discounted_price(cat.price, tour.max_commission_pct, chosen_comm)
         total_net += net_price * it.qty
 
-    return QuoteOut(total_net=total_net.quantize(Decimal("0.01")), seats_left=max(remaining, 0)) 
+    return QuoteOut(total_net=total_net.quantize(Decimal("0.01")), seats_left=max(remaining, 0))
+
+
+@router.get(
+    "/tours/{tour_id}/departures",
+    summary="Upcoming departures for a given tour (with seats left)",
+    dependencies=[Depends(role_required("bot_user"))],
+)
+async def tour_departures(
+    tour_id: int,
+    sess: SessionDep = Depends(),
+    limit: int = Query(30, gt=0, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """Return next departures for *tour_id* capped by *limit*.
+
+    Response shape::
+        [{"id": 123, "starts_at": "2025-06-01T09:00:00Z", "capacity": 25, "seats_left": 12}]
+    """
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from .bookings import _seats_taken  # local util (avoids duplication)
+
+    now = datetime.now(timezone.utc)
+
+    stmt = (
+        select(Departure)
+        .where(Departure.tour_id == tour_id, Departure.starts_at >= now)
+        .order_by(Departure.starts_at)
+        .limit(limit)
+        .offset(offset)
+    )
+    deps = (await sess.scalars(stmt)).all()
+
+    out = []
+    for dep in deps:
+        taken = await _seats_taken(sess, dep.id)
+        out.append(
+            {
+                "id": dep.id,
+                "starts_at": dep.starts_at.isoformat() if dep.starts_at else None,
+                "capacity": dep.capacity,
+                "seats_left": max(dep.capacity - taken, 0),
+            }
+        )
+    return out 

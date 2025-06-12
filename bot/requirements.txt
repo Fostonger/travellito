@@ -1,2 +1,8 @@
-aiogram==3.4.1        # asynchronous Telegram Bot API framework :contentReference[oaicite:7]{index=7}
-python-dotenv==1.0.1  # (optional) load BOT_TOKEN from .env files without extra code :contentReference[oaicite:8]{index=8}
+aiogram==3.4.1
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+httpx[http2]==0.27.0
+redis==5.0.4
+tenacity==8.2.3
+python-dotenv==1.0.1
+python-jose==3.3.0 

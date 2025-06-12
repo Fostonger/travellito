@@ -116,16 +116,31 @@ class DepartureOut(BaseModel):
     }
 
 @router.get("/", response_model=list[DepartureOut], dependencies=[Depends(role_required(["admin", "bot", "manager"]))])
-async def list_departures(sess: SessionDep):
-    """Return upcoming departures with at least one booking, ordered by date.
+async def list_departures(sess: SessionDep, user=Depends(current_user)):
+    """Return upcoming departures with at least one booking.
 
-    – Used by the Telegram tour-manager flow to let them choose which departure
-      to broadcast to.
+    • Admin / bot roles ⇒ all departures.
+    • Manager ⇒ only departures belonging to their agency.
     """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # Base query: departures in the future with bookings > 0
     stmt = (
         select(Departure.id, Tour.title, Departure.starts_at)
         .join(Tour, Tour.id == Departure.tour_id)
+        .join(Purchase, Purchase.departure_id == Departure.id)
+        .where(Departure.starts_at >= now)
+        .group_by(Departure.id, Tour.title, Departure.starts_at)
         .order_by(Departure.starts_at.asc())
     )
+
+    # Restrict to manager's agency if needed
+    if user["role"] == "manager":
+        mgr: User | None = await sess.get(User, int(user["sub"]))
+        if not mgr or mgr.agency_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Manager not linked to any agency")
+        stmt = stmt.where(Tour.agency_id == mgr.agency_id)
+
     rows = await sess.execute(stmt)
     return [DepartureOut(id=d_id, tour_title=title, starts_at=starts) for d_id, title, starts in rows] 

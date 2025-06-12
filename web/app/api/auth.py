@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, HTTPException, Request, Response, Depends, status, Body
+from fastapi import APIRouter, HTTPException, Request, Response, Depends, status
 from aiogram.utils.auth_widget import check_integrity
 from passlib.hash import argon2
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from ..security import (
     decode_token,
     ACCESS_TOKEN_EXP_SECONDS,
     REFRESH_TOKEN_EXP_SECONDS,
+    current_user,
 )
 from ..models import User
 from ..deps import Session, SessionDep
@@ -206,4 +207,40 @@ async def email_login(payload: LoginIn, response: Response, sess: SessionDep):
 async def logout(resp: Response):
     resp.delete_cookie("session")
     resp.delete_cookie("refresh_token")
-    return Response(status_code=status.HTTP_204_NO_CONTENT) 
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+#  Current user helper – handy for WebApp bootstrapping
+# ---------------------------------------------------------------------------
+
+class MeOut(BaseModel):
+    """Minimal user payload returned by `/auth/me`."""
+
+    id: int
+    role: str
+    tg_id: int | None = None
+    first: str | None = None
+    last: str | None = None
+    agency_id: int | None = None
+
+
+@router.get("/me", response_model=MeOut, summary="Return the currently authenticated user")
+async def me(user=Depends(current_user), sess: SessionDep = Depends()):
+    """Return basic information about the current session user.
+
+    Useful for the Telegram WebApp right after the auth handshake to display
+    the user name or decide which UI (tourist vs manager) to load.
+    """
+    u: User | None = await sess.get(User, int(user["sub"]))
+    if not u:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return MeOut(
+        id=u.id,
+        role=u.role,
+        tg_id=u.tg_id,
+        first=u.first,
+        last=u.last,
+        agency_id=u.agency_id,
+    ) 

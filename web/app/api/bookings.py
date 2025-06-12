@@ -290,4 +290,36 @@ async def update_booking(
         amount_gross=purchase.amount_gross,
         amount=purchase.amount,
         items=[Item(category_id=pi.category_id, qty=pi.qty) for pi in purchase.items],
-    ) 
+    )
+
+
+@router.get("/", response_model=list[BookingOut], dependencies=[Depends(role_required("bot_user"))])
+async def list_bookings(
+    limit: int = 50,
+    offset: int = 0,
+    sess: SessionDep = Depends(),
+    user=Depends(current_user),
+):
+    """Return bookings owned by the current tourist sorted by most recent first."""
+    stmt = (
+        select(Purchase)
+        .options(selectinload(Purchase.items))
+        .where(Purchase.user_id == int(user["sub"]))
+        .order_by(Purchase.ts.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    purchases = (await sess.scalars(stmt)).unique().all()
+
+    out: list[BookingOut] = []
+    for p in purchases:
+        out_items = [Item(category_id=it.category_id, qty=it.qty) for it in p.items]
+        out.append(
+            BookingOut(
+                id=p.id,
+                amount_gross=p.amount_gross,
+                amount=p.amount,
+                items=out_items,
+            )
+        )
+    return out 

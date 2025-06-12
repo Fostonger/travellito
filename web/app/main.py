@@ -2,8 +2,9 @@ from fastapi import File, UploadFile, BackgroundTasks, Depends, FastAPI, Request
 from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, PlainTextResponse
-import qrcode, io, requests, os, json
-from .models import Tour, Agency, TourImage, Base, User, Landlord, Apartment, Purchase, Setting
+import qrcode, io, requests, os, json, asyncio
+from urllib.parse import quote_plus
+from .models import Tour, Agency, TourImage, Base, User, Landlord, Apartment, Purchase, Setting, Departure
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from .deps import Session, engine, SessionDep
@@ -35,6 +36,17 @@ app.middleware("http")(limiter.middleware)
 app.include_router(api_router)
 
 # Mount new API routers
+
+# ---------------------------------------------------------------------------
+#  Telegram bot deep-link helper
+# ---------------------------------------------------------------------------
+
+BOT_ALIAS = os.getenv("BOT_ALIAS", "TravellitoBot")
+
+
+def _bot_link(payload: str) -> str:
+    """Return Telegram deep-link for Travellito bot embedding *payload* safely."""
+    return f"https://t.me/{BOT_ALIAS}?start={quote_plus(payload)}"
 
 # ---- routes -------------------------------------------------------------
 @app.on_event("startup")
@@ -289,13 +301,20 @@ async def apartment_qr(apt_id: int, landlord: Landlord = Depends(current_landlor
     if not apt or apt.landlord_id != landlord.id:
         raise HTTPException(404)
 
+    # Use referral_code when present (short & opaque) otherwise landlord id
     ref = landlord.referral_code or str(landlord.id)
+
     payload = f"apt_{apt.id}_{apt.city}_{ref}"
-    url = f"https://t.me/{os.getenv('BOT_ALIAS')}?start={payload}"
+    url = _bot_link(payload)
 
     img = qrcode.make(url, image_factory=PilImage)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
+
+    # Record the moment QR was generated – useful analytics / re-order reminders
+    landlord.qr_sent = datetime.utcnow()
+    await sess.commit()
+
     return Response(content=buf.getvalue(), media_type="image/png")
 
 # ----------------- Platform settings (DB-backed) -----------------
@@ -349,3 +368,5 @@ async def healthz(sess: SessionDep):
         status["s3"] = "error"
 
     return status
+
+# Duplicate helper block removed – see definitions near top of file.

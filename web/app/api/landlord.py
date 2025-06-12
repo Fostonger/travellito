@@ -18,6 +18,7 @@ from reportlab.pdfgen import canvas as _canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 import os
+from urllib.parse import quote_plus
 
 router = APIRouter(
     prefix="/landlord",
@@ -351,7 +352,14 @@ async def apartments_qr_pdf(sess: SessionDep = Depends(), user=Depends(current_u
 
     for apt in apartments:
         payload = f"apt_{apt.id}_{apt.city}_{landlord_id}"
-        url = f"https://t.me/{os.getenv('BOT_ALIAS')}?start={payload}"
+        url = _bot_link(payload)
+
+        # Record 'qr_sent' the first time we generate the PDF (or update)
+        # We set it only once per landlord to avoid skewing analytics when
+        # they download multiple times in a row.
+        if getattr(apt.landlord, "qr_sent", None) is None:
+            apt.landlord.qr_sent = datetime.utcnow()
+
         qr_img = qrcode.make(url, image_factory=PilImage)
         img_buf = io.BytesIO()
         qr_img.save(img_buf, format="PNG")
@@ -373,6 +381,9 @@ async def apartments_qr_pdf(sess: SessionDep = Depends(), user=Depends(current_u
                 y = page_h - 250
 
     pdf.save()
+
+    # Persist any qr_sent update
+    await sess.commit()
     buf.seek(0)
     headers = {"Content-Disposition": "attachment; filename=qrcodes.pdf"}
     return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
@@ -407,4 +418,17 @@ async def earnings_csv(
         "Content-Type": "text/csv",
         "Content-Disposition": "attachment; filename=earnings_last_30d.csv",
     }
-    return Response(content=csv_bytes, headers=headers) 
+    return Response(content=csv_bytes, headers=headers)
+
+# --------------------------- INTERNAL HELPERS -----------------------------
+
+BOT_ALIAS = os.getenv("BOT_ALIAS", "TravellitoBot")
+
+
+def _bot_link(payload: str) -> str:
+    """Return deep-link for Travellito Telegram bot with *payload*.
+
+    Falls back to default bot alias when env var not present and URL-encodes the
+    payload to avoid problems with spaces or unicode.
+    """
+    return f"https://t.me/{BOT_ALIAS}?start={quote_plus(payload)}" 

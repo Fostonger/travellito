@@ -33,6 +33,18 @@ services:
       BOT_TOKEN: "${BOT_TOKEN}"
       WEB_API: "http://web:8000"
       PANEL_URL: "http://localhost:8000/login"
+      SECRET_KEY: "${SECRET_KEY}"
+      BOT_MODE: "tourist"
+    depends_on: [web]
+    restart: unless-stopped
+
+  manager-bot:
+    build: ./bot
+    environment:
+      BOT_TOKEN: "${MANAGER_BOT_TOKEN}"
+      WEB_API: "http://web:8000"
+      SECRET_KEY: "${SECRET_KEY}"
+      BOT_MODE: "manager"
     depends_on: [web]
     restart: unless-stopped
 
