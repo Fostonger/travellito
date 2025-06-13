@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from .deps import Session, engine, SessionDep
 from qrcode.image.pil import PilImage
 from .storage import upload_image, presigned, client, BUCKET
-from .security import current_user
+from .security import current_user, role_required
 from datetime import datetime, timedelta
 from .api import api_router
 from slowapi import Limiter
@@ -87,37 +87,37 @@ def login_page(request: Request):
     return templates.TemplateResponse("login.html",
             {"request": request, "TELEGRAM_BOT_ALIAS": os.getenv("BOT_ALIAS")})
 
-@app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+@app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(role_required("admin"))])
 async def admin_dashboard(request: Request):
     """Render the main admin dashboard (summary metrics)."""
     return templates.TemplateResponse("admin/dashboard.html", {"request": request})
 
 # ---------- Admin HTML pages ----------
-@app.get("/admin/tours", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+@app.get("/admin/tours", response_class=HTMLResponse, dependencies=[Depends(role_required("admin"))])
 async def admin_tours(request: Request):
     return templates.TemplateResponse("admin/tours.html", {"request": request})
 
-@app.get("/admin/agencies", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+@app.get("/admin/agencies", response_class=HTMLResponse, dependencies=[Depends(role_required("admin"))])
 async def admin_agencies(request: Request):
     return templates.TemplateResponse("admin/agencies.html", {"request": request})
 
-@app.get("/admin/landlords", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+@app.get("/admin/landlords", response_class=HTMLResponse, dependencies=[Depends(role_required("admin"))])
 async def admin_landlords(request: Request):
     return templates.TemplateResponse("admin/landlords.html", {"request": request})
 
-@app.get("/admin/settings", response_class=HTMLResponse, dependencies=[Depends(current_user)])
+@app.get("/admin/settings", response_class=HTMLResponse, dependencies=[Depends(role_required("admin"))])
 async def admin_settings(request: Request):
     return templates.TemplateResponse("admin/settings.html", {"request": request})
 
 # ---------- Lightweight JSON APIs consumed by the admin UI ----------
-@app.get("/admin/metrics", dependencies=[Depends(current_user)])
+@app.get("/admin/metrics", dependencies=[Depends(role_required("admin"))])
 async def admin_metrics(sess: SessionDep):
     tours = await sess.scalar(select(func.count()).select_from(Tour))
     agencies = await sess.scalar(select(func.count()).select_from(Agency))
     landlords = await sess.scalar(select(func.count()).select_from(Landlord))
     return {"tours": tours or 0, "agencies": agencies or 0, "landlords": landlords or 0}
 
-@app.get("/admin/api/tours", dependencies=[Depends(current_user)])
+@app.get("/admin/api/tours", dependencies=[Depends(role_required("admin"))])
 async def api_list_tours(sess: SessionDep):
     result = await sess.execute(select(Tour.id, Tour.title, Tour.price, Tour.max_commission_pct))
     return [
@@ -125,7 +125,7 @@ async def api_list_tours(sess: SessionDep):
         for tid, title, price, maxc in result
     ]
 
-@app.get("/admin/api/agencies", dependencies=[Depends(current_user)])
+@app.get("/admin/api/agencies", dependencies=[Depends(role_required("admin"))])
 async def api_agencies(sess: SessionDep):
     result = await sess.execute(select(Agency.id, Agency.name, Agency.api_base))
     return [
@@ -133,7 +133,7 @@ async def api_agencies(sess: SessionDep):
         for aid, name, api_base in result
     ]
 
-@app.get("/admin/api/landlords", dependencies=[Depends(current_user)])
+@app.get("/admin/api/landlords", dependencies=[Depends(role_required("admin"))])
 async def api_landlords(sess: SessionDep):
     result = await sess.execute(select(Landlord.id, Landlord.name))
     return [
@@ -152,7 +152,7 @@ class TourIn(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
 
-@app.post("/admin/tours")
+@app.post("/admin/tours", dependencies=[Depends(role_required("admin"))])
 async def create_tour(
     data: str = Form(...),
     images: list[UploadFile] = File(default=[]),
@@ -201,7 +201,7 @@ async def sync_agency(agency_id: int):
             db_tour.price = item["price"]
             s.add(db_tour)
 
-@app.post("/admin/agency/{aid}/sync")
+@app.post("/admin/agency/{aid}/sync", dependencies=[Depends(role_required("admin"))])
 async def manual_sync(aid: int, bg: BackgroundTasks):
     bg.add_task(sync_agency, aid)
     return {"scheduled": True}
@@ -213,7 +213,18 @@ async def manual_sync(aid: int, bg: BackgroundTasks):
 # Helper to fetch the landlord linked to the current user (one-to-one for now)
 
 async def current_landlord(sess: SessionDep, user=Depends(current_user)) -> Landlord:
-    stmt = select(Landlord).where(Landlord.user_id == user["u"])
+    """Return landlord row linked to the current authenticated landlord *user*.
+
+    The JWT payload contains the user id in the `sub` claim, therefore we
+    reference it via `user["sub"]` cast to int. The previous key `'u'` was a
+    typo and triggered KeyError.
+    """
+    try:
+        user_id = int(user["sub"])
+    except (KeyError, ValueError):
+        raise HTTPException(401, "Invalid landlord token")
+
+    stmt = select(Landlord).where(Landlord.user_id == user_id)
     landlord = await sess.scalar(stmt)
     if not landlord:
         raise HTTPException(403, "No landlord account linked to this user")
@@ -320,7 +331,7 @@ async def apartment_qr(apt_id: int, sess: SessionDep, landlord: Landlord = Depen
 
 # ----------------- Platform settings (DB-backed) -----------------
 
-@app.get("/admin/api/settings", dependencies=[Depends(current_user)])
+@app.get("/admin/api/settings", dependencies=[Depends(role_required("admin"))])
 async def get_settings(sess: SessionDep):
     rows = (await sess.scalars(select(Setting))).all()
     return {row.key: row.value for row in rows}
@@ -329,7 +340,7 @@ class SettingBody(BaseModel):
     key: str
     value: float | int | str | bool
 
-@app.post("/admin/api/settings", dependencies=[Depends(current_user)])
+@app.post("/admin/api/settings", dependencies=[Depends(role_required("admin"))])
 async def update_settings(data: SettingBody, sess: SessionDep):
     async with sess.begin():
         setting: Setting | None = await sess.get(Setting, data.key)
@@ -371,3 +382,131 @@ async def healthz(sess: SessionDep):
     return status
 
 # Duplicate helper block removed – see definitions near top of file.
+
+# ----------------------- Admin: create agency ----------------------------
+
+class AgencyIn(BaseModel):
+    """Schema for creating a new Agency from the admin UI"""
+
+    name: str
+    api_base: str | None = None
+
+
+@app.post("/admin/api/agencies", dependencies=[Depends(role_required("admin"))])
+async def api_create_agency(data: AgencyIn, sess: SessionDep):
+    """Create a new agency row (admin only). Returns the created agency."""
+    # Basic uniqueness check on *name*
+    existing = await sess.scalar(select(Agency).where(Agency.name == data.name))
+    if existing:
+        raise HTTPException(400, "Agency with this name already exists")
+
+    agency = Agency(name=data.name, api_base=data.api_base)
+    sess.add(agency)
+    await sess.flush()
+    await sess.commit()
+    return {"id": agency.id, "name": agency.name, "api_base": agency.api_base}
+
+# ---------------------------------------------------------------------------
+#  Landlord self-signup (email / password)
+# ---------------------------------------------------------------------------
+
+
+class LandlordSignup(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+@app.post("/signup/landlord")
+async def landlord_signup(data: LandlordSignup, sess: SessionDep):
+    """Public endpoint allowing landlords to create their own account."""
+    # Ensure email is unique
+    existing_user = await sess.scalar(select(User).where(User.email == data.email))
+    if existing_user:
+        raise HTTPException(400, "Email already registered")
+
+    # Create user row with landlord role
+    from .api.auth import hash_password  # local import to avoid cycles
+
+    user = User(
+        email=data.email,
+        password_hash=hash_password(data.password),
+        role="landlord",
+    )
+    sess.add(user)
+    await sess.flush()
+
+    landlord = Landlord(name=data.name, user_id=user.id)
+    sess.add(landlord)
+
+    await sess.commit()
+
+    return {"id": landlord.id, "user_id": user.id}
+
+# ---------------------------------------------------------------------------
+#  Landlord signup form page (HTML)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/signup/landlord", response_class=HTMLResponse)
+def landlord_signup_page(request: Request):
+    return templates.TemplateResponse("landlord_signup.html", {"request": request})
+
+# ---------------------------------------------------------------------------
+#  Agency Web UI pages (HTML) – accessible to agency role
+# ---------------------------------------------------------------------------
+
+
+@app.get("/agency", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
+async def agency_dashboard(request: Request):
+    return templates.TemplateResponse("agency/dashboard.html", {"request": request})
+
+
+@app.get("/agency/tours", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
+async def agency_tours_page(request: Request):
+    return templates.TemplateResponse("agency/tours.html", {"request": request})
+
+
+@app.get("/agency/managers", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
+async def agency_managers_page(request: Request):
+    return templates.TemplateResponse("agency/managers.html", {"request": request})
+
+# ----------------------- Admin: create agency user ------------------------
+
+
+class AgencyUserIn(BaseModel):
+    """Schema to create an *agency* role user (admin only)."""
+
+    agency_id: int
+    email: str
+    password: str
+    first: str | None = None
+    last: str | None = None
+
+
+from .api.auth import hash_password
+
+
+@app.post("/admin/api/agency-users", dependencies=[Depends(role_required("admin"))])
+async def api_create_agency_user(data: AgencyUserIn, sess: SessionDep):
+    # Verify agency exists
+    agency = await sess.get(Agency, data.agency_id)
+    if not agency:
+        raise HTTPException(404, "Agency not found")
+
+    # Unique email constraint
+    existing = await sess.scalar(select(User).where(User.email == data.email))
+    if existing:
+        raise HTTPException(400, "Email already registered")
+
+    user = User(
+        email=data.email,
+        password_hash=hash_password(data.password),
+        role="agency",
+        agency_id=data.agency_id,
+        first=data.first,
+        last=data.last,
+    )
+    sess.add(user)
+    await sess.commit()
+    return {"id": user.id, "email": user.email, "agency_id": user.agency_id}

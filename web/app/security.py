@@ -35,19 +35,29 @@ def _now() -> int:
     return int(time.time())
 
 
-def create_token(sub: int | str, role: str, expires_in: int = DEFAULT_EXP_SECONDS) -> str:
-    """Return a signed JWT token.
+def create_token(
+    sub: int | str,
+    role: str,
+    *,
+    expires_in: int = DEFAULT_EXP_SECONDS,
+    **extra_claims,
+) -> str:
+    """Return a signed JWT including any *extra_claims*.
 
-    Payload fields:
-    • sub  – user identifier (int or str)
-    • role – one of the platform roles (admin, agency, landlord, bot_user, etc.)
-    • exp  – unix epoch when the token expires.
+    Standard claims:
+    • sub  – user identifier
+    • role – user role string
+    • exp  – expiry (unix epoch)
+
+    Additional keyword arguments are merged into the payload, letting callers
+    embed e.g. ``agency_id`` for agency / manager tokens.
     """
     payload = {
         "sub": str(sub),
         "role": role,
         "exp": _now() + expires_in,
     }
+    payload.update(extra_claims)
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -112,10 +122,20 @@ def role_required(*allowed: "str | Role | Iterable[str | Role]") -> Callable[[di
 
 
 # Convenience helper: returns *(access, refresh)* tokens pair
-def mint_tokens(sub: int | str, role: str) -> tuple[str, str]:
-    """Create access **and** refresh JWTs with the configured TTLs."""
-    access = create_token(sub, role, expires_in=ACCESS_TOKEN_EXP_SECONDS)
-    refresh = create_token(sub, role, expires_in=REFRESH_TOKEN_EXP_SECONDS)
+def mint_tokens(sub: int | str, role: str, **extra_claims) -> tuple[str, str]:
+    """Return *(access, refresh)* pair embedding *extra_claims* in both."""
+    access = create_token(
+        sub,
+        role,
+        expires_in=ACCESS_TOKEN_EXP_SECONDS,
+        **extra_claims,
+    )
+    refresh = create_token(
+        sub,
+        role,
+        expires_in=REFRESH_TOKEN_EXP_SECONDS,
+        **extra_claims,
+    )
     return access, refresh
 
 

@@ -647,7 +647,81 @@ def _get_agency_id(user: dict) -> int:
     we may store agency_id as a dedicated claim.
     """
 
+    agency_id = user.get("agency_id")
+    if agency_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Missing agency context in token")
     try:
-        return int(user["sub"])
-    except (KeyError, ValueError):  # pragma: no cover
-        raise HTTPException(401, "Invalid agency token") 
+        return int(agency_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid agency_id in token")
+
+
+# ---------------------------------------------------------------------------
+#  MANAGER CRUD (agency self-service)
+# ---------------------------------------------------------------------------
+
+
+# ---------------------- Schemas -------------------------------------------
+
+
+class ManagerIn(BaseModel):
+    email: str
+    password: str
+    first: str | None = None
+    last: str | None = None
+
+
+class ManagerOut(BaseModel):
+    id: int
+    email: str
+    first: str | None = None
+    last: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+from ..api.auth import hash_password
+
+
+@router.get("/managers", response_model=list[ManagerOut])
+async def list_managers(sess: SessionDep, user=Depends(current_user)):
+    """Return manager accounts belonging to the current agency."""
+    agency_id = _get_agency_id(user)
+    stmt = select(User).where(User.role == "manager", User.agency_id == agency_id).order_by(User.id)
+    rows = (await sess.scalars(stmt)).all()
+    return [ManagerOut.from_orm(u) for u in rows]
+
+
+@router.post("/managers", response_model=ManagerOut, status_code=status.HTTP_201_CREATED)
+async def create_manager(payload: ManagerIn, sess: SessionDep, user=Depends(current_user)):
+    """Create a new manager under this agency."""
+    agency_id = _get_agency_id(user)
+
+    # Ensure unique email
+    existing = await sess.scalar(select(User).where(User.email == payload.email))
+    if existing:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Email already exists")
+
+    mgr = User(
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        role="manager",
+        first=payload.first,
+        last=payload.last,
+        agency_id=agency_id,
+    )
+    sess.add(mgr)
+    await sess.flush()
+    await sess.commit()
+    return ManagerOut.from_orm(mgr)
+
+
+@router.delete("/managers/{mgr_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_manager(mgr_id: int, sess: SessionDep, user=Depends(current_user)):
+    agency_id = _get_agency_id(user)
+    mgr: User | None = await sess.get(User, mgr_id)
+    if not mgr or mgr.role != "manager" or mgr.agency_id != agency_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Manager not found")
+    await sess.delete(mgr)
+    await sess.commit()
+    return None 

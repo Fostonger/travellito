@@ -3,15 +3,74 @@
 <head>
   <meta charset="utf-8" />
   <title>Войти через Telegram</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <!-- Telegram injects the button into this script tag -->
-  <script async src="https://telegram.org/js/telegram-widget.js?22"
-          data-telegram-login="{{ TELEGRAM_BOT_ALIAS }}"
-          data-size="large"
-          data-userpic="false"
-          data-auth-url="/api/v1/auth/telegram"
-          data-request-access="write">
+<body class="bg-indigo-50 flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+    <h1 class="text-2xl font-bold text-center text-indigo-700 mb-6">Travellito – Вход</h1>
+
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="email">Email</label>
+        <input id="email" name="email" type="email" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="password">Пароль</label>
+        <input id="password" name="password" type="password" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <button type="submit" class="w-full py-2 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Войти</button>
+    </form>
+
+    <div class="mt-6 text-center">
+      <p class="text-gray-600 text-sm mb-2">или войдите через Telegram:</p>
+      <!-- Telegram injects the button into this script tag -->
+      <script async src="https://telegram.org/js/telegram-widget.js?22"
+              data-telegram-login="{{ TELEGRAM_BOT_ALIAS }}"
+              data-size="large"
+              data-userpic="false"
+              data-auth-url="/api/v1/auth/telegram"
+              data-request-access="write">
+      </script>
+    </div>
+
+    <div class="mt-6 text-center">
+      <a href="/signup/landlord" class="text-emerald-600 hover:underline">Регистрация для арендодателей</a>
+    </div>
+  </div>
+
+  <script>
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    if (!res.ok) {
+      alert('Неверный email или пароль');
+      return;
+    }
+
+    const data = await res.json();
+    switch (data.role) {
+      case 'admin':
+        window.location.href = '/admin';
+        break;
+      case 'agency':
+        window.location.href = '/agency';
+        break;
+      case 'landlord':
+        window.location.href = '/partner';
+        break;
+      default:
+        // Fallback
+        window.location.href = '/';
+    }
+  });
   </script>
 </body>
 </html>

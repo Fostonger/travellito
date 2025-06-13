@@ -48,7 +48,11 @@ async def telegram_auth(request: Request, resp: Response):
     # Bot users interact via the Telegram bot, but from the web POV they are
     # simple authenticated end-users with role "bot_user".
 
-    access_tok, refresh_tok = mint_tokens(user.id, Role.bot_user.value)
+    extra = {}
+    if user.role in ("agency", "manager") and user.agency_id is not None:
+        extra["agency_id"] = user.agency_id
+
+    access_tok, refresh_tok = mint_tokens(user.id, user.role, **extra)
 
     # Short-lived access token for API calls
     resp.set_cookie(
@@ -87,7 +91,11 @@ async def refresh_token(request: Request, response: Response):
     payload = decode_token(refresh_tok)
 
     # Create and set new pair (rotate tokens)
-    access_tok, new_refresh_tok = mint_tokens(payload["sub"], payload["role"])
+    extra = {}
+    if payload.get("role") in ("agency", "manager") and payload.get("agency_id") is not None:
+        extra["agency_id"] = payload["agency_id"]
+
+    access_tok, new_refresh_tok = mint_tokens(payload["sub"], payload["role"], **extra)
 
     response.set_cookie(
         "session",
@@ -135,7 +143,11 @@ async def telegram_manager_auth(request: Request, resp: Response):
         if agency_id is not None:
             user.agency_id = agency_id
 
-    access_tok, refresh_tok = mint_tokens(user.id, Role.manager.value)
+    extra = {}
+    if user.agency_id is not None:
+        extra["agency_id"] = user.agency_id
+
+    access_tok, refresh_tok = mint_tokens(user.id, Role.manager.value, **extra)
 
     resp.set_cookie(
         "session",
@@ -175,7 +187,11 @@ async def email_login(payload: LoginIn, response: Response, sess: SessionDep):
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    access_tok, refresh_tok = mint_tokens(user.id, user.role)
+    extra = {}
+    if user.role in ("agency", "manager") and user.agency_id is not None:
+        extra["agency_id"] = user.agency_id
+
+    access_tok, refresh_tok = mint_tokens(user.id, user.role, **extra)
 
     response.set_cookie(
         "session",
