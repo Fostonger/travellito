@@ -16,6 +16,7 @@ from .api import api_router
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 templates = Jinja2Templates(directory="templates")
 
@@ -31,7 +32,7 @@ async def ratelimit_handler(request: Request, exc: RateLimitExceeded):
     return PlainTextResponse("Too many requests", status_code=429)
 
 # Apply a sensible default limit to all endpoints (can be overridden per-route)
-app.middleware("http")(limiter.middleware)
+app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(api_router)
 
@@ -296,7 +297,7 @@ async def create_apartment(data: ApartmentIn, sess: SessionDep, landlord: Landlo
 # Example payload: apt_<id>_<city>_<ref>
 
 @app.get("/partner/apartments/{apt_id}/qrcode", response_class=Response, dependencies=[Depends(current_user)])
-async def apartment_qr(apt_id: int, landlord: Landlord = Depends(current_landlord), sess: SessionDep):
+async def apartment_qr(apt_id: int, sess: SessionDep, landlord: Landlord = Depends(current_landlord)):
     apt = await sess.get(Apartment, apt_id)
     if not apt or apt.landlord_id != landlord.id:
         raise HTTPException(404)

@@ -295,9 +295,9 @@ async def update_booking(
 
 @router.get("/", response_model=list[BookingOut], dependencies=[Depends(role_required("bot_user"))])
 async def list_bookings(
+    sess: SessionDep,
     limit: int = 50,
     offset: int = 0,
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Return bookings owned by the current tourist sorted by most recent first."""

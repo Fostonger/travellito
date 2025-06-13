@@ -30,9 +30,9 @@ class MetricsOut(BaseModel):
 
 @router.patch("/tours/{tour_id}/max-commission")
 async def set_max_commission(
+    sess: SessionDep,
     tour_id: int = Path(..., gt=0),
     body: MaxCommissionBody | None = None,
-    sess: SessionDep = Depends(),
 ):
     if body is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty payload")
@@ -48,7 +48,7 @@ async def set_max_commission(
 
 
 @router.get("/metrics")
-async def metrics(sess: SessionDep = Depends()):
+async def metrics(sess: SessionDep):
     agencies = await sess.scalar(select(func.count()).select_from(Agency)) or 0
     landlords = await sess.scalar(select(func.count()).select_from(Landlord)) or 0
     tours = await sess.scalar(select(func.count()).select_from(Tour)) or 0
@@ -87,7 +87,7 @@ class ApiKeyCreate(BaseModel):
 
 
 @router.post("/api-keys", response_model=ApiKeyOut, status_code=status.HTTP_201_CREATED)
-async def create_api_key(payload: ApiKeyCreate, sess: SessionDep = Depends()):
+async def create_api_key(payload: ApiKeyCreate, sess: SessionDep):
     # Ensure agency exists
     agency: Agency | None = await sess.get(Agency, payload.agency_id)
     if not agency:
@@ -102,7 +102,7 @@ async def create_api_key(payload: ApiKeyCreate, sess: SessionDep = Depends()):
 
 
 @router.get("/api-keys", response_model=list[ApiKeyOut])
-async def list_api_keys(limit: int = 100, offset: int = 0, sess: SessionDep = Depends()):
+async def list_api_keys(sess: SessionDep, limit: int = 100, offset: int = 0):
     stmt = (
         select(ApiKey)
         .order_by(ApiKey.created.desc())
@@ -114,7 +114,7 @@ async def list_api_keys(limit: int = 100, offset: int = 0, sess: SessionDep = De
 
 
 @router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_api_key(key_id: int, sess: SessionDep = Depends()):
+async def delete_api_key(sess: SessionDep, key_id: int):
     stmt = _delete(ApiKey).where(ApiKey.id == key_id)
     result = await sess.execute(stmt)
     if result.rowcount == 0:
@@ -157,7 +157,7 @@ from ..api.auth import hash_password
 
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, sess: SessionDep = Depends()):
+async def create_user(payload: UserCreate, sess: SessionDep):
     # Unique email check
     existing = await sess.scalar(select(User).where(User.email == payload.email))
     if existing:
@@ -176,13 +176,13 @@ async def create_user(payload: UserCreate, sess: SessionDep = Depends()):
 
 
 @router.get("/users", response_model=list[UserOut])
-async def list_users(limit: int = 100, offset: int = 0, sess: SessionDep = Depends()):
+async def list_users(sess: SessionDep, limit: int = 100, offset: int = 0):
     rows = (await sess.scalars(select(User).order_by(User.id.desc()).limit(limit).offset(offset))).all()
     return [UserOut.from_orm(r) for r in rows]
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
-async def update_user(user_id: int, payload: UserUpdate, sess: SessionDep = Depends()):
+async def update_user(user_id: int, payload: UserUpdate, sess: SessionDep):
     user: User | None = await sess.get(User, user_id)
     if not user:
         raise HTTPException(404, "User not found")
@@ -199,7 +199,7 @@ async def update_user(user_id: int, payload: UserUpdate, sess: SessionDep = Depe
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: int, sess: SessionDep = Depends()):
+async def delete_user(user_id: int, sess: SessionDep):
     u: User | None = await sess.get(User, user_id)
     if not u:
         raise HTTPException(404, "User not found")

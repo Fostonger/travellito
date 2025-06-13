@@ -99,10 +99,10 @@ async def _seats_taken(sess: SessionDep, departure_id: int) -> int:
 
 @router.get("/departures", response_model=list[DepartureOut])
 async def list_departures(
+    sess: SessionDep,
     tour: int | None = None,
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """List departures for the agency. Optional filter by *tour* id."""
@@ -125,7 +125,7 @@ async def list_departures(
 @router.post("/departures", response_model=DepartureOut, status_code=status.HTTP_201_CREATED)
 async def create_departure(
     payload: DepartureIn,
-    sess: SessionDep = Depends(),
+    sess: SessionDep,
     user=Depends(current_user),
 ):
     agency_id = _get_agency_id(user)
@@ -149,9 +149,9 @@ async def create_departure(
 
 @router.patch("/departures/{dep_id}", response_model=DepartureOut)
 async def update_departure(
+    sess: SessionDep,
     dep_id: int = Path(..., gt=0),
     payload: DepartureUpdate | dict | None = None,
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     if payload is None:
@@ -205,15 +205,15 @@ class CapacityBody(BaseModel):
 
 @router.patch("/departures/{dep_id}/capacity", response_model=DepartureOut)
 async def set_capacity(
+    sess: SessionDep,
     dep_id: int = Path(..., gt=0),
     body: CapacityBody | None = None,
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     if body is None:
         raise HTTPException(400, "Empty payload")
 
-    return await update_departure(dep_id, DepartureUpdate(capacity=body.capacity), sess, user)
+    return await update_departure(sess, dep_id, DepartureUpdate(capacity=body.capacity), user)
 
 
 # ---------------------------------------------------------------------------
@@ -223,9 +223,9 @@ async def set_capacity(
 
 @router.get("/tours", response_model=list[TourOut])
 async def list_tours(
+    sess: SessionDep,
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Return tours owned by the agency bound to the JWT."""
@@ -267,9 +267,9 @@ async def create_tour(payload: TourIn, sess: SessionDep, user=Depends(current_us
 
 @router.patch("/tours/{tour_id}", response_model=TourOut)
 async def update_tour(
+    sess: SessionDep,
     tour_id: int = Path(..., gt=0),
     payload: TourIn | dict | None = None,
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     agency_id = _get_agency_id(user)
@@ -294,8 +294,8 @@ async def update_tour(
 
 @router.delete("/tours/{tour_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tour(
+    sess: SessionDep,
     tour_id: int = Path(..., gt=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     agency_id = _get_agency_id(user)
@@ -317,9 +317,9 @@ async def delete_tour(
 
 @router.post("/tours/{tour_id}/images", response_model=ImagesOut, status_code=status.HTTP_201_CREATED)
 async def upload_tour_images(
+    sess: SessionDep,
     tour_id: int = Path(..., gt=0),
     files: list[UploadFile] = File(...),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Upload one or multiple images and link them to the tour.
@@ -374,9 +374,9 @@ class CategoryOut(BaseModel):
 @router.get("/tours/{tour_id}/categories", response_model=list[CategoryOut])
 async def list_categories(
     tour_id: int,
+    sess: SessionDep,
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     agency_id = _get_agency_id(user)
@@ -405,8 +405,10 @@ async def add_category(tour_id: int, payload: CategoryIn, sess: SessionDep, user
 
 
 @router.patch("/tours/{tour_id}/categories/{cat_id}", response_model=CategoryOut)
-async def update_category(tour_id: int, cat_id: int, payload: CategoryIn | dict | None = None,
-                          sess: SessionDep = Depends(), user=Depends(current_user)):
+async def update_category(tour_id: int, cat_id: int, 
+                          sess: SessionDep,
+                          payload: CategoryIn | dict | None = None,
+                          user=Depends(current_user)):
     if payload is None:
         raise HTTPException(400, "Empty payload")
 
@@ -457,11 +459,11 @@ from datetime import date, datetime, timezone
 
 @router.get("/bookings", summary="List / export bookings")
 async def export_bookings(
+    sess: SessionDep,
     request: Request,
     from_date: date | None = Query(None, description="Start date (YYYY-MM-DD) inclusive"),
     to_date: date | None = Query(None, description="End date (YYYY-MM-DD) inclusive"),
     format: str | None = Query(None, enum=["json", "csv"], description="Response format: json (default) or csv"),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Return bookings as JSON (default) or CSV when format=csv or Accept header asks for text/csv."""

@@ -97,9 +97,9 @@ def _get_landlord_id(user: dict) -> int:
 
 @router.get("/apartments", response_model=List[ApartmentOut])
 async def list_apartments(
+    sess: SessionDep,
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     landlord_id = _get_landlord_id(user)
@@ -129,9 +129,9 @@ async def create_apartment(payload: ApartmentIn, sess: SessionDep, user=Depends(
 
 @router.patch("/apartments/{apt_id}", response_model=ApartmentOut)
 async def update_apartment(
+    sess: SessionDep,
     apt_id: int = Path(..., gt=0),
     payload: ApartmentIn | dict | None = None,
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     if payload is None:
@@ -152,9 +152,9 @@ async def update_apartment(
 
 @router.patch("/tours/{tour_id}/commission", response_model=CommissionBody)
 async def set_tour_commission(
+    sess: SessionDep,
     tour_id: int = Path(..., gt=0),
     body: CommissionBody | None = None,
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Set chosen commission (%) for a given tour.
@@ -199,7 +199,7 @@ async def set_tour_commission(
 
 
 @router.get("/earnings", response_model=EarningsOut)
-async def earnings(period: str = "30d", sess: SessionDep = Depends(), user=Depends(current_user)):
+async def earnings(sess: SessionDep, period: str = "30d", user=Depends(current_user)):
     """Return total tickets and earnings. *period* can be `all` or like `30d`."""
 
     landlord_id = _get_landlord_id(user)
@@ -254,9 +254,9 @@ async def earnings(period: str = "30d", sess: SessionDep = Depends(), user=Depen
 
 @router.get("/commissions", response_model=List[CommissionOut])
 async def list_commissions(
+    sess: SessionDep,
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Return every (tour, commission_pct) set by the landlord."""
@@ -285,9 +285,9 @@ async def list_commissions(
 
 @router.get("/tours", response_model=List[TourForLandlord])
 async def list_tours_for_commission(
+    sess: SessionDep,
     limit: int = Query(100, gt=0, le=200),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user=Depends(current_user),
 ):
     """Return *all* tours together with already-chosen commission (if any).
@@ -335,7 +335,7 @@ async def list_tours_for_commission(
 
 @router.get("/apartments/qr-pdf", response_class=Response,
             summary="Download a single PDF containing one QR code per apartment")
-async def apartments_qr_pdf(sess: SessionDep = Depends(), user=Depends(current_user)):
+async def apartments_qr_pdf(sess: SessionDep, user=Depends(current_user)):
     landlord_id = _get_landlord_id(user)
 
     stmt = select(Apartment).where(Apartment.landlord_id == landlord_id).order_by(Apartment.id)
@@ -394,7 +394,7 @@ async def apartments_qr_pdf(sess: SessionDep = Depends(), user=Depends(current_u
 
 @router.get("/earnings.csv", summary="Download detailed last-30-days earnings as CSV")
 async def earnings_csv(
-    sess: SessionDep = Depends(),
+    sess: SessionDep,
     user=Depends(current_user),
 ):
     landlord_id = _get_landlord_id(user)

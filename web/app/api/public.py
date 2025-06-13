@@ -17,9 +17,9 @@ HUNDRED = Decimal("100")  # module-level constant avoids re-construction
 
 @router.get("/tours", summary="List tours (lightweight)")
 async def list_tours(
+    sess: SessionDep,
     limit: int = Query(100, gt=0, le=200),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
 ):
     stmt = select(Tour.id, Tour.title).order_by(Tour.id.desc()).limit(limit).offset(offset)
     result = await sess.execute(stmt)
@@ -118,6 +118,7 @@ def _discounted_price(
     dependencies=[Depends(role_required("bot_user"))],
 )
 async def search_tours(
+    sess: SessionDep,
     city: str | None = Query(None, max_length=64),
     price_min: Decimal | None = Query(None, gt=0),
     price_max: Decimal | None = Query(None, gt=0),
@@ -127,7 +128,6 @@ async def search_tours(
     duration_max: int | None = Query(None, gt=0),
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    sess: SessionDep = Depends(),
     user: dict = Depends(current_user),
 ):
     """Return lightweight tour list respecting filters and discounted price.
@@ -194,7 +194,7 @@ async def search_tours(
     summary="List ticket categories including discounted price",
     dependencies=[Depends(role_required("bot_user"))],
 )
-async def tour_categories(tour_id: int, sess: SessionDep = Depends(), user=Depends(current_user)):
+async def tour_categories(tour_id: int, sess: SessionDep, user=Depends(current_user)):
     tour: Tour | None = await sess.get(Tour, tour_id)
     if not tour:
         raise HTTPException(404, "Tour not found")
@@ -238,7 +238,7 @@ class QuoteOut(BaseModel):
     summary="Preview price and availability before confirming booking",
     dependencies=[Depends(role_required("bot_user"))],
 )
-async def price_quote(payload: QuoteIn, sess: SessionDep = Depends(), user=Depends(current_user)):
+async def price_quote(payload: QuoteIn, sess: SessionDep, user=Depends(current_user)):
     dep: Departure | None = await sess.get(Departure, payload.departure_id)
     if not dep:
         raise HTTPException(404, "Departure not found")
@@ -280,7 +280,7 @@ async def price_quote(payload: QuoteIn, sess: SessionDep = Depends(), user=Depen
 )
 async def tour_departures(
     tour_id: int,
-    sess: SessionDep = Depends(),
+    sess: SessionDep,
     limit: int = Query(30, gt=0, le=100),
     offset: int = Query(0, ge=0),
 ):

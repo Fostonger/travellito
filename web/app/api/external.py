@@ -41,9 +41,9 @@ class CapacityBody(BaseModel):
 
 @router.patch("/departures/{dep_id}/capacity", response_model=dict)
 async def ext_set_capacity(
+    sess: SessionDep,
     dep_id: int = Path(..., gt=0),
     body: CapacityBody | None = None,
-    sess: SessionDep = Depends(),
     api_key_row: ApiKey = Depends(require_api_key),
 ):
     if body is None:
@@ -87,11 +87,11 @@ from io import StringIO
 
 @router.get("/bookings")
 async def ext_export_bookings(
+    sess: SessionDep,
     request: Request,
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
     format: str | None = Query(None, enum=["json", "csv"]),
-    sess: SessionDep = Depends(),
     api_key_row: ApiKey = Depends(require_api_key),
 ):
     agency_id = _get_agency_id_from_key(api_key_row)

@@ -226,7 +226,7 @@ class MeOut(BaseModel):
 
 
 @router.get("/me", response_model=MeOut, summary="Return the currently authenticated user")
-async def me(user=Depends(current_user), sess: SessionDep = Depends()):
+async def me(sess: SessionDep, user=Depends(current_user)):
     """Return basic information about the current session user.
 
     Useful for the Telegram WebApp right after the auth handshake to display

@@ -71,10 +71,10 @@ async def _do_broadcast(dep_id: int, message: BroadcastBody):
              dependencies=[Depends(role_required(["bot", "manager"]))])
 async def broadcast(
     background_tasks: BackgroundTasks,
+    sess: SessionDep,
     departure_id: int = Path(..., gt=0),
     payload: BroadcastBody | None = None,
     user=Depends(current_user),
-    sess: SessionDep = Depends(),
 ):
     """Asynchronously broadcast *payload* to every tourist booked on the departure."""
 

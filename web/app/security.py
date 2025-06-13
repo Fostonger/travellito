@@ -8,7 +8,6 @@ from fastapi import Depends, HTTPException, Request, status, Header
 from jose import JWTError, jwt
 from .roles import Role
 from .deps import SessionDep
-from .models import ApiKey
 from sqlalchemy import select
 
 # ---------------------------------------------------------------------------
@@ -125,12 +124,15 @@ def mint_tokens(sub: int | str, role: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 async def require_api_key(
+    sess: SessionDep,
     api_key: str | None = Header(None, alias="X-API-Key"),
-    sess: SessionDep = Depends(),
 ):
     """FastAPI dependency that raises 401 unless *api_key* matches a row in ApiKey."""
     if api_key is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Missing API key")
+
+    # Local import to avoid circular dependency
+    from .models import ApiKey
 
     stmt = select(ApiKey).where(ApiKey.key == api_key)
     res = await sess.scalar(stmt)
