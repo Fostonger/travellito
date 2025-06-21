@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from decimal import Decimal
 from datetime import date
 from typing import Sequence, Optional, List
-from ..models import Tour, Departure, Purchase, TicketCategory, Referral, LandlordCommission
+from ..models import Tour, Departure, Purchase, TicketCategory, Referral, LandlordCommission, City, TourCategory, TicketClass
 from ..security import role_required, current_user
 from ..deps import SessionDep
 from ..storage import presigned
@@ -13,54 +13,6 @@ from pydantic import BaseModel, Field
 router = APIRouter()
 
 HUNDRED = Decimal("100")  # module-level constant avoids re-construction
-
-
-@router.get("/tours", summary="List tours (lightweight)")
-async def list_tours(
-    sess: SessionDep,
-    limit: int = Query(100, gt=0, le=200),
-    offset: int = Query(0, ge=0),
-):
-    stmt = select(Tour.id, Tour.title).order_by(Tour.id.desc()).limit(limit).offset(offset)
-    result = await sess.execute(stmt)
-    return [{"id": tid, "title": title} for tid, title in result]
-
-
-@router.get("/tours/{tid}", summary="Full tour detail")
-async def tour_detail(tid: int, sess: SessionDep):
-    stmt = (
-        select(Tour)
-        .options(selectinload(Tour.images))
-        .where(Tour.id == tid)
-    )
-    tour = await sess.scalar(stmt)
-    if not tour:
-        raise HTTPException(404, "Tour not found")
-
-    return {
-        "id": tour.id,
-        "title": tour.title,
-        "description": tour.description,
-        "price": str(tour.price),
-        "images": [presigned(img.key) for img in tour.images],
-    }
-
-
-@router.get("/departures/{departure_id}/availability", summary="Seats left for a departure")
-async def departure_availability(departure_id: int, sess: SessionDep):
-    """Return number of free seats for the given departure."""
-
-    dep: Departure | None = await sess.get(Departure, departure_id)
-    if not dep:
-        raise HTTPException(404, "Departure not found")
-
-    taken_stmt = select(func.coalesce(func.sum(Purchase.qty), 0)).where(Purchase.departure_id == departure_id)
-    taken: int | None = await sess.scalar(taken_stmt)
-    taken = taken or 0
-    remaining = max(dep.capacity - taken, 0)
-
-    return {"remaining": remaining}
-
 
 # ---------------------------------------------------------------------------
 #  Helpers (shared with multiple handlers)
@@ -112,11 +64,7 @@ def _discounted_price(
 # ---------------------------------------------------------------------------
 
 
-@router.get(
-    "/tours/search",
-    summary="Search tours with filters and return discounted price",
-    dependencies=[Depends(role_required("bot_user"))],
-)
+@router.get("/tours/search", summary="Search tours with filters and return discounted price")
 async def search_tours(
     sess: SessionDep,
     city: str | None = Query(None, max_length=64),
@@ -128,7 +76,7 @@ async def search_tours(
     duration_max: int | None = Query(None, gt=0),
     limit: int = Query(50, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    user: dict = Depends(current_user),
+    user: dict | None = Depends(lambda: None),
 ):
     """Return lightweight tour list respecting filters and discounted price.
 
@@ -139,7 +87,9 @@ async def search_tours(
     """
 
     # Determine landlord associated to tourist (may be None → no discount)
-    landlord_id = await _last_referral_landlord_id(sess, int(user["sub"]))
+    landlord_id = None
+    if user and "sub" in user:
+        landlord_id = await _last_referral_landlord_id(sess, int(user["sub"]))
 
     # Base query: Tours + optional joins for filters
     stmt = select(Tour)
@@ -164,9 +114,10 @@ async def search_tours(
     if duration_max is not None:
         stmt = stmt.where(Tour.duration_minutes <= duration_max)
 
-    # City filter on new Tour.city column
+    # City filter via City table if provided
     if city is not None:
-        stmt = stmt.where(func.lower(Tour.city) == city.lower())
+        stmt = stmt.join(City, City.id == Tour.city_id)
+        stmt = stmt.where(func.lower(City.name) == city.lower())
 
     # Additional fallback: if user has landlord referral but tour city missing, we already narrowed by departure/apartment earlier.
 
@@ -192,15 +143,17 @@ async def search_tours(
 @router.get(
     "/tours/{tour_id}/categories",
     summary="List ticket categories including discounted price",
-    dependencies=[Depends(role_required("bot_user"))],
 )
-async def tour_categories(tour_id: int, sess: SessionDep, user=Depends(current_user)):
+async def tour_categories(tour_id: int, sess: SessionDep, user: dict | None = Depends(lambda: None)):
     tour: Tour | None = await sess.get(Tour, tour_id)
     if not tour:
         raise HTTPException(404, "Tour not found")
 
-    landlord_id = await _last_referral_landlord_id(sess, int(user["sub"]))
-    chosen_comm = await _chosen_commission(sess, landlord_id, tour_id, tour.max_commission_pct)
+    landlord_id = None
+    chosen_comm = None
+    if user and "sub" in user:
+        landlord_id = await _last_referral_landlord_id(sess, int(user["sub"]))
+        chosen_comm = await _chosen_commission(sess, landlord_id, tour_id, tour.max_commission_pct)
 
     categories = (
         await sess.scalars(select(TicketCategory).where(TicketCategory.tour_id == tour_id))
@@ -208,7 +161,10 @@ async def tour_categories(tour_id: int, sess: SessionDep, user=Depends(current_u
 
     out: List[dict] = []
     for c in categories:
-        net = _discounted_price(c.price, tour.max_commission_pct, chosen_comm)
+        if chosen_comm is not None:
+            net = _discounted_price(c.price, tour.max_commission_pct, chosen_comm)
+        else:
+            net = c.price
         out.append(
             {
                 "id": c.id,
@@ -315,4 +271,79 @@ async def tour_departures(
                 "seats_left": max(dep.capacity - taken, 0),
             }
         )
-    return out 
+    return out
+
+
+@router.get("/cities", response_model=list[dict])
+async def list_cities(sess: SessionDep):
+    """Return all cities for dropdown selection."""
+    stmt = select(City.id, City.name).order_by(City.name)
+    result = await sess.execute(stmt)
+    return [{"id": id, "name": name} for id, name in result]
+
+
+@router.get("/tour_categories", response_model=list[dict])
+async def list_tour_categories(sess: SessionDep):
+    """Return all tour categories for dropdown selection."""
+    stmt = select(TourCategory.id, TourCategory.name).order_by(TourCategory.name)
+    result = await sess.execute(stmt)
+    return [{"id": id, "name": name} for id, name in result]
+
+
+@router.get("/ticket_classes", response_model=list[dict])
+async def list_ticket_classes(sess: SessionDep):
+    """Return all ticket classes for dropdown selection."""
+    stmt = select(TicketClass.id, TicketClass.code, TicketClass.human_name).order_by(TicketClass.human_name)
+    result = await sess.execute(stmt)
+    return [{"id": id, "code": code, "name": name} for id, code, name in result]
+
+
+# ---------------------------------------------------------------------------
+#  Basic public endpoints (lightweight list and detail)
+# ---------------------------------------------------------------------------
+
+@router.get("/tours", summary="List tours (lightweight)")
+async def list_tours(
+    sess: SessionDep,
+    limit: int = Query(100, gt=0, le=200),
+    offset: int = Query(0, ge=0),
+):
+    stmt = select(Tour.id, Tour.title).order_by(Tour.id.desc()).limit(limit).offset(offset)
+    result = await sess.execute(stmt)
+    return [{"id": tid, "title": title} for tid, title in result]
+
+
+@router.get("/tours/{tid}", summary="Full tour detail")
+async def tour_detail(tid: int, sess: SessionDep):
+    stmt = (
+        select(Tour)
+        .options(selectinload(Tour.images))
+        .where(Tour.id == tid)
+    )
+    tour = await sess.scalar(stmt)
+    if not tour:
+        raise HTTPException(404, "Tour not found")
+
+    return {
+        "id": tour.id,
+        "title": tour.title,
+        "description": tour.description,
+        "price": str(tour.price),
+        "images": [presigned(img.key) for img in tour.images],
+    }
+
+
+@router.get("/departures/{departure_id}/availability", summary="Seats left for a departure")
+async def departure_availability(departure_id: int, sess: SessionDep):
+    """Return number of free seats for the given departure."""
+
+    dep: Departure | None = await sess.get(Departure, departure_id)
+    if not dep:
+        raise HTTPException(404, "Departure not found")
+
+    taken_stmt = select(func.coalesce(func.sum(Purchase.qty), 0)).where(Purchase.departure_id == departure_id)
+    taken: int | None = await sess.scalar(taken_stmt)
+    taken = taken or 0
+    remaining = max(dep.capacity - taken, 0)
+
+    return {"remaining": remaining} 

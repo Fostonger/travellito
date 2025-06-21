@@ -1,0 +1,114 @@
+{% extends "agency/base.html" %}
+{% block title %}Менеджеры{% endblock %}
+{% block body %}
+<div class="max-w-7xl mx-auto px-6 py-10">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-extrabold text-cyan-700">Менеджеры</h1>
+    <button id="newManagerBtn" class="px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">+ Новый менеджер</button>
+  </div>
+
+  <div class="overflow-x-auto bg-white rounded-xl shadow">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Имя</th>
+          <th class="px-6 py-3"></th>
+        </tr>
+      </thead>
+      <tbody id="mgrBody" class="bg-white divide-y divide-gray-200"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="mgrModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Новый менеджер</h2>
+    <form id="mgrForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="mgrEmail">Email</label>
+        <input id="mgrEmail" type="email" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="mgrFirst">Имя</label>
+        <input id="mgrFirst" type="text" class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="mgrLast">Фамилия</label>
+        <input id="mgrLast" type="text" class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="mgrPwd">Пароль</label>
+        <input id="mgrPwd" type="password" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancelMgr" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
+        <button type="submit" class="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700">Создать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const loadManagers = async () => {
+    const res = await fetch('/api/v1/agency/managers');
+    if (!res.ok) return;
+    const mgrs = await res.json();
+    const body = document.getElementById('mgrBody');
+    body.innerHTML = '';
+    mgrs.forEach(m => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${m.id}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${m.email}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${(m.first || '') + ' ' + (m.last || '')}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-right text-sm'>
+          <button data-id='${m.id}' class='delBtn text-red-600 hover:text-red-800'>Удалить</button>
+        </td>`;
+      body.appendChild(tr);
+    });
+
+    // Attach delete handlers
+    document.querySelectorAll('.delBtn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = e.target.getAttribute('data-id');
+        if (!confirm('Удалить менеджера?')) return;
+        const delRes = await fetch(`/api/v1/agency/managers/${id}`, { method: 'DELETE' });
+        if (delRes.ok) loadManagers();
+      });
+    });
+  };
+
+  loadManagers();
+
+  const modal = document.getElementById('mgrModal');
+  const open = () => modal.classList.remove('hidden');
+  const close = () => modal.classList.add('hidden');
+
+  document.getElementById('newManagerBtn').addEventListener('click', open);
+  document.getElementById('cancelMgr').addEventListener('click', close);
+
+  document.getElementById('mgrForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      email: document.getElementById('mgrEmail').value.trim(),
+      first: document.getElementById('mgrFirst').value.trim() || null,
+      last: document.getElementById('mgrLast').value.trim() || null,
+      password: document.getElementById('mgrPwd').value
+    };
+    const res = await fetch('/api/v1/agency/managers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) { alert('Ошибка'); return; }
+    close();
+    document.getElementById('mgrForm').reset();
+    loadManagers();
+  });
+})();
+</script>
+{% endblock %} 

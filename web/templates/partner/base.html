@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}Travellito Партнёр{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-r from-emerald-50 to-teal-50 min-h-screen">
+  <!-- Landlord Navbar -->
+  <nav class="bg-white/90 shadow-md backdrop-blur sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <a href="/partner" class="flex-shrink-0 text-emerald-700 font-bold">Travellito Партнёр</a>
+          <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <a href="/partner" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-gray-700 hover:border-emerald-500">Квартиры</a>
+            <a href="/partner/apartments/new" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-gray-700 hover:border-emerald-500">Добавить</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  {% block body %}{% endblock %}
+</body>
+</html> 

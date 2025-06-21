@@ -1,4 +1,4 @@
-// @ts-nocheck
+// src/pages/App.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -13,38 +13,66 @@ interface Tour {
 export default function App() {
   const [tours, setTours] = useState<Tour[]>([]);
   const [loading, setLoading] = useState(true);
-  const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1';
+  const apiBase =
+    import.meta.env.VITE_API_BASE || 'https://api.trycloudflare.com/api/v1';
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       try {
         const { data } = await axios.get(`${apiBase}/tours/search`, {
-          params: { limit: 20 },
+          params: { limit: 50 },
           withCredentials: true,
         });
         setTours(data);
       } finally {
         setLoading(false);
       }
-    };
-    load();
+    })();
   }, []);
 
-  if (loading) return <p>{t('loading')}</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <span className="animate-pulse text-gray-400">{t('loading')}</span>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>{t('available_tours')}</h2>
-      <ul>
-        {tours.map((t) => (
-          <li key={t.id} style={{ margin: '12px 0' }}>
-            <Link to={`/tour/${t.id}`}>{t.title}</Link> – {fmtPrice(t.price_net)}
-          </li>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <h1 className="text-2xl font-extrabold text-cyan-700 mb-4">
+        {t('available_tours')}
+      </h1>
+
+      {tours.length === 0 && (
+        <p className="text-gray-500">{t('no_tours')}</p>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {tours.map((tour) => (
+          <Link
+            key={tour.id}
+            to={`/tour/${tour.id}`}
+            className="block rounded-xl shadow hover:shadow-md transition bg-white"
+          >
+            <div className="p-4">
+              <h2 className="font-semibold text-lg mb-2">{tour.title}</h2>
+              <p className="text-cyan-700 font-bold">
+                {fmtPrice(tour.price_net)}
+              </p>
+            </div>
+          </Link>
         ))}
-      </ul>
-      <p>
-        <Link to="/bookings">{t('my_bookings')}</Link>
-      </p>
+      </div>
+
+      <div className="mt-8">
+        <Link
+          to="/bookings"
+          className="text-cyan-600 underline hover:text-cyan-800"
+        >
+          {t('my_bookings')}
+        </Link>
+      </div>
     </div>
   );
-} 
+}

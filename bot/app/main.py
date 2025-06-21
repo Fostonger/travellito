@@ -36,7 +36,7 @@ class Settings:
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
     WEBHOOK_SECRET: str = os.getenv("BOT_WEBHOOK_SECRET", "")  # optional, use BOT_TOKEN if empty
     WEB_API: str = os.getenv("WEB_API", "http://web:8000")
-    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "http://localhost:5173")  # Vite dev server default
+    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "http://webapp:5173")  # Vite dev server default
 
     @property
     def webhook_path(self) -> str:
@@ -405,3 +405,13 @@ async def on_lang_cb(cb: CallbackQuery, callback_data: LangCB):
 
 
         pass 
+
+
+# TODO: remove this when before deploy
+if __name__ == "__main__":
+    import asyncio, logging
+    from aiogram import executor
+
+    logging.basicConfig(level=logging.INFO)
+    executor.start_polling(dp, skip_updates=True)
+# ────────────────────────────────────────────────────────

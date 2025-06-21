@@ -1,0 +1,133 @@
+{% extends "agency/base.html" %}
+{% block title %}Бронирования{% endblock %}
+{% block body %}
+<div class="max-w-7xl mx-auto px-6 py-10">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-extrabold text-cyan-700">Бронирования</h1>
+    <div class="flex gap-3 items-center">
+      <input type="date" id="fromDate" class="border rounded px-2 py-1 text-sm" />
+      <span>—</span>
+      <input type="date" id="toDate" class="border rounded px-2 py-1 text-sm" />
+      <button id="exportCsv" class="px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">Экспорт CSV</button>
+    </div>
+  </div>
+
+  <!-- Bookings list -->
+  <div id="bookingsContainer"></div>
+</div>
+
+<script>
+(function(){
+  const apiBase = '/api/v1/agency';
+
+  const fetchBookings = async () => {
+    const res = await fetch(`${apiBase}/bookings?format=json`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.bookings || [];
+  };
+
+  const groupBy = (array, keyFn) => {
+    const map = {};
+    array.forEach(item => {
+      const k = keyFn(item);
+      (map[k] = map[k] || []).push(item);
+    });
+    return map;
+  };
+
+  const render = async () => {
+    const bookings = await fetchBookings();
+    const container = document.getElementById('bookingsContainer');
+    container.innerHTML = '';
+
+    // group by tour_title
+    const groups = groupBy(bookings, b => b.tour_title);
+
+    Object.entries(groups).forEach(([title, rows]) => {
+      // Sort rows: unviewed first
+      rows.sort((a,b)=> (a.viewed === b.viewed ? 0 : a.viewed ? 1 : -1));
+
+      const section = document.createElement('div');
+      section.className = 'mb-10';
+      section.innerHTML = `
+        <h2 class="text-xl font-semibold text-gray-800 mb-3">${title}</h2>
+        <div class="overflow-x-auto bg-white rounded-xl shadow">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">ID</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Дата</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Турист</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Телефон</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Кол-во</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Сумма</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Статус</th>
+                <th class="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              ${rows.map(r => `
+                <tr class="${r.viewed ? '' : 'bg-amber-50'}">
+                  <td class="px-4 py-2">${r.booking_id}</td>
+                  <td class="px-4 py-2">${new Date(r.booked_at).toLocaleString()}</td>
+                  <td class="px-4 py-2">${r.tourist_name}</td>
+                  <td class="px-4 py-2">${r.tourist_phone}</td>
+                  <td class="px-4 py-2 text-center">${r.qty}</td>
+                  <td class="px-4 py-2">${r.gross_price}</td>
+                  <td class="px-4 py-2">${r.status || 'pending'}</td>
+                  <td class="px-4 py-2 text-right whitespace-nowrap">
+                    ${r.status === 'pending' ? `
+                      <button data-id="${r.booking_id}" data-action="confirm" class="actBtn text-green-600 hover:text-green-800 mr-2">Подтвердить</button>
+                      <button data-id="${r.booking_id}" data-action="reject" class="actBtn text-red-600 hover:text-red-800">Отклонить</button>
+                    ` : ''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      container.appendChild(section);
+    });
+
+    attachActions();
+  };
+
+  const patchStatus = async (id, status) => {
+    const res = await fetch(`${apiBase}/bookings/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({status})
+    });
+    if (!res.ok) {
+      alert('Ошибка изменения статуса');
+    }
+  };
+
+  const attachActions = () => {
+    document.querySelectorAll('.actBtn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = e.target.getAttribute('data-id');
+        const action = e.target.getAttribute('data-action');
+        if (!id || !action) return;
+        await patchStatus(id, action === 'confirm' ? 'confirmed' : 'rejected');
+        await render();
+      });
+    });
+  };
+
+  document.getElementById('exportCsv').addEventListener('click', () => {
+    const fd = document.getElementById('fromDate').value;
+    const td = document.getElementById('toDate').value;
+    const params = new URLSearchParams();
+    if (fd) params.append('from_date', fd);
+    if (td) params.append('to_date', td);
+    params.append('format', 'csv');
+    window.open(`${apiBase}/bookings?${params.toString()}`, '_blank');
+  });
+
+  render();
+})();
+</script>
+{% endblock %}

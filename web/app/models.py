@@ -92,12 +92,16 @@ class Tour(Base):
     free_cancellation_cutoff_h = mapped_column(Integer, default=24, nullable=False, comment="Hours before start when free cancellation is allowed")
     # Optional additional metadata used for filtering / future geo features
     duration_minutes = mapped_column(Integer, nullable=True)
-    city       = mapped_column(String(64), nullable=True)
+    # Normalised city FK instead of free-text string
+    city_id   = mapped_column(ForeignKey("cities.id"), nullable=True)
+    category_id = mapped_column(ForeignKey("tour_categories.id"), nullable=True)
     latitude   = mapped_column(Numeric(8, 6))   # nullable
     longitude  = mapped_column(Numeric(9, 6))
     agency      = relationship("Agency", back_populates="tours")
     images      = relationship("TourImage", back_populates="tour")
     categories  = relationship("TicketCategory", back_populates="tour")
+    city        = relationship("City", back_populates="tours")
+    category    = relationship("TourCategory", back_populates="tours")
 
 class TourImage(Base):
     __tablename__ = "tour_images"
@@ -151,6 +155,10 @@ class Purchase(Base):
     amount       = mapped_column(Numeric(10, 2))
     ts           = mapped_column(DateTime, server_default=func.now())
     commission_pct = mapped_column(Numeric(5, 2), nullable=True, comment="Commission percentage applied for landlord at time of booking")
+    status      = mapped_column(String(20), default="pending", nullable=False, comment="Booking status: pending, confirmed, rejected")
+    viewed      = mapped_column(Boolean, default=False, nullable=False, comment="Whether the booking has been viewed by the agency")
+    status_changed_at = mapped_column(DateTime, nullable=True, comment="When the status was last changed")
+    tourist_notified = mapped_column(Boolean, default=False, nullable=False, comment="Whether the tourist has been notified of status change")
 
     user         = relationship("User")
     departure    = relationship("Departure")
@@ -169,7 +177,13 @@ class TicketCategory(Base):
     name     = mapped_column(String(64), nullable=False)
     price    = mapped_column(Numeric(10, 2), nullable=False)
 
+    # New normalisation: link to TicketClass (adult / child / student ...) instead of free text name.
+    ticket_class_id = mapped_column(ForeignKey("ticket_classes.id"), nullable=True)
+
     tour     = relationship("Tour", back_populates="categories")
+
+    # Optional relationship – populated after migration
+    ticket_class = relationship("TicketClass")
 
 # ---------- Purchase items (by category) --------------------------------
 class PurchaseItem(Base):
@@ -218,3 +232,38 @@ class ApiKey(Base):
     created    = mapped_column(DateTime, server_default=func.now())
 
     agency = relationship("Agency")
+
+# ------------------------- New Normalised Tables ---------------------------
+
+class City(Base):
+    """Master table of cities so tours can be filtered reliably."""
+
+    __tablename__ = "cities"
+
+    id   = mapped_column(Integer, primary_key=True)
+    name = mapped_column(String(64), unique=True, nullable=False, index=True)
+
+    tours = relationship("Tour", back_populates="city")
+
+
+class TicketClass(Base):
+    """Lookup table for passenger types: adult, child, student, senior …"""
+
+    __tablename__ = "ticket_classes"
+
+    id        = mapped_column(Integer, primary_key=True)
+    code      = mapped_column(String(32), unique=True, nullable=False)  # machine-friendly
+    human_name = mapped_column(String(64), nullable=False)              # shown to users
+
+    # Back-ref is defined in TicketCategory
+
+
+class TourCategory(Base):
+    """High-level thematic categories (walking, food, museum …)."""
+
+    __tablename__ = "tour_categories"
+
+    id   = mapped_column(Integer, primary_key=True)
+    name = mapped_column(String(64), unique=True, nullable=False)
+
+    tours = relationship("Tour", back_populates="category")

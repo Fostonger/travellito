@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}Travellito Агентство{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-r from-sky-50 to-cyan-50 min-h-screen">
+  <nav class="bg-white/90 shadow-md backdrop-blur sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex">
+          <a href="/agency" class="flex-shrink-0 flex items-center text-cyan-700 font-bold">Travellito Агентство</a>
+          <div class="hidden sm:-my-px sm:ml-6 sm:flex sm:space-x-8">
+            <a href="/agency/tours" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-gray-700 hover:border-cyan-500">Экскурсии</a>
+            <a href="/agency/managers" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-gray-700 hover:border-cyan-500">Менеджеры</a>
+            <a href="/agency/bookings" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-gray-700 hover:border-cyan-500">Бронирования</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  {% block body %}{% endblock %}
+</body>
+</html> 

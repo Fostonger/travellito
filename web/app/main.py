@@ -17,6 +17,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 templates = Jinja2Templates(directory="templates")
 
@@ -26,6 +27,29 @@ app = FastAPI()
 
 # Attach rate-limiter to app
 app.state.limiter = limiter
+
+# ---------------------------------------------------------------------------
+#  CORS (allow Mini-App domain in development)
+# ---------------------------------------------------------------------------
+_raw_origins = os.getenv("CORS_ALLOW_ORIGINS") or os.getenv("WEBAPP_URL", "*")
+
+# When using the wildcard "*" we cannot enable credentials per Starlette's
+# security checks. If specific origins are provided we keep credentials=true
+# to allow cookie-based auth or other credentialed requests.
+if _raw_origins.strip() == "*":
+    _allow_origins = ["*"]
+    _allow_credentials = False  # Starlette forbids '*' with credentials=True
+else:
+    _allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    _allow_credentials = True
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allow_origins,
+    allow_credentials=_allow_credentials,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 @app.exception_handler(RateLimitExceeded)
 async def ratelimit_handler(request: Request, exc: RateLimitExceeded):
@@ -470,6 +494,14 @@ async def agency_tours_page(request: Request):
 @app.get("/agency/managers", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
 async def agency_managers_page(request: Request):
     return templates.TemplateResponse("agency/managers.html", {"request": request})
+
+# -------------------------- Agency bookings page ---------------------------
+
+
+@app.get("/agency/bookings", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
+async def agency_bookings_page(request: Request):
+    """Render bookings management page for agency UI."""
+    return templates.TemplateResponse("agency/bookings.html", {"request": request})
 
 # ----------------------- Admin: create agency user ------------------------
 

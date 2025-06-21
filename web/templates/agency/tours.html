@@ -1,0 +1,198 @@
+{% extends "agency/base.html" %}
+{% block title %}Мои экскурсии{% endblock %}
+{% block body %}
+<div class="max-w-7xl mx-auto px-6 py-10">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-extrabold text-cyan-700">Экскурсии</h1>
+    <button id="newTourBtn" class="px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">+ Новая экскурсия</button>
+  </div>
+
+  <!-- Tours table -->
+  <div class="overflow-x-auto bg-white rounded-xl shadow">
+    <table class="min-w-full divide-y divide-gray-200" id="toursTable">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цена</th>
+          <th class="px-6 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200" id="toursBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal for new tour -->
+<div id="tourModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Новая экскурсия</h2>
+    <form id="tourForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="tourTitle">Название</label>
+        <input id="tourTitle" type="text" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="tourDesc">Описание</label>
+        <textarea id="tourDesc" class="w-full px-3 py-2 border rounded"></textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="tourPrice">Базовая цена</label>
+        <input id="tourPrice" type="number" step="0.01" min="0" required class="w-full px-3 py-2 border rounded" />
+      </div>
+
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium mb-1" for="tourCity">Город</label>
+          <select id="tourCity" class="w-full px-3 py-2 border rounded"></select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium mb-1" for="tourCat">Категория</label>
+          <select id="tourCat" class="w-full px-3 py-2 border rounded"></select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1" for="tourImages">Фотографии</label>
+        <input id="tourImages" type="file" accept="image/*" multiple class="w-full" />
+      </div>
+
+      <div>
+        <h3 class="font-medium mb-2">Типы билетов</h3>
+        <div id="ticketRows" class="space-y-2"></div>
+        <div class="flex gap-2 mt-2">
+          <select id="ticketClassSel" class="flex-1 border rounded px-2 py-1 text-sm"></select>
+          <input id="ticketPriceInput" type="number" step="0.01" min="0" placeholder="Цена" class="flex-1 border rounded px-2 py-1 text-sm" />
+          <button type="button" id="addTicketBtn" class="px-3 py-1 bg-emerald-600 text-white rounded">Добавить</button>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancelModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
+        <button type="submit" class="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700">Создать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const modal = document.getElementById('tourModal');
+  const newBtn = document.getElementById('newTourBtn');
+  const cancelBtn = document.getElementById('cancelModal');
+
+  const openModal = () => { modal.classList.remove('hidden'); };
+  const closeModal = () => { modal.classList.add('hidden'); };
+
+  newBtn.addEventListener('click', async () => {
+    await preloadSelects();
+    openModal();
+  });
+  cancelBtn.addEventListener('click', closeModal);
+
+  const loadTours = async () => {
+    const res = await fetch('/api/v1/agency/tours');
+    if (!res.ok) return;
+    const tours = await res.json();
+    const body = document.getElementById('toursBody');
+    body.innerHTML = '';
+    tours.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.id}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.title}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.price}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'></td>`;
+      body.appendChild(tr);
+    });
+  };
+
+  const ticketRows = [];
+
+  // Initial fetch
+  loadTours();
+
+  document.getElementById('addTicketBtn').addEventListener('click', () => {
+    const clsSel = document.getElementById('ticketClassSel');
+    const priceInput = document.getElementById('ticketPriceInput');
+    const clsId = clsSel.value;
+    const clsName = clsSel.options[clsSel.selectedIndex].text;
+    const price = priceInput.value;
+    if (!clsId || !price) return;
+    ticketRows.push({ ticket_class_id: parseInt(clsId), name: clsName, price });
+    renderTicketRows();
+    priceInput.value = '';
+  });
+
+  const renderTicketRows = () => {
+    const container = document.getElementById('ticketRows');
+    container.innerHTML = ticketRows.map((r,i)=>`
+      <div class="flex justify-between items-center bg-gray-50 px-3 py-1 rounded">
+        <span>${r.name}</span>
+        <span>${r.price}</span>
+        <button data-idx="${i}" class="delTicket text-red-600">×</button>
+      </div>
+    `).join('');
+    container.querySelectorAll('.delTicket').forEach(btn => {
+      btn.addEventListener('click', (e)=>{
+        const idx = e.target.getAttribute('data-idx');
+        ticketRows.splice(idx,1);
+        renderTicketRows();
+      });
+    });
+  };
+
+  async function preloadSelects(){
+    // cities
+    const cities = await fetch('/api/v1/cities').then(r=>r.json()).catch(()=>[]);
+    const citySel = document.getElementById('tourCity');
+    citySel.innerHTML = '<option value="">—</option>' + cities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    // tour categories
+    const tCats = await fetch('/api/v1/tour_categories').then(r=>r.json()).catch(()=>[]);
+    const catSel = document.getElementById('tourCat');
+    catSel.innerHTML = '<option value="">—</option>' + tCats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    // ticket classes
+    const tClass = await fetch('/api/v1/ticket_classes').then(r=>r.json()).catch(()=>[]);
+    const clsSel = document.getElementById('ticketClassSel');
+    clsSel.innerHTML = '<option value="">Тип</option>' + tClass.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  }
+
+  document.getElementById('tourForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('tourTitle').value.trim();
+    const description = document.getElementById('tourDesc').value.trim();
+    const price = document.getElementById('tourPrice').value;
+    const city_id = document.getElementById('tourCity').value || null;
+    const category_id = document.getElementById('tourCat').value || null;
+    if (!title || !price) return;
+    const res = await fetch('/api/v1/agency/tours', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description, price, city_id, category_id })
+    });
+    if (!res.ok) { alert('Ошибка при создании экскурсии'); return; }
+    closeModal();
+    document.getElementById('tourForm').reset();
+    const { id } = await res.json();
+
+    // Upload images if any
+    const imgs = document.getElementById('tourImages').files;
+    if (imgs && imgs.length){
+      const fd = new FormData();
+      for (const f of imgs) fd.append('files', f);
+      await fetch(`/api/v1/agency/tours/${id}/images`, {method:'POST', body:fd});
+    }
+
+    // Add ticket categories
+    for (const tc of ticketRows){
+      await fetch(`/api/v1/agency/tours/${id}/categories`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(tc)
+      });
+    }
+
+    ticketRows.length = 0;
+    loadTours();
+  });
+})();
+</script>
+{% endblock %} 

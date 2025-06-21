@@ -30,7 +30,8 @@ class TourIn(BaseModel):
     description: str | None = None
     price: Decimal = Field(..., gt=0)
     duration_minutes: int | None = Field(None, gt=0)
-    city: str | None = Field(None, max_length=64)
+    city_id: int | None = None
+    category_id: int | None = None
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
 
@@ -217,6 +218,40 @@ async def set_capacity(
 
 
 # ---------------------------------------------------------------------------
+#  Delete departure
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/departures/{dep_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_departure(
+    sess: SessionDep,
+    dep_id: int = Path(..., gt=0),
+    user=Depends(current_user),
+):
+    """Delete a departure owned by the agency (only if no bookings)."""
+
+    agency_id = _get_agency_id(user)
+
+    dep: Departure | None = await sess.get(Departure, dep_id)
+    if not dep:
+        raise HTTPException(404, "Departure not found")
+
+    tour: Tour | None = await sess.get(Tour, dep.tour_id)
+    if not tour or tour.agency_id != agency_id:
+        raise HTTPException(404, "Departure not found")
+
+    # Prevent deletion if bookings exist
+    has_bookings = await sess.scalar(select(func.count()).select_from(Purchase).where(Purchase.departure_id == dep_id))
+    if has_bookings:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Cannot delete – bookings exist")
+
+    await sess.delete(dep)
+    await sess.commit()
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 #  Endpoints – CRUD Tours
 # ---------------------------------------------------------------------------
 
@@ -254,7 +289,8 @@ async def create_tour(payload: TourIn, sess: SessionDep, user=Depends(current_us
         description=payload.description,
         price=payload.price,
         duration_minutes=payload.duration_minutes,
-        city=payload.city,
+        city_id=payload.city_id,
+        category_id=payload.category_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
     )
@@ -359,6 +395,7 @@ async def upload_tour_images(
 class CategoryIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     price: Decimal = Field(..., gt=0)
+    ticket_class_id: int | None = None
 
 
 class CategoryOut(BaseModel):
@@ -397,6 +434,8 @@ async def add_category(tour_id: int, payload: CategoryIn, sess: SessionDep, user
         raise HTTPException(404, "Tour not found")
 
     cat = TicketCategory(tour_id=tour_id, name=payload.name, price=payload.price)
+    if payload.ticket_class_id:
+        cat.ticket_class_id = payload.ticket_class_id
     sess.add(cat)
     await sess.flush()
     await sess.commit()
@@ -491,7 +530,7 @@ async def export_bookings(
         .join(Tour, Tour.id == Departure.tour_id)
         .join(User, User.id == Purchase.user_id)
         .where(Tour.agency_id == agency_id)
-        .order_by(Purchase.ts.desc())
+        .order_by(Purchase.viewed.asc(), Purchase.ts.desc())
     )
 
     # Apply optional date filters on purchase timestamp (UTC)
@@ -725,3 +764,49 @@ async def delete_manager(mgr_id: int, sess: SessionDep, user=Depends(current_use
     await sess.delete(mgr)
     await sess.commit()
     return None 
+
+
+# ---------------------------------------------------------------------------
+#  Booking actions (confirm / reject)
+# ---------------------------------------------------------------------------
+
+
+class BookingStatusBody(BaseModel):
+    status: str = Field(..., pattern="^(confirmed|rejected)$")
+
+
+@router.patch("/bookings/{booking_id}")
+async def set_booking_status(
+    sess: SessionDep,
+    booking_id: int = Path(..., gt=0),
+    body: BookingStatusBody | None = None,
+    user=Depends(current_user),
+):
+    """Confirm or reject a booking belonging to the agency and mark it as viewed."""
+
+    if body is None:
+        raise HTTPException(400, "Empty payload")
+
+    agency_id = _get_agency_id(user)
+
+    purchase: Purchase | None = await sess.get(Purchase, booking_id)
+    if not purchase:
+        raise HTTPException(404, "Booking not found")
+
+    # Validate ownership via linked tour
+    dep: Departure | None = await sess.get(Departure, purchase.departure_id)
+    if not dep:
+        raise HTTPException(404, "Departure not found")
+
+    tour: Tour | None = await sess.get(Tour, dep.tour_id)
+    if not tour or tour.agency_id != agency_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Booking not found")
+
+    purchase.status = body.status
+    purchase.viewed = True
+    purchase.status_changed_at = datetime.utcnow()
+    purchase.tourist_notified = False
+
+    await sess.commit()
+
+    return {"booking_id": purchase.id, "status": purchase.status} 
