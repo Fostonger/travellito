@@ -74,7 +74,13 @@ async def telegram_auth(request: Request, resp: Response):
         samesite="lax",
     )
 
-    return {"ok": True}
+    # Return tokens in the JSON payload so non-browser clients (e.g. the Telegram bot) can consume them directly
+    return {
+        "ok": True,
+        "access_token": access_tok,
+        "refresh_token": refresh_tok,
+        "role": user.role,
+    }
 
 
 # ---------------------------------------------------------------------------

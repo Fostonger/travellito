@@ -1,6 +1,11 @@
 import asyncio, os, time, uuid
 
-import aioredis
+# Prefer the modern redis-py asyncio client (works on Python 3.12+).
+# Fall back to legacy aioredis if redis.asyncio is unavailable.
+try:
+    import redis.asyncio as aioredis  # redis >= 4.2
+except ModuleNotFoundError:  # pragma: no cover – legacy envs
+    import aioredis  # type: ignore
 from fastapi import HTTPException
 
 # ---------------------------------------------------------------------------

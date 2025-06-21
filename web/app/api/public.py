@@ -232,7 +232,6 @@ async def price_quote(payload: QuoteIn, sess: SessionDep, user=Depends(current_u
 @router.get(
     "/tours/{tour_id}/departures",
     summary="Upcoming departures for a given tour (with seats left)",
-    dependencies=[Depends(role_required("bot_user"))],
 )
 async def tour_departures(
     tour_id: int,
@@ -245,11 +244,11 @@ async def tour_departures(
     Response shape::
         [{"id": 123, "starts_at": "2025-06-01T09:00:00Z", "capacity": 25, "seats_left": 12}]
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
     from sqlalchemy import select
     from .bookings import _seats_taken  # local util (avoids duplication)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     stmt = (
         select(Departure)
