@@ -57,8 +57,11 @@ export default function Checkout() {
   };
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>{t('checkout', { date: new Date(departure.starts_at).toLocaleString() })}</h2>
+    <div className="p-4">
+      <div className="mb-2">
+        <button onClick={() => nav(-1)} className="text-cyan-600 underline">{t('back')}</button>
+      </div>
+      <h2 className="text-xl font-bold mb-3">{t('checkout', { date: new Date(departure.starts_at).toLocaleString() })}</h2>
       {categories.map((c: any) => (
         <div key={c.id} style={{ marginBottom: 8 }}>
           {c.name} – {fmtPrice(c.price_net)} &times;{' '}
@@ -76,7 +79,7 @@ export default function Checkout() {
           <strong>{t('total')}</strong> {fmtPrice(quote.total_net)} – {t('seats_left')}: {quote.seats_left}
         </p>
       )}
-      <button disabled={!quote} onClick={handleConfirm}>
+      <button disabled={!quote} onClick={handleConfirm} className="mt-4 px-4 py-2 bg-cyan-600 text-white rounded disabled:opacity-50">
         {t('confirm')}
       </button>
     </div>

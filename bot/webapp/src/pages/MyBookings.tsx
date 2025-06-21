@@ -24,7 +24,10 @@ export default function MyBookings() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2>{t('my_bookings')}</h2>
+      <div className="mb-2">
+        <Link to="/" className="text-cyan-600 underline">{t('back')}</Link>
+      </div>
+      <h2 className="text-xl font-bold mb-3">{t('my_bookings')}</h2>
       <ul>
         {bookings.map((b: any) => (
           <li key={b.id}>
@@ -33,9 +36,6 @@ export default function MyBookings() {
           </li>
         ))}
       </ul>
-      <p>
-        <Link to="/">{t('back')}</Link>
-      </p>
     </div>
   );
 } 

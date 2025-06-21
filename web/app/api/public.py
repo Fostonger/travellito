@@ -135,6 +135,7 @@ async def search_tours(
                 "title": t.title,
                 "price_raw": str(t.price),
                 "price_net": str(price_net),
+                "category": t.category.name if t.category is not None else None,
             }
         )
     return out
@@ -328,6 +329,7 @@ async def tour_detail(tid: int, sess: SessionDep):
         "title": tour.title,
         "description": tour.description,
         "price": str(tour.price),
+        "category": tour.category.name if tour.category is not None else None,
         "images": [presigned(img.key) for img in tour.images],
     }
 
