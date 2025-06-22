@@ -1,6 +1,6 @@
 from sqlalchemy import (
     String, BigInteger, Integer, ForeignKey, Numeric, DateTime,
-    func, select, UniqueConstraint, JSON, Index, Boolean
+    func, select, UniqueConstraint, JSON, Index, Boolean, Time
 )
 from sqlalchemy.orm import mapped_column, relationship, DeclarativeBase
 from .roles import Role
@@ -95,6 +95,12 @@ class Tour(Base):
     # Normalised city FK instead of free-text string
     city_id   = mapped_column(ForeignKey("cities.id"), nullable=True)
     category_id = mapped_column(ForeignKey("tour_categories.id"), nullable=True)
+    # -------- Recurrence ---------
+    repeat_type = mapped_column(String(16), default="none", nullable=False, comment="none | daily | weekly")
+    # For weekly repetition store list of weekday numbers 0=Mon .. 6=Sun
+    repeat_weekdays = mapped_column(JSON, nullable=True)
+    # Time of day (HH:MM:SS) when repeat departs
+    repeat_time = mapped_column(Time, nullable=True)
     latitude   = mapped_column(Numeric(8, 6))   # nullable
     longitude  = mapped_column(Numeric(9, 6))
     agency      = relationship("Agency", back_populates="tours")

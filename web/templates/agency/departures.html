@@ -1,0 +1,145 @@
+{% extends "agency/base.html" %}
+{% block title %}Расписания{% endblock %}
+{% block body %}
+<div class="max-w-6xl mx-auto px-6 py-10">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-extrabold text-cyan-700">Расписание выездов</h1>
+    <button id="newDepBtn" class="px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">+ Новый выезд</button>
+  </div>
+
+  <!-- Departures table -->
+  <div class="overflow-x-auto bg-white rounded-xl shadow">
+    <table class="min-w-full divide-y divide-gray-200" id="depsTable">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Тур</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Начало</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Вместимость</th>
+          <th class="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200" id="depsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="depModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-semibold mb-4" id="modalTitle">Новый выезд</h2>
+    <form id="depForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="depTour">Экскурсия</label>
+        <select id="depTour" class="w-full px-3 py-2 border rounded"></select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="depDate">Дата и время (UTC)</label>
+        <input id="depDate" type="datetime-local" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="depCap">Вместимость</label>
+        <input id="depCap" type="number" min="1" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancelDep" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
+        <button type="submit" class="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const modal = document.getElementById('depModal');
+  const openBtn = document.getElementById('newDepBtn');
+  const cancelBtn = document.getElementById('cancelDep');
+  const form = document.getElementById('depForm');
+  const tourSel = document.getElementById('depTour');
+  const dateInput = document.getElementById('depDate');
+  const capInput = document.getElementById('depCap');
+  const modalTitle = document.getElementById('modalTitle');
+  let editingId = null;
+
+  const openModal = (dep=null) => {
+    editingId = dep ? dep.id : null;
+    modalTitle.textContent = dep ? 'Редактировать выезд' : 'Новый выезд';
+    if(dep){
+      tourSel.value = dep.tour_id;
+      dateInput.value = dep.starts_at.slice(0,16); // ISO to yyyy-MM-ddThh:mm
+      capInput.value = dep.capacity;
+    } else {
+      dateInput.value = '';
+      capInput.value = '';
+    }
+    modal.classList.remove('hidden');
+  };
+  const closeModal = () => modal.classList.add('hidden');
+
+  openBtn.addEventListener('click', async ()=>{
+    await preloadTours();
+    openModal();
+  });
+  cancelBtn.addEventListener('click', closeModal);
+
+  async function preloadTours(){
+    if(tourSel.options.length>0) return; // already loaded
+    const tours = await fetch('/api/v1/agency/tours').then(r=>r.json()).catch(()=>[]);
+    tourSel.innerHTML = tours.map(t=>`<option value="${t.id}">${t.title}</option>`).join('');
+  }
+
+  async function loadDeps(){
+    const deps = await fetch('/api/v1/agency/departures?limit=100').then(r=>r.json()).catch(()=>[]);
+    const body = document.getElementById('depsBody');
+    body.innerHTML = '';
+    deps.forEach(d=>{
+      const tr = document.createElement('tr');
+      const dt = new Date(d.starts_at).toLocaleString();
+      tr.innerHTML = `
+        <td class='px-4 py-3 text-sm'>${d.id}</td>
+        <td class='px-4 py-3 text-sm'>${d.tour_id}</td>
+        <td class='px-4 py-3 text-sm'>${dt}</td>
+        <td class='px-4 py-3 text-sm'>${d.capacity}</td>
+        <td class='px-4 py-3 text-right text-sm'>
+          <button data-id="${d.id}" class="editDep text-cyan-600 mr-3">Изм.</button>
+          <button data-id="${d.id}" class="delDep text-red-600">×</button>
+        </td>`;
+      body.appendChild(tr);
+    });
+    body.querySelectorAll('.editDep').forEach(btn=>btn.addEventListener('click', async e=>{
+      const id = e.target.getAttribute('data-id');
+      const dep = deps.find(x=>x.id==id);
+      await preloadTours();
+      openModal(dep);
+    }));
+    body.querySelectorAll('.delDep').forEach(btn=>btn.addEventListener('click', async e=>{
+      const id = e.target.getAttribute('data-id');
+      if(!confirm('Удалить выезд?')) return;
+      await fetch(`/api/v1/agency/departures/${id}`, {method:'DELETE'});
+      loadDeps();
+    }));
+  }
+
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const payload = {
+      tour_id: parseInt(tourSel.value),
+      starts_at: new Date(dateInput.value).toISOString(),
+      capacity: parseInt(capInput.value)
+    };
+    if(editingId){
+      await fetch(`/api/v1/agency/departures/${editingId}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      });
+    } else {
+      await fetch('/api/v1/agency/departures', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    }
+    closeModal();
+    loadDeps();
+  });
+
+  // initial load
+  loadDeps();
+})();
+</script>
+{% endblock %} 

@@ -92,7 +92,7 @@ async def search_tours(
         landlord_id = await _last_referral_landlord_id(sess, int(user["sub"]))
 
     # Base query: Tours + optional joins for filters
-    stmt = select(Tour)
+    stmt = select(Tour).options(selectinload(Tour.category))
 
     # Price filters (raw list price)
     if price_min is not None:
@@ -317,7 +317,7 @@ async def list_tours(
 async def tour_detail(tid: int, sess: SessionDep):
     stmt = (
         select(Tour)
-        .options(selectinload(Tour.images))
+        .options(selectinload(Tour.images), selectinload(Tour.category))
         .where(Tour.id == tid)
     )
     tour = await sess.scalar(stmt)

@@ -34,6 +34,9 @@ class TourIn(BaseModel):
     category_id: int | None = None
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
+    repeat_type: str | None = Field(None, pattern="^(none|daily|weekly)$")
+    repeat_weekdays: list[int] | None = None  # 0=Mon .. 6=Sun
+    repeat_time: str | None = Field(None, pattern=r"^\d{2}:\d{2}$")
 
 
 class TourOut(BaseModel):
@@ -41,6 +44,9 @@ class TourOut(BaseModel):
     title: str
     description: str | None = None
     price: Decimal
+    repeat_type: str | None = None
+    repeat_weekdays: list[int] | None = None
+    repeat_time: str | None = None
 
     model_config = {
         "from_attributes": True,
@@ -197,6 +203,8 @@ async def update_departure(
         dep.starts_at = data["starts_at"]
 
     await sess.commit()
+    await sess.refresh(dep)
+
     return DepartureOut.from_orm(dep)
 
 
@@ -293,10 +301,14 @@ async def create_tour(payload: TourIn, sess: SessionDep, user=Depends(current_us
         category_id=payload.category_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
+        repeat_type=payload.repeat_type or "none",
+        repeat_weekdays=payload.repeat_weekdays,
+        repeat_time=payload.repeat_time,
     )
     sess.add(tour)
     await sess.flush()
     await sess.commit()
+    await sess.refresh(tour)
 
     return TourOut.from_orm(tour)
 
@@ -324,6 +336,7 @@ async def update_tour(
             setattr(tour, field, value)
 
     await sess.commit()
+    await sess.refresh(tour)
 
     return TourOut.from_orm(tour)
 

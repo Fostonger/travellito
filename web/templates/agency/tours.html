@@ -15,6 +15,7 @@
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цена</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Расписание</th>
           <th class="px-6 py-3"></th>
         </tr>
       </thead>
@@ -97,13 +98,19 @@
     body.innerHTML = '';
     tours.forEach(t => {
       const tr = document.createElement('tr');
+      const badge = formatScheduleBadge(t);
       tr.innerHTML = `
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.id}</td>
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.title}</td>
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.price}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm space-x-1'>${badge} <button data-id="${t.id}" class="addSched px-2 rounded bg-gray-200 hover:bg-gray-300">＋</button></td>
         <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'></td>`;
       body.appendChild(tr);
     });
+    body.querySelectorAll('.addSched').forEach(btn=>btn.addEventListener('click', (e)=>{
+      const tid = e.target.getAttribute('data-id');
+      openRecModal(tours.find(x=>x.id==tid));
+    }));
   };
 
   const ticketRows = [];
@@ -193,6 +200,32 @@
     ticketRows.length = 0;
     loadTours();
   });
+
+  function fmtTime(t){return t?.slice(0,5);} // HH:MM
+  const weekdaysRU=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  function formatScheduleBadge(t){
+    if(t.repeat_type==='daily') return `<span class="inline-block px-2 bg-emerald-100 rounded">🗓 ${fmtTime(t.repeat_time)}</span>`;
+    if(t.repeat_type==='weekly'){
+      const days=t.repeat_weekdays.map(i=>weekdaysRU[i]).join(' ');
+      return `<span class="inline-block px-2 bg-amber-100 rounded">⏲ ${fmtTime(t.repeat_time)} — ${days}</span>`;
+    }
+    return '<span class="inline-block px-2 bg-gray-100 rounded">—</span>';
+  }
+
+  // Recurrence modal (simple prompt for now)
+  function openRecModal(tour){
+    const type = prompt('Тип повторения (none|daily|weekly)', tour.repeat_type||'none');
+    if(!type) return;
+    let weekdays=null, time=null;
+    if(type==='weekly'){
+      weekdays = prompt('Дни недели (0=Пн..6=Вс через запятую)', (tour.repeat_weekdays||[]).join(','));
+      time = prompt('Время HH:MM', tour.repeat_time||'09:00');
+    }
+    if(type==='daily'){
+      time = prompt('Время HH:MM', tour.repeat_time||'09:00');
+    }
+    fetch(`/api/v1/agency/tours/${tour.id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({repeat_type:type, repeat_weekdays: weekdays?weekdays.split(',').map(Number):null, repeat_time: time})}).then(()=>loadTours());
+  }
 })();
 </script>
 {% endblock %} 

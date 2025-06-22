@@ -503,6 +503,13 @@ async def agency_bookings_page(request: Request):
     """Render bookings management page for agency UI."""
     return templates.TemplateResponse("agency/bookings.html", {"request": request})
 
+# ---------- Departures management page ----------
+
+@app.get("/agency/departures", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
+async def agency_departures_page(request: Request):
+    """Render departures CRUD UI for the agency."""
+    return templates.TemplateResponse("agency/departures.html", {"request": request})
+
 # ----------------------- Admin: create agency user ------------------------
 
 
