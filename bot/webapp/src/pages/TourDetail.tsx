@@ -12,16 +12,25 @@ export default function TourDetail() {
   const [departures, setDepartures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [imgIdx, setImgIdx] = useState(0);
+  const [fullscreenImg, setFullscreenImg] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       if (!id) return;
       const [tourRes, depRes] = await Promise.all([
         axios.get(`${apiBase}/tours/${id}`),
-        axios.get(`${apiBase}/tours/${id}/departures`, { params: { limit: 10 } }),
+        axios.get(`${apiBase}/tours/${id}/departures`, { params: { limit: 30 } }),
       ]);
       setTour(tourRes.data);
       setDepartures(depRes.data);
+      
+      // Set the first date as selected by default if departures exist
+      if (depRes.data.length > 0) {
+        const firstDate = new Date(depRes.data[0].starts_at).toDateString();
+        setSelectedDate(firstDate);
+      }
+      
       setLoading(false);
     };
     load();
@@ -29,59 +38,174 @@ export default function TourDetail() {
 
   const nextImg = () => setImgIdx((imgIdx + 1) % (tour.images?.length || 1));
   const prevImg = () => setImgIdx((imgIdx - 1 + (tour.images?.length || 1)) % (tour.images?.length || 1));
+  
+  // Group departures by date
+  const departuresByDate = departures.reduce((acc, dep) => {
+    const dateStr = new Date(dep.starts_at).toDateString();
+    if (!acc[dateStr]) acc[dateStr] = [];
+    acc[dateStr].push(dep);
+    return acc;
+  }, {});
+  
+  // Get unique dates
+  const uniqueDates = Object.keys(departuresByDate);
 
-  if (loading) return <p>{t('loading')}</p>;
-  if (!tour) return <p>{t('not_found')}</p>;
+  if (loading) return <p className="flex justify-center items-center h-screen text-lg">{t('loading')}</p>;
+  if (!tour) return <p className="flex justify-center items-center h-screen text-lg">{t('not_found')}</p>;
 
   return (
-    <div className="p-4">
+    <div className="p-4 pb-20 bg-gray-50 min-h-screen">
       {/* Back link */}
       <div className="mb-2">
-        <Link to="/" className="text-cyan-600 underline">{t('back')}</Link>
+        <Link to="/" className="text-blue-600 font-medium flex items-center">
+          <span className="mr-1">←</span> {t('back')}
+        </Link>
       </div>
 
       {/* Image carousel */}
       {tour.images?.length > 0 && (
-        <div className="relative mb-4">
+        <div className="relative mb-4 rounded-xl overflow-hidden shadow-lg">
           <img
             src={tour.images[imgIdx]}
-            className="w-full h-60 object-cover rounded-xl"
+            className="w-full h-72 object-cover cursor-pointer"
+            onClick={() => setFullscreenImg(tour.images[imgIdx])}
           />
           {tour.images.length > 1 && (
             <>
               <button
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/70 rounded-full p-2"
+                className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full p-2 shadow-md"
                 onClick={prevImg}
               >◀</button>
               <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/70 rounded-full p-2"
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full p-2 shadow-md"
                 onClick={nextImg}
               >▶</button>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-1">
+                {tour.images.map((_, idx) => (
+                  <div 
+                    key={idx}
+                    className={`w-2 h-2 rounded-full ${idx === imgIdx ? 'bg-white' : 'bg-white/50'}`}
+                    onClick={() => setImgIdx(idx)}
+                  />
+                ))}
+              </div>
             </>
           )}
         </div>
       )}
 
-      <h2 className="text-xl font-bold mb-1">{tour.title}</h2>
-      {tour.category && (
-        <span
-          className="inline-block px-2 py-1 text-xs rounded-full mb-2"
-          style={{ backgroundColor: pastelColor(tour.category), color: '#333' }}
+      {/* Fullscreen image modal */}
+      {fullscreenImg && (
+        <div 
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center"
+          onClick={() => setFullscreenImg(null)}
         >
-          {tour.category}
-        </span>
+          <img 
+            src={fullscreenImg} 
+            className="max-w-full max-h-full object-contain"
+          />
+          <button 
+            className="absolute top-4 right-4 text-white text-2xl"
+            onClick={() => setFullscreenImg(null)}
+          >
+            ✕
+          </button>
+        </div>
       )}
 
-      <p className="mb-4 text-gray-700 whitespace-pre-line">{tour.description}</p>
-      <h3>{t('upcoming_departures')}</h3>
-      <ul>
-        {departures.map((d: any) => (
-          <li key={d.id}>
-            {new Date(d.starts_at).toLocaleString()} – {t('seats_left')}: {d.seats_left}{' '}
-            <button onClick={() => nav('/checkout', { state: { tourId: id, departure: d } })}>{t('book')}</button>
-          </li>
-        ))}
-      </ul>
+      {/* Tour details */}
+      <div className="bg-white rounded-xl p-4 shadow-md mb-4">
+        <h2 className="text-2xl font-bold mb-1">{tour.title}</h2>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            {tour.category && (
+              <span
+                className="inline-block px-3 py-1 text-sm rounded-full font-medium"
+                style={{ backgroundColor: pastelColor(tour.category), color: '#333' }}
+              >
+                {tour.category}
+              </span>
+            )}
+          </div>
+          <div className="text-xl font-bold text-blue-600">
+            {fmtPrice(tour.price)}
+          </div>
+        </div>
+
+        {tour.duration_minutes && (
+          <div className="mb-3 flex items-center text-gray-600">
+            <span className="mr-1">⏱</span>
+            <span>{Math.floor(tour.duration_minutes / 60)} {t('hours')} {tour.duration_minutes % 60} {t('minutes')}</span>
+          </div>
+        )}
+        
+        <p className="mb-4 text-gray-700 whitespace-pre-line leading-relaxed">{tour.description}</p>
+      </div>
+
+      {/* Departures section with date tabs */}
+      {uniqueDates.length > 0 ? (
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          <h3 className="text-xl font-semibold p-4 border-b">{t('upcoming_departures')}</h3>
+          
+          {/* Date tabs */}
+          <div className="flex overflow-x-auto p-2 bg-gray-50">
+            {uniqueDates.map(dateStr => (
+              <button
+                key={dateStr}
+                className={`px-4 py-2 whitespace-nowrap mx-1 rounded-lg font-medium ${
+                  selectedDate === dateStr 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-white text-gray-700 border'
+                }`}
+                onClick={() => setSelectedDate(dateStr)}
+              >
+                {new Date(dateStr).toLocaleDateString()}
+              </button>
+            ))}
+          </div>
+          
+          {/* Departures for selected date */}
+          {selectedDate && (
+            <div className="p-4">
+              <h4 className="font-medium text-gray-500 mb-3">
+                {new Date(selectedDate).toLocaleDateString(undefined, { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+              </h4>
+              <div className="space-y-3">
+                {departuresByDate[selectedDate].map((d) => {
+                  const time = new Date(d.starts_at).toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                  return (
+                    <div key={d.id} className="flex justify-between items-center border-b pb-3">
+                      <div>
+                        <div className="font-bold">{time}</div>
+                        <div className="text-sm text-gray-600">{t('seats_left')}: {d.seats_left}</div>
+                      </div>
+                      <button 
+                        onClick={() => nav('/checkout', { state: { tourId: id, departure: d } })}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                        disabled={d.seats_left <= 0}
+                      >
+                        {t('book')}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl p-4 shadow-md text-center">
+          <p className="text-gray-500">{t('no_departures')}</p>
+        </div>
+      )}
     </div>
   );
 }
