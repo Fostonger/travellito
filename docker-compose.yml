@@ -20,6 +20,7 @@ services:
       WEB_API: "http://web:8000"
       WEBAPP_URL: "${WEBAPP_URL}"
       S3_ENDPOINT: "minio:9000"
+      PUBLIC_S3_ENDPOINT: "localhost:9000"
       S3_ACCESS_KEY: "minioadmin"
       S3_SECRET_KEY: "minioadminsecret"
       S3_BUCKET: "tour-images"

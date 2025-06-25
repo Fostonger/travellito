@@ -245,32 +245,106 @@ async def tour_departures(
     Response shape::
         [{"id": 123, "starts_at": "2025-06-01T09:00:00Z", "capacity": 25, "seats_left": 12}]
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from sqlalchemy import select
+    from typing import Union, List, Dict, Any, Optional
+    from ..models import Tour
     from .bookings import _seats_taken  # local util (avoids duplication)
 
     now = datetime.utcnow()
 
+    # First, get the tour to check its repetition type
+    tour: Optional[Tour] = await sess.get(Tour, tour_id)
+    if tour is None:
+        raise HTTPException(404, "Tour not found")
+
+    # Get existing departures
     stmt = (
         select(Departure)
         .where(Departure.tour_id == tour_id, Departure.starts_at >= now)
         .order_by(Departure.starts_at)
-        .limit(limit)
-        .offset(offset)
     )
     deps = (await sess.scalars(stmt)).all()
 
-    out = []
+    # Create a list of all departure dates (existing + future calculated ones)
+    all_departures = []
+    
+    # Process existing departures
+    existing_dates = set()
     for dep in deps:
         taken = await _seats_taken(sess, dep.id)
-        out.append(
-            {
-                "id": dep.id,
-                "starts_at": dep.starts_at.isoformat() if dep.starts_at else None,
-                "capacity": dep.capacity,
-                "seats_left": max(dep.capacity - taken, 0),
-            }
-        )
+        all_departures.append({
+            "id": dep.id,
+            "starts_at": dep.starts_at,
+            "capacity": dep.capacity,
+            "seats_left": max(dep.capacity - taken, 0),
+            "is_existing": True
+        })
+        existing_dates.add(dep.starts_at.date())
+
+    # Calculate future departures based on repetition type
+    if tour.repeat_type != "none" and tour.repeat_time:
+        # Define how many days ahead to generate departures
+        future_days = 30
+        
+        # Get the default capacity from existing departures or set a default
+        default_capacity = 10
+        if deps:
+            default_capacity = deps[0].capacity
+        
+        # Generate dates based on repetition type
+        future_dates = []
+        
+        if tour.repeat_type == "daily":
+            # Generate daily dates for the next 'future_days'
+            for i in range(future_days):
+                future_date = now.date() + timedelta(days=i)
+                future_datetime = datetime.combine(future_date, tour.repeat_time)
+                if future_datetime > now:
+                    future_dates.append(future_datetime)
+        
+        elif tour.repeat_type == "weekly" and tour.repeat_weekdays:
+            # Generate weekly dates for the next 'future_days'
+            for i in range(future_days):
+                future_date = now.date() + timedelta(days=i)
+                weekday = future_date.weekday()  # 0=Mon, 6=Sun
+                
+                # Check if this weekday is in the repeat_weekdays list
+                if weekday in tour.repeat_weekdays:
+                    future_datetime = datetime.combine(future_date, tour.repeat_time)
+                    if future_datetime > now:
+                        future_dates.append(future_datetime)
+        
+        # Filter out dates that already exist in the departures
+        new_dates = [date for date in future_dates if date.date() not in existing_dates]
+        
+        # Add virtual departures to the list
+        for date in new_dates:
+            all_departures.append({
+                "id": None,  # No ID for virtual departures
+                "starts_at": date,
+                "capacity": default_capacity,
+                "seats_left": default_capacity,
+                "is_existing": False
+            })
+    
+    # Sort all departures by start time
+    all_departures.sort(key=lambda x: x["starts_at"])
+    
+    # Apply pagination
+    paginated_departures = all_departures[offset:offset+limit]
+    
+    # Format the response
+    out = []
+    for dep in paginated_departures:
+        out.append({
+            "id": dep["id"],
+            "starts_at": dep["starts_at"].isoformat() if dep["starts_at"] else None,
+            "capacity": dep["capacity"],
+            "seats_left": dep["seats_left"],
+            "is_virtual": not dep["is_existing"]  # Add flag to indicate virtual departures
+        })
+    
     return out
 
 
@@ -346,12 +420,12 @@ async def tour_detail(tid: int, sess: SessionDep):
 async def departure_availability(departure_id: int, sess: SessionDep):
     """Return number of free seats for the given departure."""
 
-    dep: Departure | None = await sess.get(Departure, departure_id)
-    if not dep:
+    dep: Optional[Departure] = await sess.get(Departure, departure_id)
+    if dep is None:
         raise HTTPException(404, "Departure not found")
 
     taken_stmt = select(func.coalesce(func.sum(Purchase.qty), 0)).where(Purchase.departure_id == departure_id)
-    taken: int | None = await sess.scalar(taken_stmt)
+    taken: Optional[int] = await sess.scalar(taken_stmt)
     taken = taken or 0
     remaining = max(dep.capacity - taken, 0)
 

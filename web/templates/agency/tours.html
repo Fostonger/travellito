@@ -55,7 +55,15 @@
 
       <div>
         <label class="block text-sm font-medium mb-1" for="tourImages">Фотографии</label>
-        <input id="tourImages" type="file" accept="image/*" multiple class="w-full" />
+        <div id="dropArea" class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition-colors">
+          <p class="text-gray-500 mb-2">Перетащите изображения сюда или нажмите для выбора</p>
+          <input id="tourImages" type="file" accept="image/*" multiple class="hidden" />
+          <button type="button" id="selectImagesBtn" class="px-3 py-1 bg-cyan-600 text-white rounded">Выбрать файлы</button>
+        </div>
+        <div id="imagePreviewCarousel" class="mt-3 hidden">
+          <h4 class="text-sm font-medium mb-2">Предпросмотр изображений:</h4>
+          <div class="flex overflow-x-auto gap-2 pb-2" id="previewContainer"></div>
+        </div>
       </div>
 
       <div>
@@ -221,6 +229,105 @@
     await loadRepetitionTypes();
   }
 
+  // Handle drag and drop image functionality
+  const dropArea = document.getElementById('dropArea');
+  const imageInput = document.getElementById('tourImages');
+  const selectImagesBtn = document.getElementById('selectImagesBtn');
+  const imagePreviewCarousel = document.getElementById('imagePreviewCarousel');
+  const previewContainer = document.getElementById('previewContainer');
+  const selectedFiles = [];
+
+  // Open file dialog when button is clicked
+  selectImagesBtn.addEventListener('click', () => {
+    imageInput.click();
+  });
+
+  // Handle file selection
+  imageInput.addEventListener('change', handleFileSelect);
+
+  // Drag and drop events
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, preventDefaults, false);
+  });
+
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropArea.addEventListener(eventName, highlight, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, unhighlight, false);
+  });
+
+  function highlight() {
+    dropArea.classList.add('border-cyan-500', 'bg-cyan-50');
+  }
+
+  function unhighlight() {
+    dropArea.classList.remove('border-cyan-500', 'bg-cyan-50');
+  }
+
+  // Handle the dropped files
+  dropArea.addEventListener('drop', handleDrop, false);
+
+  function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    handleFiles(files);
+  }
+
+  function handleFileSelect(e) {
+    const files = e.target.files;
+    handleFiles(files);
+  }
+
+  function handleFiles(files) {
+    if (files.length === 0) return;
+    
+    // Clear previous previews if needed
+    if (selectedFiles.length === 0) {
+      previewContainer.innerHTML = '';
+    }
+    
+    // Process each file
+    Array.from(files).forEach(file => {
+      if (!file.type.match('image.*')) return;
+      
+      selectedFiles.push(file);
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const div = document.createElement('div');
+        div.className = 'relative flex-shrink-0';
+        div.innerHTML = `
+          <img src="${e.target.result}" class="h-24 w-auto rounded border border-gray-300" />
+          <button type="button" class="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center remove-image">×</button>
+        `;
+        previewContainer.appendChild(div);
+        
+        // Add remove functionality
+        div.querySelector('.remove-image').addEventListener('click', function() {
+          const index = Array.from(previewContainer.children).indexOf(div);
+          selectedFiles.splice(index, 1);
+          div.remove();
+          
+          // Hide carousel if no images
+          if (selectedFiles.length === 0) {
+            imagePreviewCarousel.classList.add('hidden');
+          }
+        });
+        
+        // Show the preview carousel
+        imagePreviewCarousel.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   document.getElementById('tourForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('tourTitle').value.trim();
@@ -240,10 +347,9 @@
     const { id } = await res.json();
 
     // Upload images if any
-    const imgs = document.getElementById('tourImages').files;
-    if (imgs && imgs.length){
+    if (selectedFiles.length > 0){
       const fd = new FormData();
-      for (const f of imgs) fd.append('files', f);
+      for (const f of selectedFiles) fd.append('files', f);
       await fetch(`/api/v1/agency/tours/${id}/images`, {method:'POST', body:fd});
     }
 

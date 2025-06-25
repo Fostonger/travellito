@@ -411,19 +411,39 @@ async def upload_tour_images(
 
     agency_id = _get_agency_id(user)
 
-    tour: Tour | None = await sess.get(Tour, tour_id)
-    if not tour or tour.agency_id != agency_id:
+    # Ensure the tour exists and belongs to the agency
+    tour = await sess.get(Tour, tour_id)
+    if tour is None or tour.agency_id != agency_id:
         raise HTTPException(404, "Tour not found")
 
-    keys: list[str] = []
+    keys = []
+    urls = []
+    
+    # Process each file
     for f in files:
-        key = upload_image(f)
-        keys.append(key)
-        sess.add(TourImage(tour_id=tour.id, key=key))
+        try:
+            # Make sure file is an image
+            if not f.content_type.startswith('image/'):
+                continue
+                
+            # Upload to Minio storage
+            key = upload_image(f)
+            
+            if key:
+                # Create database record
+                tour_image = TourImage(tour_id=tour.id, key=key)
+                sess.add(tour_image)
+                
+                # Add to response lists
+                keys.append(key)
+                urls.append(presigned(key))
+        except Exception as e:
+            # Log the error but continue with other files
+            print(f"Error uploading image {f.filename}: {str(e)}")
+            continue
 
+    # Commit all changes to database
     await sess.commit()
-
-    urls = [presigned(k) for k in keys]
 
     return ImagesOut(keys=keys, urls=urls)
 

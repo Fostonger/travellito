@@ -1,5 +1,5 @@
 # web/app/storage.py
-import os, uuid, datetime, pathlib
+import os, uuid, datetime, pathlib, json
 from minio import Minio
 from minio.error import S3Error
 
@@ -7,6 +7,8 @@ ENDPOINT     = os.getenv("S3_ENDPOINT", "minio:9000")
 ACCESS_KEY   = os.getenv("S3_ACCESS_KEY", "minioadmin")
 SECRET_KEY   = os.getenv("S3_SECRET_KEY", "minioadminsecret")
 BUCKET       = os.getenv("S3_BUCKET", "tour-images")
+# Use this for external access (from browser)
+PUBLIC_ENDPOINT = os.getenv("PUBLIC_S3_ENDPOINT", "localhost:9000")
 
 client = Minio(
     ENDPOINT,
@@ -17,6 +19,40 @@ client = Minio(
 
 if not client.bucket_exists(BUCKET):
     client.make_bucket(BUCKET)
+
+# Set bucket policy to allow public read access
+try:
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "*"},
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{BUCKET}/*"]
+            }
+        ]
+    }
+    client.set_bucket_policy(BUCKET, json.dumps(policy))
+except Exception as e:
+    print(f"Error setting bucket policy: {str(e)}")
+
+# Always set the CORS policy (even if bucket already exists)
+try:
+    cors_config = {
+        'CORSRules': [
+            {
+                'AllowedHeaders': ['*'],
+                'AllowedMethods': ['GET', 'PUT', 'POST'],
+                'AllowedOrigins': ['*'],
+                'ExposeHeaders': ['ETag', 'Content-Length', 'Content-Type'],
+                'MaxAgeSeconds': 3600
+            }
+        ]
+    }
+    client.set_bucket_cors(BUCKET, cors_config)
+except Exception as e:
+    print(f"Error setting CORS policy: {str(e)}")
 
 def upload_image(upload_file):
     """Upload FastAPI UploadFile → returns object key"""
@@ -34,7 +70,11 @@ def upload_image(upload_file):
     return object_name
 
 def presigned(object_name, seconds=3600):
-    return client.presigned_get_object(
-        BUCKET, object_name,
-        expires=datetime.timedelta(seconds=seconds)
-    )
+    # For browser access, use the public endpoint
+    if PUBLIC_ENDPOINT != ENDPOINT:
+        return f"http://{PUBLIC_ENDPOINT}/{BUCKET}/{object_name}"
+    else:
+        return client.presigned_get_object(
+            BUCKET, object_name,
+            expires=datetime.timedelta(seconds=seconds)
+        )
