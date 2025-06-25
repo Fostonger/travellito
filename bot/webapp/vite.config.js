@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['centuries-disable-palace-submitted.trycloudflare.com']
+    allowedHosts: ['end-shorts-click-context.trycloudflare.com']
   },
 }); 

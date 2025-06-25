@@ -96,7 +96,7 @@ class Tour(Base):
     city_id   = mapped_column(ForeignKey("cities.id"), nullable=True)
     category_id = mapped_column(ForeignKey("tour_categories.id"), nullable=True)
     # -------- Recurrence ---------
-    repeat_type = mapped_column(String(16), default="none", nullable=False, comment="none | daily | weekly")
+    repeat_type = mapped_column(String(16), ForeignKey("repetition_types.code"), default="none", nullable=False, comment="none | daily | weekly")
     # For weekly repetition store list of weekday numbers 0=Mon .. 6=Sun
     repeat_weekdays = mapped_column(JSON, nullable=True)
     # Time of day (HH:MM:SS) when repeat departs
@@ -108,6 +108,7 @@ class Tour(Base):
     categories  = relationship("TicketCategory", back_populates="tour")
     city        = relationship("City", back_populates="tours")
     category    = relationship("TourCategory", back_populates="tours")
+    repeat_type_rel = relationship("RepetitionType")
 
 class TourImage(Base):
     __tablename__ = "tour_images"
@@ -273,3 +274,15 @@ class TourCategory(Base):
     name = mapped_column(String(64), unique=True, nullable=False)
 
     tours = relationship("Tour", back_populates="category")
+
+
+class RepetitionType(Base):
+    """Departure repetition types (none, daily, weekly)."""
+
+    __tablename__ = "repetition_types"
+
+    code = mapped_column(String(16), primary_key=True)
+    name = mapped_column(String(64), nullable=False)
+    description = mapped_column(String(255), nullable=True)
+    
+    tours = relationship("Tour", back_populates="repeat_type_rel")

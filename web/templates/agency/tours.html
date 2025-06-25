@@ -75,6 +75,62 @@
   </div>
 </div>
 
+<!-- Modal for schedule configuration -->
+<div id="scheduleModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden">
+  <div class="bg-white w-full max-w-md rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Настройка расписания</h2>
+    <form id="scheduleForm" class="space-y-4">
+      <input type="hidden" id="scheduleTourId">
+      
+      <div>
+        <label class="block text-sm font-medium mb-1" for="repeatType">Тип повторения</label>
+        <select id="repeatType" class="w-full px-3 py-2 border rounded">
+          <option value="none">Без повторения</option>
+          <option value="daily">Ежедневно</option>
+          <option value="weekly">Еженедельно</option>
+        </select>
+      </div>
+      
+      <div id="timeSection" class="hidden">
+        <label class="block text-sm font-medium mb-1" for="repeatTime">Время</label>
+        <input type="time" id="repeatTime" class="w-full px-3 py-2 border rounded" value="09:00">
+      </div>
+      
+      <div id="weekdaysSection" class="hidden">
+        <label class="block text-sm font-medium mb-2">Дни недели</label>
+        <div class="flex flex-wrap gap-2">
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="0" class="weekday-cb mr-1"> Пн
+          </label>
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="1" class="weekday-cb mr-1"> Вт
+          </label>
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="2" class="weekday-cb mr-1"> Ср
+          </label>
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="3" class="weekday-cb mr-1"> Чт
+          </label>
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="4" class="weekday-cb mr-1"> Пт
+          </label>
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="5" class="weekday-cb mr-1"> Сб
+          </label>
+          <label class="inline-flex items-center px-3 py-1 bg-gray-100 rounded">
+            <input type="checkbox" value="6" class="weekday-cb mr-1"> Вс
+          </label>
+        </div>
+      </div>
+      
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancelScheduleModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
+        <button type="submit" class="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 (function(){
   const modal = document.getElementById('tourModal');
@@ -161,6 +217,8 @@
     const tClass = await fetch('/api/v1/ticket_classes').then(r=>r.json()).catch(()=>[]);
     const clsSel = document.getElementById('ticketClassSel');
     clsSel.innerHTML = '<option value="">Тип</option>' + tClass.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    // repetition types
+    await loadRepetitionTypes();
   }
 
   document.getElementById('tourForm').addEventListener('submit', async (e) => {
@@ -212,20 +270,123 @@
     return '<span class="inline-block px-2 bg-gray-100 rounded">—</span>';
   }
 
-  // Recurrence modal (simple prompt for now)
-  function openRecModal(tour){
-    const type = prompt('Тип повторения (none|daily|weekly)', tour.repeat_type||'none');
-    if(!type) return;
-    let weekdays=null, time=null;
-    if(type==='weekly'){
-      weekdays = prompt('Дни недели (0=Пн..6=Вс через запятую)', (tour.repeat_weekdays||[]).join(','));
-      time = prompt('Время HH:MM', tour.repeat_time||'09:00');
+  // Schedule modal
+  const scheduleModal = document.getElementById('scheduleModal');
+  const scheduleForm = document.getElementById('scheduleForm');
+  const repeatTypeSelect = document.getElementById('repeatType');
+  const timeSection = document.getElementById('timeSection');
+  const weekdaysSection = document.getElementById('weekdaysSection');
+  const scheduleTourIdInput = document.getElementById('scheduleTourId');
+  const repeatTimeInput = document.getElementById('repeatTime');
+  const weekdayCbs = document.querySelectorAll('.weekday-cb');
+  const cancelScheduleBtn = document.getElementById('cancelScheduleModal');
+
+  // Show/hide sections based on repeat type
+  repeatTypeSelect.addEventListener('change', () => {
+    const type = repeatTypeSelect.value;
+    timeSection.classList.toggle('hidden', type === 'none');
+    weekdaysSection.classList.toggle('hidden', type !== 'weekly');
+  });
+
+  // Load repetition types
+  async function loadRepetitionTypes() {
+    try {
+      const res = await fetch('/api/v1/repetition_types');
+      if (!res.ok) throw new Error('Failed to load repetition types');
+      
+      const types = await res.json();
+      repeatTypeSelect.innerHTML = types.map(t => 
+        `<option value="${t.code}">${t.name}</option>`
+      ).join('');
+    } catch (err) {
+      console.error('Error loading repetition types:', err);
+      // Fallback to hardcoded values
+      repeatTypeSelect.innerHTML = `
+        <option value="none">Без повторения</option>
+        <option value="daily">Ежедневно</option>
+        <option value="weekly">Еженедельно</option>
+      `;
     }
-    if(type==='daily'){
-      time = prompt('Время HH:MM', tour.repeat_time||'09:00');
-    }
-    fetch(`/api/v1/agency/tours/${tour.id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({repeat_type:type, repeat_weekdays: weekdays?weekdays.split(',').map(Number):null, repeat_time: time})}).then(()=>loadTours());
   }
+
+  // Open schedule modal
+  async function openRecModal(tour) {
+    // Load repetition types if not already loaded
+    if (repeatTypeSelect.children.length === 0) {
+      await loadRepetitionTypes();
+    }
+    
+    scheduleTourIdInput.value = tour.id;
+    
+    // Set initial values
+    repeatTypeSelect.value = tour.repeat_type || 'none';
+    
+    // Set time if exists
+    if (tour.repeat_time) {
+      repeatTimeInput.value = tour.repeat_time.slice(0, 5); // HH:MM
+    } else {
+      repeatTimeInput.value = '09:00';
+    }
+    
+    // Set weekdays if exists
+    weekdayCbs.forEach(cb => cb.checked = false);
+    if (tour.repeat_weekdays && Array.isArray(tour.repeat_weekdays)) {
+      tour.repeat_weekdays.forEach(day => {
+        const cb = document.querySelector(`.weekday-cb[value="${day}"]`);
+        if (cb) cb.checked = true;
+      });
+    }
+    
+    // Show/hide sections based on type
+    timeSection.classList.toggle('hidden', repeatTypeSelect.value === 'none');
+    weekdaysSection.classList.toggle('hidden', repeatTypeSelect.value !== 'weekly');
+    
+    // Show modal
+    scheduleModal.classList.remove('hidden');
+  }
+  
+  // Close schedule modal
+  cancelScheduleBtn.addEventListener('click', () => {
+    scheduleModal.classList.add('hidden');
+  });
+  
+  // Submit schedule form
+  scheduleForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const tourId = scheduleTourIdInput.value;
+    const type = repeatTypeSelect.value;
+    const time = type !== 'none' ? repeatTimeInput.value : null;
+    
+    // Get selected weekdays
+    let weekdays = null;
+    if (type === 'weekly') {
+      weekdays = Array.from(weekdayCbs)
+        .filter(cb => cb.checked)
+        .map(cb => parseInt(cb.value));
+    }
+    
+    try {
+      const res = await fetch(`/api/v1/agency/tours/${tourId}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          repeat_type: type,
+          repeat_weekdays: weekdays,
+          repeat_time: time
+        })
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to update schedule');
+      }
+      
+      scheduleModal.classList.add('hidden');
+      loadTours();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  });
 })();
 </script>
 {% endblock %} 

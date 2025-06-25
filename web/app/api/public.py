@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from decimal import Decimal
 from datetime import date
 from typing import Sequence, Optional, List
-from ..models import Tour, Departure, Purchase, TicketCategory, Referral, LandlordCommission, City, TourCategory, TicketClass
+from ..models import Tour, Departure, Purchase, TicketCategory, Referral, LandlordCommission, City, TourCategory, TicketClass, RepetitionType
 from ..security import role_required, current_user
 from ..deps import SessionDep
 from ..storage import presigned
@@ -296,6 +296,14 @@ async def list_ticket_classes(sess: SessionDep):
     stmt = select(TicketClass.id, TicketClass.code, TicketClass.human_name).order_by(TicketClass.human_name)
     result = await sess.execute(stmt)
     return [{"id": id, "code": code, "name": name} for id, code, name in result]
+
+
+@router.get("/repetition_types", response_model=list[dict])
+async def list_repetition_types(sess: SessionDep):
+    """Return all repetition types for dropdown selection."""
+    stmt = select(RepetitionType.code, RepetitionType.name, RepetitionType.description).order_by(RepetitionType.code)
+    result = await sess.execute(stmt)
+    return [{"code": code, "name": name, "description": desc} for code, name, desc in result]
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Sequence
+from datetime import datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status, UploadFile, File, Query, Request
 from pydantic import BaseModel, Field
@@ -51,6 +52,16 @@ class TourOut(BaseModel):
     model_config = {
         "from_attributes": True,
     }
+    
+    @classmethod
+    def model_validate(cls, obj, *args, **kwargs):
+        if hasattr(obj, "__dict__"):
+            # If it's an ORM object, handle time conversion
+            data = {**obj.__dict__}
+            if hasattr(obj, "repeat_time") and obj.repeat_time is not None:
+                data["repeat_time"] = obj.repeat_time.strftime("%H:%M") if obj.repeat_time else None
+            return super().model_validate(data, *args, **kwargs)
+        return super().model_validate(obj, *args, **kwargs)
 
 
 class ImagesOut(BaseModel):
@@ -61,9 +72,6 @@ class ImagesOut(BaseModel):
 # ---------------------------------------------------------------------------
 #  Departure Schemas
 # ---------------------------------------------------------------------------
-
-
-from datetime import datetime
 
 
 class DepartureIn(BaseModel):
@@ -126,7 +134,7 @@ async def list_departures(
 
     stmt = stmt.order_by(Departure.starts_at).limit(limit).offset(offset)
     result = (await sess.scalars(stmt)).all()
-    return [DepartureOut.from_orm(d) for d in result]
+    return [DepartureOut.model_validate(d) for d in result]
 
 
 @router.post("/departures", response_model=DepartureOut, status_code=status.HTTP_201_CREATED)
@@ -151,7 +159,7 @@ async def create_departure(
     await sess.flush()
     await sess.commit()
 
-    return DepartureOut.from_orm(dep)
+    return DepartureOut.model_validate(dep)
 
 
 @router.patch("/departures/{dep_id}", response_model=DepartureOut)
@@ -205,7 +213,7 @@ async def update_departure(
     await sess.commit()
     await sess.refresh(dep)
 
-    return DepartureOut.from_orm(dep)
+    return DepartureOut.model_validate(dep)
 
 
 class CapacityBody(BaseModel):
@@ -284,12 +292,22 @@ async def list_tours(
     )
     result: Sequence[Tour] = (await sess.scalars(stmt)).all()
 
-    return [TourOut.from_orm(t) for t in result]
+    return [TourOut.model_validate(t) for t in result]
 
 
 @router.post("/tours", response_model=TourOut, status_code=status.HTTP_201_CREATED)
 async def create_tour(payload: TourIn, sess: SessionDep, user=Depends(current_user)):
     agency_id = _get_agency_id(user)
+
+    # Convert time string to Time object if present
+    repeat_time = None
+    if payload.repeat_time is not None:
+        from datetime import time
+        try:
+            hour, minute = map(int, payload.repeat_time.split(":"))
+            repeat_time = time(hour=hour, minute=minute)
+        except (ValueError, AttributeError):
+            raise HTTPException(400, "Invalid time format. Use HH:MM")
 
     tour = Tour(
         agency_id=agency_id,
@@ -303,14 +321,14 @@ async def create_tour(payload: TourIn, sess: SessionDep, user=Depends(current_us
         longitude=payload.longitude,
         repeat_type=payload.repeat_type or "none",
         repeat_weekdays=payload.repeat_weekdays,
-        repeat_time=payload.repeat_time,
+        repeat_time=repeat_time,
     )
     sess.add(tour)
     await sess.flush()
     await sess.commit()
     await sess.refresh(tour)
 
-    return TourOut.from_orm(tour)
+    return TourOut.model_validate(tour)
 
 
 @router.patch("/tours/{tour_id}", response_model=TourOut)
@@ -331,6 +349,16 @@ async def update_tour(
 
     data = payload if isinstance(payload, dict) else payload.model_dump(exclude_unset=True)
 
+    # Convert time string to Time object if present
+    if "repeat_time" in data and data["repeat_time"] is not None:
+        from datetime import datetime, time
+        try:
+            # Parse HH:MM format to time object
+            hour, minute = map(int, data["repeat_time"].split(":"))
+            data["repeat_time"] = time(hour=hour, minute=minute)
+        except (ValueError, AttributeError):
+            raise HTTPException(400, "Invalid time format. Use HH:MM")
+
     for field, value in data.items():
         if value is not None:
             setattr(tour, field, value)
@@ -338,7 +366,7 @@ async def update_tour(
     await sess.commit()
     await sess.refresh(tour)
 
-    return TourOut.from_orm(tour)
+    return TourOut.model_validate(tour)
 
 
 @router.delete("/tours/{tour_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -436,7 +464,7 @@ async def list_categories(
 
     stmt = select(TicketCategory).where(TicketCategory.tour_id == tour_id).order_by(TicketCategory.id).limit(limit).offset(offset)
     result = (await sess.scalars(stmt)).all()
-    return [CategoryOut.from_orm(c) for c in result]
+    return [CategoryOut.model_validate(c) for c in result]
 
 
 @router.post("/tours/{tour_id}/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
@@ -453,7 +481,7 @@ async def add_category(tour_id: int, payload: CategoryIn, sess: SessionDep, user
     await sess.flush()
     await sess.commit()
 
-    return CategoryOut.from_orm(cat)
+    return CategoryOut.model_validate(cat)
 
 
 @router.patch("/tours/{tour_id}/categories/{cat_id}", response_model=CategoryOut)
@@ -480,7 +508,7 @@ async def update_category(tour_id: int, cat_id: int,
             setattr(cat, f, v)
 
     await sess.commit()
-    return CategoryOut.from_orm(cat)
+    return CategoryOut.model_validate(cat)
 
 
 @router.delete("/tours/{tour_id}/categories/{cat_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -506,7 +534,7 @@ async def delete_category(tour_id: int, cat_id: int, sess: SessionDep, user=Depe
 from fastapi.responses import StreamingResponse
 import csv
 from io import StringIO
-from datetime import date, datetime, timezone
+from datetime import date, timezone
 
 
 @router.get("/bookings", summary="List / export bookings")
@@ -741,7 +769,7 @@ async def list_managers(sess: SessionDep, user=Depends(current_user)):
     agency_id = _get_agency_id(user)
     stmt = select(User).where(User.role == "manager", User.agency_id == agency_id).order_by(User.id)
     rows = (await sess.scalars(stmt)).all()
-    return [ManagerOut.from_orm(u) for u in rows]
+    return [ManagerOut.model_validate(u) for u in rows]
 
 
 @router.post("/managers", response_model=ManagerOut, status_code=status.HTTP_201_CREATED)
@@ -765,7 +793,7 @@ async def create_manager(payload: ManagerIn, sess: SessionDep, user=Depends(curr
     sess.add(mgr)
     await sess.flush()
     await sess.commit()
-    return ManagerOut.from_orm(mgr)
+    return ManagerOut.model_validate(mgr)
 
 
 @router.delete("/managers/{mgr_id}", status_code=status.HTTP_204_NO_CONTENT)
