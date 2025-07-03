@@ -12,7 +12,7 @@ from ..core.base import BaseService
 from ..core.exceptions import NotFoundError, ConflictError
 from ..models import Agency, Landlord, Tour, Departure, Purchase, ApiKey, User
 from ..infrastructure.repositories import UserRepository, TourRepository
-from ..api.auth import hash_password
+from .auth_service import AuthService
 
 
 class AdminService(BaseService):
@@ -22,6 +22,7 @@ class AdminService(BaseService):
         super().__init__(session)
         self.user_repository = UserRepository(session)
         self.tour_repository = TourRepository(session)
+        self.auth_service = AuthService(session)
 
     async def set_tour_max_commission(self, tour_id: int, commission_pct: Decimal) -> Decimal:
         """Set maximum commission percentage for a tour.
@@ -173,7 +174,7 @@ class AdminService(BaseService):
             
         user = User(
             email=email,
-            password_hash=hash_password(password),
+            password_hash= self.auth_service._hash_password(password),
             role=role,
             agency_id=agency_id,
         )
@@ -231,7 +232,7 @@ class AdminService(BaseService):
         if email is not None:
             user.email = email
         if password is not None:
-            user.password_hash = hash_password(password)
+            user.password_hash = self.auth_service._hash_password(password)
         if role is not None:
             user.role = role
         if agency_id is not None:

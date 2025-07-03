@@ -6,14 +6,15 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 import os
 import asyncio
 from datetime import datetime, timedelta
 
-from .infrastructure.database import engine, Base
-from .deps import Session, SessionDep
-from .models import Setting, Departure, Tour
+from .infrastructure.database import engine, AsyncSessionFactory
+from .deps import SessionDep
+from .models import Setting, Departure, Tour, Base
 from .api.v1.api import api_v1_router
 from .api.v1.middleware import exception_handler
 from .storage import client, BUCKET
@@ -37,7 +38,7 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     
     # Ensure platform default settings exist
-    async with Session() as s:
+    async with AsyncSessionFactory() as s:
         default_setting = await s.get(Setting, "default_max_commission")
         if default_setting is None:
             s.add(Setting(key="default_max_commission", value=10))
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI):
     # Start periodic task to lock departures past free-cancellation cutoff
     async def _cutoff_loop():
         while True:
-            async with Session() as sess:
+            async with AsyncSessionFactory() as sess:
                 now = datetime.utcnow()
                 stmt = select(Departure).join(Tour).where(Departure.modifiable == True)
                 deps = (await sess.scalars(stmt)).unique().all()

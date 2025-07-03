@@ -13,7 +13,6 @@ import httpx
 from ..core.base import BaseService
 from ..core.exceptions import NotFoundError, ValidationError, AuthorizationError
 from ..models import Purchase, User, Departure, Tour
-from ..deps import Session
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -107,7 +106,7 @@ class BroadcastService(BaseService):
             List of Telegram chat IDs
         """
         # Use a new session to avoid interfering with the main transaction
-        async with Session() as sess:
+        async with AsyncSession() as sess:
             stmt = (
                 select(User.tg_id)
                 .join(Purchase, Purchase.user_id == User.id)

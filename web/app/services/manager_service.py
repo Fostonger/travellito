@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.base import BaseService
 from ..core.exceptions import NotFoundError, ConflictError
 from ..models import User
-from ..api.auth import hash_password
+from .auth_service import AuthService
 
 
 class ManagerService(BaseService):
@@ -17,6 +17,7 @@ class ManagerService(BaseService):
     
     def __init__(self, session: AsyncSession):
         super().__init__(session)
+        self.auth_service = AuthService(session)
     
     async def list_managers(self, agency_id: int) -> List[User]:
         """List all managers for an agency.
@@ -67,7 +68,7 @@ class ManagerService(BaseService):
         # Create new manager
         manager = User(
             email=email,
-            password_hash=hash_password(password),
+            password_hash=self.auth_service._hash_password(password),
             role="manager",
             agency_id=agency_id,
             first=first,

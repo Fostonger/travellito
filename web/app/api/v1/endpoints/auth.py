@@ -56,8 +56,8 @@ async def login(
 
 @router.post("/token", response_model=LoginResponse)
 async def login_for_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    sess: SessionDep = Depends()
+    sess: SessionDep,
+    form_data: OAuth2PasswordRequestForm = Depends()
 ):
     """OAuth2 compatible token endpoint for Swagger UI"""
     service = AuthService(sess)
