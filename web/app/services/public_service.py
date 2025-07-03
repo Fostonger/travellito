@@ -1,0 +1,535 @@
+"""Public service for public API operations."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, date
+from decimal import Decimal
+from typing import List, Dict, Any, Sequence, Optional
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.base import BaseService
+from ..core.exceptions import NotFoundError, ValidationError
+from ..models import (
+    Tour, Departure, Purchase, TicketCategory, Referral, 
+    LandlordCommission, City, TourCategory, TicketClass, 
+    RepetitionType, Apartment
+)
+from ..infrastructure.repositories import TourRepository, DepartureRepository
+from ..storage import presigned
+
+HUNDRED = Decimal("100")  # module-level constant
+
+
+class PublicService(BaseService):
+    """Service for public API operations."""
+    
+    def __init__(self, session: AsyncSession):
+        super().__init__(session)
+        self.tour_repository = TourRepository(session)
+        self.departure_repository = DepartureRepository(session)
+    
+    # Helper Methods
+    
+    async def _last_referral_landlord_id(self, user_id: int) -> int | None:
+        """Return landlord_id of the most recent referral for user_id or None."""
+        stmt = (
+            select(Referral.landlord_id)
+            .where(Referral.user_id == user_id)
+            .order_by(Referral.ts.desc())
+            .limit(1)
+        )
+        return await self.session.scalar(stmt)
+    
+    async def _chosen_commission(
+        self, landlord_id: int | None, tour_id: int, max_commission: Decimal
+    ) -> Decimal:
+        """Return commission_pct chosen by landlord for tour (or 0 if none).
+        
+        Ensures it does not exceed max_commission.
+        """
+        if landlord_id is None:
+            return Decimal("0")
+        
+        stmt = select(LandlordCommission.commission_pct).where(
+            LandlordCommission.landlord_id == landlord_id,
+            LandlordCommission.tour_id == tour_id,
+        )
+        pct: Decimal | None = await self.session.scalar(stmt)
+        if pct is None:
+            return Decimal("0")
+        return min(pct, max_commission)
+    
+    def _discounted_price(
+        self, raw_price: Decimal, max_commission: Decimal, chosen_commission: Decimal
+    ) -> Decimal:
+        """Return price applying discount given max and chosen commission."""
+        discount_pct = (max_commission - chosen_commission).quantize(Decimal("0.01"))
+        if discount_pct < 0:
+            discount_pct = Decimal("0")
+        return (raw_price * (HUNDRED - discount_pct) / HUNDRED).quantize(Decimal("0.01"))
+    
+    async def _materialize_virtual_departure(
+        self, tour_id: int, starts_at: datetime, capacity: int = 10
+    ) -> Departure:
+        """Create a real departure from virtual departure data.
+        
+        This is used when a user tries to book a virtual departure that doesn't
+        exist in the database yet. We materialize it on demand.
+        """
+        # First check if a departure at this exact time already exists
+        stmt = select(Departure).where(
+            Departure.tour_id == tour_id,
+            Departure.starts_at == starts_at
+        )
+        existing = await self.session.scalar(stmt)
+        if existing:
+            return existing
+        
+        # Create a new departure
+        departure = Departure(
+            tour_id=tour_id,
+            starts_at=starts_at,
+            capacity=capacity,
+            modifiable=True
+        )
+        
+        self.session.add(departure)
+        await self.session.flush()
+        await self.session.commit()
+        
+        return departure
+    
+    # Tour Search and Listing
+    
+    async def search_tours(
+        self,
+        user_id: int | None,
+        city: str | None = None,
+        price_min: Decimal | None = None,
+        price_max: Decimal | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        duration_min: int | None = None,
+        duration_max: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Search tours with filters and return discounted prices.
+        
+        Args:
+            user_id: User ID for discount calculation
+            city: City filter
+            price_min: Minimum price filter
+            price_max: Maximum price filter
+            date_from: Start date filter
+            date_to: End date filter
+            duration_min: Minimum duration in minutes
+            duration_max: Maximum duration in minutes
+            limit: Maximum results
+            offset: Results offset
+            
+        Returns:
+            List of tours with discounted prices
+        """
+        # Determine landlord for discount calculation
+        landlord_id = None
+        if user_id is not None:
+            landlord_id = await self._last_referral_landlord_id(user_id)
+        
+        # Base query
+        stmt = select(Tour).options(selectinload(Tour.category))
+        
+        # Price filters (raw list price)
+        if price_min is not None:
+            stmt = stmt.where(Tour.price >= price_min)
+        if price_max is not None:
+            stmt = stmt.where(Tour.price <= price_max)
+        
+        # Date range - need to join departures
+        if date_from or date_to:
+            stmt = stmt.join(Departure, Departure.tour_id == Tour.id)
+            if date_from:
+                stmt = stmt.where(Departure.starts_at >= date_from)
+            if date_to:
+                stmt = stmt.where(Departure.starts_at <= date_to)
+        
+        # Duration filters (minutes)
+        if duration_min is not None:
+            stmt = stmt.where(Tour.duration_minutes >= duration_min)
+        if duration_max is not None:
+            stmt = stmt.where(Tour.duration_minutes <= duration_max)
+        
+        # City filter via City table if provided
+        if city is not None:
+            stmt = stmt.join(City, City.id == Tour.city_id)
+            stmt = stmt.where(func.lower(City.name) == city.lower())
+        
+        stmt = stmt.order_by(Tour.id.desc()).limit(limit).offset(offset)
+        
+        tours: Sequence[Tour] = (await self.session.scalars(stmt)).unique().all()
+        
+        out: List[Dict[str, Any]] = []
+        for t in tours:
+            chosen_comm = await self._chosen_commission(landlord_id, t.id, t.max_commission_pct)
+            price_net = self._discounted_price(t.price, t.max_commission_pct, chosen_comm)
+            out.append({
+                "id": t.id,
+                "title": t.title,
+                "price_raw": str(t.price),
+                "price_net": str(price_net),
+                "category": t.category.name if t.category is not None else None,
+            })
+        
+        return out
+    
+    async def get_tour_categories(
+        self, tour_id: int, user_id: int | None = None
+    ) -> List[Dict[str, Any]]:
+        """Get ticket categories for a tour with discounted prices.
+        
+        Args:
+            tour_id: Tour ID
+            user_id: User ID for discount calculation
+            
+        Returns:
+            List of categories with prices
+            
+        Raises:
+            NotFoundError: If tour not found
+        """
+        tour: Tour | None = await self.session.get(Tour, tour_id)
+        if not tour:
+            raise NotFoundError("Tour not found")
+        
+        landlord_id = None
+        chosen_comm = None
+        if user_id is not None:
+            landlord_id = await self._last_referral_landlord_id(user_id)
+            chosen_comm = await self._chosen_commission(landlord_id, tour_id, tour.max_commission_pct)
+        
+        categories = (
+            await self.session.scalars(
+                select(TicketCategory).where(TicketCategory.tour_id == tour_id)
+            )
+        ).all()
+        
+        out: List[Dict[str, Any]] = []
+        for c in categories:
+            if chosen_comm is not None:
+                net = self._discounted_price(c.price, tour.max_commission_pct, chosen_comm)
+            else:
+                net = c.price
+            out.append({
+                "id": c.id,
+                "name": c.name,
+                "price_raw": str(c.price),
+                "price_net": str(net),
+            })
+        
+        return out
+    
+    async def calculate_price_quote(
+        self,
+        departure_id: int,
+        items: List[Dict[str, int]],
+        user_id: int,
+        virtual_timestamp: int | None = None,
+    ) -> Dict[str, Any]:
+        """Calculate price quote for a booking.
+        
+        Args:
+            departure_id: Departure ID (negative for virtual)
+            items: List of {"category_id": int, "qty": int}
+            user_id: User ID for discount calculation
+            virtual_timestamp: Timestamp for virtual departures
+            
+        Returns:
+            Quote with total price and availability
+        """
+        # Handle virtual departures
+        if departure_id < 0:
+            tour_id, starts_at = await self._decode_virtual_departure(
+                departure_id, virtual_timestamp
+            )
+            dep = await self._materialize_virtual_departure(tour_id, starts_at)
+        else:
+            dep: Departure | None = await self.session.get(Departure, departure_id)
+            if not dep:
+                raise NotFoundError("Departure not found")
+        
+        # Calculate capacity
+        taken_stmt = select(func.coalesce(func.sum(Purchase.qty), 0)).where(
+            Purchase.departure_id == dep.id
+        )
+        taken: int = await self.session.scalar(taken_stmt) or 0
+        remaining = dep.capacity - taken
+        
+        # Get tour for commission calculation
+        tour: Tour | None = await self.session.get(Tour, dep.tour_id)
+        if tour is None:
+            raise NotFoundError("Tour not found")
+        
+        landlord_id = await self._last_referral_landlord_id(user_id)
+        chosen_comm = await self._chosen_commission(landlord_id, tour.id, tour.max_commission_pct)
+        
+        # Fetch categories
+        cats = (
+            await self.session.scalars(
+                select(TicketCategory).where(TicketCategory.tour_id == dep.tour_id)
+            )
+        ).all()
+        cat_map = {c.id: c for c in cats}
+        
+        total_net = Decimal("0")
+        for item in items:
+            cat = cat_map.get(item["category_id"])
+            if not cat:
+                raise ValidationError("Invalid category id")
+            net_price = self._discounted_price(cat.price, tour.max_commission_pct, chosen_comm)
+            total_net += net_price * item["qty"]
+        
+        return {
+            "total_net": total_net.quantize(Decimal("0.01")),
+            "seats_left": max(remaining, 0),
+            "departure_id": dep.id,
+        }
+    
+    async def _decode_virtual_departure(
+        self, departure_id: int, virtual_timestamp: int | None
+    ) -> tuple[int, datetime]:
+        """Decode virtual departure ID to extract tour_id and timestamp."""
+        try:
+            encoded_id = str(abs(departure_id))
+            
+            # Try to find a valid tour ID by checking different prefixes
+            tour_id = None
+            for prefix_length in range(1, 4):  # Try 1, 2, or 3 digit tour IDs
+                if prefix_length >= len(encoded_id):
+                    continue
+                
+                potential_tour_id = int(encoded_id[:prefix_length])
+                tour = await self.session.get(Tour, potential_tour_id)
+                if tour is not None:
+                    tour_id = potential_tour_id
+                    break
+            
+            if tour_id is None:
+                raise ValidationError("Could not determine tour from virtual departure ID")
+            
+            # Use provided timestamp or current time
+            if virtual_timestamp:
+                starts_at = datetime.fromtimestamp(virtual_timestamp / 1000)
+            else:
+                starts_at = datetime.utcnow()
+            
+            return tour_id, starts_at
+            
+        except Exception as e:
+            raise ValidationError(f"Invalid virtual departure ID: {e}")
+    
+    async def get_tour_departures(
+        self, tour_id: int, limit: int = 30, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Get upcoming departures for a tour including virtual ones.
+        
+        Args:
+            tour_id: Tour ID
+            limit: Maximum results
+            offset: Results offset
+            
+        Returns:
+            List of departures with availability
+            
+        Raises:
+            NotFoundError: If tour not found
+        """
+        from ..api.bookings import _seats_taken  # Import helper function
+        
+        now = datetime.utcnow()
+        
+        # Get the tour to check its repetition type
+        tour: Tour | None = await self.session.get(Tour, tour_id)
+        if tour is None:
+            raise NotFoundError("Tour not found")
+        
+        # Get existing departures
+        stmt = (
+            select(Departure)
+            .where(Departure.tour_id == tour_id, Departure.starts_at >= now)
+            .order_by(Departure.starts_at)
+        )
+        deps = (await self.session.scalars(stmt)).all()
+        
+        # Create list of all departure dates
+        all_departures = []
+        
+        # Process existing departures
+        existing_dates = set()
+        for dep in deps:
+            taken = await _seats_taken(self.session, dep.id)
+            all_departures.append({
+                "id": dep.id,
+                "starts_at": dep.starts_at,
+                "capacity": dep.capacity,
+                "seats_left": max(dep.capacity - taken, 0),
+                "is_existing": True
+            })
+            existing_dates.add(dep.starts_at.date())
+        
+        # Calculate future departures based on repetition type
+        if tour.repeat_type != "none" and tour.repeat_time:
+            future_days = 30
+            default_capacity = 10
+            if deps:
+                default_capacity = deps[0].capacity
+            
+            # Generate dates based on repetition type
+            future_dates = []
+            
+            if tour.repeat_type == "daily":
+                for i in range(future_days):
+                    future_date = now.date() + timedelta(days=i)
+                    future_datetime = datetime.combine(future_date, tour.repeat_time)
+                    if future_datetime > now:
+                        future_dates.append(future_datetime)
+            
+            elif tour.repeat_type == "weekly" and tour.repeat_weekdays:
+                for i in range(future_days):
+                    future_date = now.date() + timedelta(days=i)
+                    weekday = future_date.weekday()
+                    
+                    if weekday in tour.repeat_weekdays:
+                        future_datetime = datetime.combine(future_date, tour.repeat_time)
+                        if future_datetime > now:
+                            future_dates.append(future_datetime)
+            
+            # Filter out existing dates
+            new_dates = [date for date in future_dates if date.date() not in existing_dates]
+            
+            # Add virtual departures
+            for date in new_dates:
+                all_departures.append({
+                    "id": None,
+                    "starts_at": date,
+                    "capacity": default_capacity,
+                    "seats_left": default_capacity,
+                    "is_existing": False
+                })
+        
+        # Sort and paginate
+        all_departures.sort(key=lambda x: x["starts_at"])
+        paginated_departures = all_departures[offset:offset+limit]
+        
+        # Format response
+        out = []
+        for dep in paginated_departures:
+            out.append({
+                "id": dep["id"],
+                "starts_at": dep["starts_at"].isoformat() if dep["starts_at"] else None,
+                "capacity": dep["capacity"],
+                "seats_left": dep["seats_left"],
+                "is_virtual": not dep["is_existing"]
+            })
+        
+        return out
+    
+    # Listing Methods
+    
+    async def list_cities(self) -> List[Dict[str, Any]]:
+        """List all cities for dropdown selection."""
+        stmt = select(City.id, City.name).order_by(City.name)
+        result = await self.session.execute(stmt)
+        return [{"id": id, "name": name} for id, name in result]
+    
+    async def list_tour_categories(self) -> List[Dict[str, Any]]:
+        """List all tour categories for dropdown selection."""
+        stmt = select(TourCategory.id, TourCategory.name).order_by(TourCategory.name)
+        result = await self.session.execute(stmt)
+        return [{"id": id, "name": name} for id, name in result]
+    
+    async def list_ticket_classes(self) -> List[Dict[str, Any]]:
+        """List all ticket classes for dropdown selection."""
+        stmt = select(TicketClass.id, TicketClass.code, TicketClass.human_name).order_by(
+            TicketClass.human_name
+        )
+        result = await self.session.execute(stmt)
+        return [{"id": id, "code": code, "name": name} for id, code, name in result]
+    
+    async def list_repetition_types(self) -> List[Dict[str, Any]]:
+        """List all repetition types for dropdown selection."""
+        stmt = select(RepetitionType.id, RepetitionType.name).order_by(RepetitionType.name)
+        result = await self.session.execute(stmt)
+        return [{"id": id, "name": name} for id, name in result]
+    
+    async def list_tours(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """List tours with basic information."""
+        stmt = (
+            select(Tour.id, Tour.title, Tour.price)
+            .order_by(Tour.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        return [
+            {"id": id, "title": title, "price": str(price)}
+            for id, title, price in result
+        ]
+    
+    async def get_tour_detail(self, tour_id: int) -> Dict[str, Any]:
+        """Get full tour details including images.
+        
+        Args:
+            tour_id: Tour ID
+            
+        Returns:
+            Tour details dictionary
+            
+        Raises:
+            NotFoundError: If tour not found
+        """
+        tour: Tour | None = await self.session.get(Tour, tour_id)
+        if not tour:
+            raise NotFoundError("Tour not found")
+        
+        return {
+            "id": tour.id,
+            "title": tour.title,
+            "description": tour.description,
+            "price": str(tour.price),
+            "duration_minutes": tour.duration_minutes,
+            "images": [
+                {"key": img.key, "url": presigned(img.key)}
+                for img in tour.images
+            ]
+        }
+    
+    async def get_departure_availability(self, departure_id: int) -> Dict[str, Any]:
+        """Get seats left for a departure.
+        
+        Args:
+            departure_id: Departure ID
+            
+        Returns:
+            Availability information
+            
+        Raises:
+            NotFoundError: If departure not found
+        """
+        dep: Departure | None = await self.session.get(Departure, departure_id)
+        if not dep:
+            raise NotFoundError("Departure not found")
+        
+        # Get bookings count
+        taken = await self.session.scalar(
+            select(func.coalesce(func.sum(Purchase.qty), 0))
+            .where(Purchase.departure_id == departure_id)
+        ) or 0
+        
+        return {
+            "departure_id": departure_id,
+            "capacity": dep.capacity,
+            "seats_taken": taken,
+            "seats_left": max(dep.capacity - taken, 0)
+        }

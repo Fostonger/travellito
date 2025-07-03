@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.security import role_required
-from app.api.v1.endpoints import tours, departures, bookings, auth, admin, landlord
+from app.api.v1.endpoints import tours, departures, bookings, auth, admin, landlord, public, managers
 
 
 # Create main API router
@@ -50,5 +50,16 @@ api_v1_router.include_router(
     tags=["landlord"]
 )
 
-# TODO: Add more endpoint routers as they are refactored
-# api_v1_router.include_router(public.router, prefix="/public", tags=["public"]) 
+# Include public endpoints (public access)
+api_v1_router.include_router(
+    public.router,
+    tags=["public"]
+)
+
+# Include manager endpoints (agency access)
+api_v1_router.include_router(
+    managers.router,
+    prefix="/agency",
+    tags=["managers"],
+    dependencies=[Depends(role_required("agency"))]
+) 

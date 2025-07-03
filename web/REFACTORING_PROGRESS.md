@@ -49,10 +49,14 @@
 ### 4.1 Additional Services
 - ✅ AdminService - Platform administration business logic
 - ✅ LandlordService - Landlord operations and commission management
+- ✅ PublicService - Public API operations (search, categories, quotes, etc.)
+- ✅ ManagerService - Agency manager CRUD operations
 
 ### 4.2 Additional Schemas  
 - ✅ Admin schemas (MaxCommissionBody, MetricsOut, ApiKeyOut, UserOut, etc.)
 - ✅ Landlord schemas (ApartmentIn/Out, CommissionBody/Out, TourForLandlord, EarningsOut)
+- ✅ Public schemas (TourSearchOut, QuoteIn/Out, DepartureListOut, CategoryOut, etc.)
+- ✅ Manager schemas (ManagerIn, ManagerOut)
 
 ### 4.3 Additional Endpoints
 - ✅ Admin endpoints (`/api/v1/admin`)
@@ -65,35 +69,38 @@
   - Commission management
   - Earnings tracking
   - QR code generation
+- ✅ Public endpoints (`/api/v1`)
+  - Tour search with filters
+  - Tour categories listing
+  - Price quotes
+  - Departure availability
+  - List endpoints (cities, tour categories, ticket classes, repetition types)
+- ✅ Manager endpoints (`/api/v1/agency/managers`)
+  - Manager CRUD operations
 
 ## In Progress 🚧
 
 ### Remaining Endpoints to Refactor:
-1. **Public endpoints**
-   - Tour search with filters
-   - Tour categories listing
-   - Price quotes
-   - Departure availability
-   - Various list endpoints (cities, tour categories, etc.)
-
-2. **Agency Manager endpoints**
-   - Manager CRUD operations
-
-3. **Other endpoints**
+1. **Other endpoints**
    - External API endpoints
-   - Broadcast endpoints
+   - Broadcast endpoints  
    - Referral endpoints
+   - Legacy endpoints
 
 ## TODO 📋
 
 ### 1. Complete Remaining Endpoints
 - [x] Create AdminService for admin business logic
 - [x] Create LandlordService for landlord features
-- [ ] Create PublicService for public API
-- [ ] Create ManagerService for agency manager operations
-- [ ] Refactor public endpoints
-- [ ] Refactor agency manager endpoints
-- [ ] Refactor other miscellaneous endpoints
+- [x] Create PublicService for public API
+- [x] Create ManagerService for agency manager operations
+- [x] Refactor admin endpoints
+- [x] Refactor landlord endpoints
+- [x] Refactor public endpoints
+- [x] Refactor agency manager endpoints
+- [ ] Refactor external API endpoints
+- [ ] Refactor broadcast endpoints
+- [ ] Refactor referral endpoints
 
 ### 2. Testing
 - [ ] Unit tests for services
