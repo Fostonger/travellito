@@ -17,9 +17,13 @@ export default function Checkout() {
   const [categories, setCategories] = useState([]);
   const [quantities, setQuantities] = useState<any>({});
   const [quote, setQuote] = useState<any>(null);
-  const [contactInfo, setContactInfo] = useState({
-    name: '',
-    phone: ''
+  // Load saved user info from localStorage if available
+  const [contactInfo, setContactInfo] = useState(() => {
+    const savedInfo = localStorage.getItem('userContactInfo');
+    return savedInfo ? JSON.parse(savedInfo) : {
+      name: '',
+      phone: ''
+    };
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +34,14 @@ export default function Checkout() {
       setCategories(data);
     };
     load();
+    
+    // Debug information about the departure
+    console.log('Departure data:', {
+      id: departure.id,
+      starts_at: departure.starts_at,
+      is_virtual: departure.is_virtual,
+      tourId
+    });
   }, [tourId]);
 
   const recalc = async (qs: any) => {
@@ -39,14 +51,55 @@ export default function Checkout() {
     if (!items.length) return setQuote(null);
     
     try {
-      const { data } = await axios.post(`${apiBase}/quote`, {
-        departure_id: departure.id,
-        items,
+      // Get auth token from localStorage
+      const authToken = localStorage.getItem('authToken');
+      
+      // Make sure departure ID is a number
+      const departureId = typeof departure.id === 'string' 
+        ? parseInt(departure.id) 
+        : departure.id;
+      
+      console.log('Sending quote request with departure_id:', departureId, 'Type:', typeof departureId);
+      
+      // Prepare the quote payload
+      const quotePayload: any = {
+        departure_id: departureId,
+        items
+      };
+      
+      // If this is a virtual departure, include the timestamp
+      if (departure.is_virtual && departure.virtual_timestamp) {
+        quotePayload.virtual_timestamp = departure.virtual_timestamp;
+        console.log('Including virtual timestamp in quote:', departure.virtual_timestamp);
+      }
+      
+      const { data } = await axios.post(`${apiBase}/quote`, quotePayload, {
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : undefined
+        }
       });
+      
+      console.log('Quote response:', data);
+      
+      // If the server materialized a virtual departure, update our local state
+      if (departure.is_virtual && data.departure_id && data.departure_id !== departure.id) {
+        console.log('Virtual departure was materialized with ID:', data.departure_id);
+        departure.id = data.departure_id;
+        departure.is_virtual = false;
+      }
+      
       setQuote(data);
     } catch (err) {
       console.error('Error getting quote:', err);
       setError(t('quote_error'));
+      
+      // If unauthorized, try to redirect to authentication
+      if (err.response?.status === 401) {
+        setError(t('auth_required'));
+      } else if (err.response?.status === 404 && departure.is_virtual) {
+        // Special handling for virtual departures that couldn't be materialized
+        setError(t('virtual_departure_error'));
+      }
     }
   };
 
@@ -84,21 +137,59 @@ export default function Checkout() {
       return;
     }
     
+    // Save contact info to localStorage for future use
+    localStorage.setItem('userContactInfo', JSON.stringify(contactInfo));
+    
     setIsSubmitting(true);
     setError('');
     
     try {
-      await axios.post(`${apiBase}/bookings`, {
-        departure_id: departure.id,
+      // Get auth token from localStorage
+      const authToken = localStorage.getItem('authToken');
+      
+      // Use the real departure ID (which might have been updated if this was a virtual departure)
+      console.log('Booking with departure ID:', departure.id, 'Type:', typeof departure.id);
+      
+      // Make sure departure ID is a number
+      const departureId = typeof departure.id === 'string' 
+        ? parseInt(departure.id) 
+        : departure.id;
+        
+      console.log('Final departure ID being sent:', departureId, 'Type:', typeof departureId);
+      
+      // Prepare the booking payload
+      const bookingPayload: any = {
+        departure_id: departureId,
         items,
         contact_name: contactInfo.name,
         contact_phone: contactInfo.phone
+      };
+      
+      // If this is a virtual departure, include the timestamp
+      if (departure.is_virtual && departure.virtual_timestamp) {
+        bookingPayload.virtual_timestamp = departure.virtual_timestamp;
+        console.log('Including virtual timestamp:', departure.virtual_timestamp);
+      }
+      
+      await axios.post(`${apiBase}/bookings`, bookingPayload, {
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : undefined
+        }
       });
       alert(t('booking_confirmed'));
       nav('/bookings');
     } catch (err) {
       console.error('Booking error:', err);
-      setError(t('booking_error'));
+      
+      // Handle specific error cases
+      if (err.response?.status === 401) {
+        setError(t('auth_required'));
+      } else if (err.response?.status === 422) {
+        setError(t('validation_error'));
+      } else {
+        setError(t('booking_error'));
+      }
+      
       setIsSubmitting(false);
     }
   };

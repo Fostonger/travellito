@@ -67,6 +67,70 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 router = Router()
 
+# Storage for user auth tokens
+user_tokens = {}
+
+# ---------------------------------------------------------------------------
+#  Authentication helper
+# ---------------------------------------------------------------------------
+
+async def authenticate_user(user_id: int) -> dict:
+    """Authenticate a user with the web API and store their tokens."""
+    logging.info(f"Starting authentication for user_id: {user_id}")
+    
+    if user_id in user_tokens:
+        logging.info(f"Using cached token for user_id: {user_id}")
+        return user_tokens[user_id]
+        
+    # Get user info from Telegram
+    try:
+        user = await bot.get_chat(user_id)
+        logging.info(f"Got user from Telegram: {user.id}, {user.first_name}")
+    except Exception as e:
+        logging.exception(f"Error getting user from Telegram: {str(e)}")
+        raise ValueError(f"Could not get user info from Telegram: {str(e)}")
+    
+    if not user:
+        raise ValueError("Could not get user info from Telegram")
+        
+    # Convert to dict format expected by API
+    user_data = {
+        "id": user.id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "username": user.username,
+    }
+    
+    logging.info(f"Authenticating user: {user_data}")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Call our auth endpoint
+            auth_url = f"{settings.WEB_API}/api/v1/auth/telegram/bot"
+            logging.info(f"Calling auth endpoint: {auth_url}")
+            
+            response = await client.post(
+                auth_url,
+                json=user_data,
+                timeout=10
+            )
+            
+            logging.info(f"Auth response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                logging.error(f"Auth error: {response.status_code} - {response.text}")
+                return None
+                
+            tokens = response.json()
+            logging.info(f"Authentication successful for user {user_id}. Token received: {tokens.get('access_token')[:10]}...")
+            
+            # Store tokens for this user
+            user_tokens[user_id] = tokens
+            return tokens
+    except Exception as e:
+        logging.exception(f"Authentication error: {str(e)}")
+        return None
+
 # Middlewares ----------------------------------------------------------------
 
 # built-in logging middleware (requires python -m logging.basicConfig())
@@ -113,6 +177,16 @@ async def cmd_start(msg: Message):
         await msg.answer(_("manager_greet", lang))
         return
 
+    # Authenticate user first to ensure we have valid tokens
+    tokens = None
+    if msg.from_user:
+        try:
+            tokens = await authenticate_user(msg.from_user.id)
+            logging.info(f"Got tokens for user {msg.from_user.id}: {tokens is not None}")
+        except Exception as e:
+            logging.warning(f"Authentication failed: {str(e)}")
+            # Continue anyway - the webapp will handle auth if needed
+
     # Preserve the raw payload (after /start) – contains QR metadata like
     # `ap_<apartment_id>_<city>_<ref>` which the WebApp will parse.
     args: str | None = None
@@ -121,11 +195,20 @@ async def cmd_start(msg: Message):
 
     lang = _detect_lang(msg)
     launch_url = settings.WEBAPP_URL
+    query_params = []
+    
     if args:
-        # Append raw payload so the WebApp can handle landlord attribution & city filter
-        launch_url += f"?start={args}&lang={lang}"
-    else:
-        launch_url += f"?lang={lang}"
+        query_params.append(f"start={args}")
+    
+    query_params.append(f"lang={lang}")
+    
+    # Pass auth token to the webapp if available
+    if tokens and tokens.get('access_token'):
+        query_params.append(f"token={tokens['access_token']}")
+    
+    # Build the final URL with all query parameters
+    if query_params:
+        launch_url += f"?{'&'.join(query_params)}"
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[

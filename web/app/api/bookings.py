@@ -27,8 +27,11 @@ class Item(BaseModel):
 
 
 class BookingCreate(BaseModel):
-    departure_id: int = Field(..., gt=0)
+    departure_id: int = Field(...)  # Allow any integer (positive or negative)
     items: list[Item] = Field(..., min_items=1)
+    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures
+    contact_name: str = Field(...)
+    contact_phone: str = Field(...)
 
     @field_validator("items")
     def non_empty(cls, v):
@@ -80,7 +83,87 @@ async def create_booking(payload: BookingCreate, sess: SessionDep, user=Depends(
     – Verifies capacity.
     – Applies any landlord referral.
     – Stores total amount (price × qty; commission/discount not yet applied).
+    – Handles virtual departures (negative IDs) by materializing them.
     """
+    # Handle virtual departures (negative IDs)
+    if payload.departure_id < 0:
+        # Import the helper function to materialize virtual departures
+        from .public import _materialize_virtual_departure
+        from sqlalchemy import desc
+        
+        tour_id = None
+        starts_at = None
+        capacity = 10  # Default capacity
+        
+        try:
+            # Parse the negative ID to extract tour_id and timestamp
+            # Format: The frontend now sends a negative number
+            # The number is created by concatenating tour_id and timestamp (truncated)
+            # We need to extract the tour_id from this number
+            
+            # Log the received ID for debugging
+            print(f"Received virtual departure ID: {payload.departure_id}")
+            
+            # Extract tour_id from the negative number
+            # We know the tour_id is likely a small number (1-3 digits)
+            # So we can try different lengths to extract it
+            encoded_id = str(abs(payload.departure_id))
+            
+            # Try to find a valid tour ID by checking different prefixes
+            found = False
+            for prefix_length in range(1, 4):  # Try 1, 2, or 3 digit tour IDs
+                if prefix_length >= len(encoded_id):
+                    continue
+                    
+                potential_tour_id = int(encoded_id[:prefix_length])
+                # Check if this tour exists
+                tour = await sess.get(Tour, potential_tour_id)
+                if tour is not None:
+                    tour_id = potential_tour_id
+                    found = True
+                    break
+            
+            if not found:
+                raise HTTPException(404, "Could not determine tour from virtual departure ID")
+                
+            # Use the virtual_timestamp if provided, otherwise use current time
+            if hasattr(payload, 'virtual_timestamp') and payload.virtual_timestamp:
+                # Convert from milliseconds to seconds and create datetime
+                timestamp_ms = payload.virtual_timestamp
+                starts_at = datetime.fromtimestamp(timestamp_ms / 1000)
+                print(f"Booking: Using provided timestamp: {starts_at}")
+            else:
+                # Fallback to current time
+                starts_at = datetime.utcnow()
+                print(f"Booking: Using current time as fallback: {starts_at}")
+            
+            # Use the same capacity as other departures for this tour if available
+            existing_dep = await sess.scalar(
+                select(Departure)
+                .where(Departure.tour_id == tour_id)
+                .order_by(Departure.id.desc())
+                .limit(1)
+            )
+            if existing_dep:
+                capacity = existing_dep.capacity
+                
+            # Materialize the virtual departure
+            dep = await _materialize_virtual_departure(sess, tour_id, starts_at, capacity)
+            
+            # Update the payload with the real departure ID
+            payload.departure_id = dep.id
+            print(f"Booking: Materialized virtual departure: {dep.id} for tour {tour_id}")
+            
+            # Double-check that the departure was actually saved
+            check_dep = await sess.get(Departure, dep.id)
+            if check_dep:
+                print(f"Booking: Successfully verified departure {dep.id} exists in database")
+            else:
+                print(f"Booking: WARNING - Could not verify departure {dep.id} exists in database")
+        except Exception as e:
+            print(f"Error processing virtual departure: {e}")
+            raise HTTPException(400, f"Invalid virtual departure ID: {e}")
+    
     # Acquire short-lived Redis mutex in addition to DB row-lock for UX-friendly retries
     async with SeatLock(payload.departure_id):
         # Lock departure row to avoid race conditions on capacity

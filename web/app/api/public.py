@@ -1,8 +1,9 @@
+from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime
 from typing import Sequence, Optional, List
 from ..models import Tour, Departure, Purchase, TicketCategory, Referral, LandlordCommission, City, TourCategory, TicketClass, RepetitionType
 from ..security import role_required, current_user
@@ -57,6 +58,55 @@ def _discounted_price(
     if discount_pct < 0:
         discount_pct = Decimal("0")
     return (raw_price * (HUNDRED - discount_pct) / HUNDRED).quantize(Decimal("0.01"))
+
+
+async def _materialize_virtual_departure(
+    sess: SessionDep, 
+    tour_id: int, 
+    starts_at: datetime, 
+    capacity: int = 10
+) -> Departure:
+    """Create a real departure from virtual departure data.
+    
+    This is used when a user tries to book a virtual departure that doesn't
+    exist in the database yet. We materialize it on demand.
+    
+    Args:
+        sess: Database session
+        tour_id: Tour ID
+        starts_at: Departure start time
+        capacity: Seat capacity (defaults to 10)
+        
+    Returns:
+        The newly created Departure object
+    """
+    # First check if a departure at this exact time already exists
+    stmt = select(Departure).where(
+        Departure.tour_id == tour_id,
+        Departure.starts_at == starts_at
+    )
+    existing = await sess.scalar(stmt)
+    if existing:
+        print(f"Found existing departure: {existing.id} for tour {tour_id}")
+        return existing
+        
+    # Create a new departure
+    departure = Departure(
+        tour_id=tour_id,
+        starts_at=starts_at,
+        capacity=capacity,
+        modifiable=True  # New departures are modifiable by default
+    )
+    
+    sess.add(departure)
+    await sess.flush()  # Get the ID without committing
+    
+    # Important: We need to commit the changes to actually save the departure to the database
+    await sess.commit()
+    
+    print(f"Created new departure: {departure.id} for tour {tour_id}")
+    
+    return departure
 
 
 # ---------------------------------------------------------------------------
@@ -184,10 +234,12 @@ class QuoteItem(BaseModel):
 class QuoteIn(BaseModel):
     departure_id: int
     items: list[QuoteItem]
+    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures
 
 class QuoteOut(BaseModel):
     total_net: Decimal
     seats_left: int
+    departure_id: int | None = None  # Include the actual departure ID (useful for materialized virtual departures)
 
 @router.post(
     "/quote",
@@ -196,9 +248,77 @@ class QuoteOut(BaseModel):
     dependencies=[Depends(role_required("bot_user"))],
 )
 async def price_quote(payload: QuoteIn, sess: SessionDep, user=Depends(current_user)):
-    dep: Departure | None = await sess.get(Departure, payload.departure_id)
-    if not dep:
-        raise HTTPException(404, "Departure not found")
+    # First check if this is a virtual departure that needs materialization
+    # Virtual departures are passed with negative IDs from the frontend
+    tour_id = None
+    starts_at = None
+    capacity = 10  # Default capacity
+    
+    if payload.departure_id < 0:
+        # This is a virtual departure - we need to extract the real data from the encoded ID
+        # Format: The frontend now sends a negative number
+        try:
+            # Log the received ID for debugging
+            print(f"Quote: Received virtual departure ID: {payload.departure_id}")
+            
+            # Extract tour_id from the negative number
+            # We know the tour_id is likely a small number (1-3 digits)
+            encoded_id = str(abs(payload.departure_id))
+            
+            # Try to find a valid tour ID by checking different prefixes
+            found = False
+            for prefix_length in range(1, 4):  # Try 1, 2, or 3 digit tour IDs
+                if prefix_length >= len(encoded_id):
+                    continue
+                    
+                potential_tour_id = int(encoded_id[:prefix_length])
+                # Check if this tour exists
+                tour = await sess.get(Tour, potential_tour_id)
+                if tour is not None:
+                    tour_id = potential_tour_id
+                    found = True
+                    break
+            
+            if not found:
+                raise HTTPException(404, "Could not determine tour from virtual departure ID")
+                
+            # Use the virtual_timestamp if provided, otherwise use current time
+            if hasattr(payload, 'virtual_timestamp') and payload.virtual_timestamp:
+                # Convert from milliseconds to seconds and create datetime
+                timestamp_ms = payload.virtual_timestamp
+                starts_at = datetime.fromtimestamp(timestamp_ms / 1000)
+                print(f"Quote: Using provided timestamp: {starts_at}")
+            else:
+                # Fallback to current time
+                starts_at = datetime.utcnow()
+                print(f"Quote: Using current time as fallback: {starts_at}")
+            
+            # Use the same capacity as other departures for this tour if available
+            existing_dep = await sess.scalar(
+                select(Departure)
+                .where(Departure.tour_id == tour_id)
+                .order_by(Departure.id.desc())
+                .limit(1)
+            )
+            if existing_dep:
+                capacity = existing_dep.capacity
+                
+            print(f"Quote: Extracted tour_id: {tour_id} for virtual departure")
+        except Exception as e:
+            print(f"Quote: Error processing virtual departure: {e}")
+            raise HTTPException(400, f"Invalid virtual departure ID: {e}")
+    
+    # Get or create the departure
+    if payload.departure_id < 0 and tour_id and starts_at:
+        # Materialize the virtual departure
+        dep = await _materialize_virtual_departure(sess, tour_id, starts_at, capacity)
+        print(f"Quote: Materialized virtual departure with ID: {dep.id}")
+    else:
+        # Regular departure lookup
+        dep: Departure | None = await sess.get(Departure, payload.departure_id)
+        if not dep:
+            print(f"Quote: Departure not found with ID: {payload.departure_id}")
+            raise HTTPException(404, "Departure not found")
 
     # Capacity check
     taken_stmt = select(func.coalesce(func.sum(Purchase.qty), 0)).where(Purchase.departure_id == dep.id)
@@ -227,7 +347,12 @@ async def price_quote(payload: QuoteIn, sess: SessionDep, user=Depends(current_u
         net_price = _discounted_price(cat.price, tour.max_commission_pct, chosen_comm)
         total_net += net_price * it.qty
 
-    return QuoteOut(total_net=total_net.quantize(Decimal("0.01")), seats_left=max(remaining, 0))
+    # Include the actual departure ID in the response (important for virtual departures)
+    return QuoteOut(
+        total_net=total_net.quantize(Decimal("0.01")), 
+        seats_left=max(remaining, 0),
+        departure_id=dep.id  # Include the real departure ID (especially important for materialized virtual departures)
+    )
 
 
 @router.get(

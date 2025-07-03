@@ -265,4 +265,86 @@ async def me(sess: SessionDep, user=Depends(current_user)):
         first=u.first,
         last=u.last,
         agency_id=u.agency_id,
-    ) 
+    )
+
+
+# ---------------------------------------------------------------------------
+#  Telegram auth from bot (no widget integrity check)
+# ---------------------------------------------------------------------------
+
+class TelegramUserData(BaseModel):
+    id: int
+    first_name: str
+    last_name: str | None = None
+    username: str | None = None
+    auth_date: int | None = None
+    hash: str | None = None
+
+
+@router.post("/telegram/bot", summary="Telegram auth directly from bot")
+async def telegram_bot_auth(user_data: TelegramUserData, resp: Response):
+    """Authenticate a user directly from the Telegram bot.
+    
+    This endpoint is only called by our bot backend, not by clients.
+    It creates or retrieves a user and returns tokens without requiring
+    the Telegram login widget hash verification.
+    """
+    # Convert to format expected by User.get_or_create
+    tg_data = {
+        "id": user_data.id,
+        "first_name": user_data.first_name,
+        "last_name": user_data.last_name,
+        "username": user_data.username,
+    }
+    
+    async with Session() as s, s.begin():
+        user = await User.get_or_create(s, tg_data, role=Role.bot_user)
+
+    extra = {}
+    if user.role in ("agency", "manager") and user.agency_id is not None:
+        extra["agency_id"] = user.agency_id
+
+    access_tok, refresh_tok = mint_tokens(user.id, user.role, **extra)
+
+    # Return tokens in the JSON payload for the bot to store
+    return {
+        "ok": True,
+        "access_token": access_tok,
+        "refresh_token": refresh_tok,
+        "role": user.role,
+        "user_id": user.id
+    }
+
+
+@router.post("/telegram/webapp", summary="Telegram WebApp auth")
+async def telegram_webapp_auth(user_data: TelegramUserData, resp: Response):
+    """Authenticate a user from the Telegram WebApp.
+    
+    This endpoint is called by the WebApp running in the Telegram client.
+    It creates or retrieves a user and returns tokens.
+    """
+    # Convert to format expected by User.get_or_create
+    tg_data = {
+        "id": user_data.id,
+        "first_name": user_data.first_name,
+        "last_name": user_data.last_name,
+        "username": user_data.username,
+    }
+    
+    async with Session() as s, s.begin():
+        user = await User.get_or_create(s, tg_data, role=Role.bot_user)
+
+    extra = {}
+    if user.role in ("agency", "manager") and user.agency_id is not None:
+        extra["agency_id"] = user.agency_id
+
+    access_tok, refresh_tok = mint_tokens(user.id, user.role, **extra)
+
+    # Return tokens in the JSON payload for the WebApp to store
+    return {
+        "ok": True,
+        "access_token": access_tok,
+        "refresh_token": refresh_tok,
+        "role": user.role,
+        "user_id": user.id
+    } 

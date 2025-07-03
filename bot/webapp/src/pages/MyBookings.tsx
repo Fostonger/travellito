@@ -9,8 +9,22 @@ export default function MyBookings() {
   const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1';
 
   const load = async () => {
-    const { data } = await axios.get(`${apiBase}/bookings`, { params: { limit: 30 } });
-    setBookings(data);
+    try {
+      const { data } = await axios.get(`${apiBase}/bookings`, { 
+        params: { limit: 30 },
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      setBookings(data);
+    } catch (error) {
+      console.error('Error loading bookings:', error);
+      // If unauthorized, redirect to home page
+      if (error.response?.status === 401) {
+        alert('Please log in to view your bookings');
+        window.location.href = '/';
+      }
+    }
   };
 
   useEffect(() => {
@@ -18,8 +32,21 @@ export default function MyBookings() {
   }, []);
 
   const handleCancel = async (id: number) => {
-    await axios.patch(`${apiBase}/bookings/${id}`, { items: [] });
-    await load();
+    try {
+      await axios.patch(`${apiBase}/bookings/${id}`, { items: [] }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      await load();
+    } catch (error) {
+      console.error('Error canceling booking:', error);
+      if (error.response?.status === 401) {
+        alert('Please log in to cancel bookings');
+      } else {
+        alert('Failed to cancel booking. Please try again.');
+      }
+    }
   };
 
   return (

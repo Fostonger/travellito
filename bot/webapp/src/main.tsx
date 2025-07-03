@@ -1,11 +1,24 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import App from './pages/App';
 import TourDetail from './pages/TourDetail';
 import Checkout from './pages/Checkout';
 import MyBookings from './pages/MyBookings';
+import { setupAxiosAuth, authenticateWithTelegram } from './auth';
+
+// Setup axios with authentication
+setupAxiosAuth();
+
+// Try to authenticate immediately
+authenticateWithTelegram().then(success => {
+  if (success) {
+    console.log('Authentication successful');
+  } else {
+    console.log('Authentication not available or failed');
+  }
+});
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 

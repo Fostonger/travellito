@@ -52,6 +52,10 @@ const messages: Record<Lang, Record<string, string>> = {
     processing: "Обработка...",
     hours: "ч",
     minutes: "мин",
+    auth_required: "Требуется авторизация. Пожалуйста, перезапустите бот.",
+    validation_error: "Ошибка валидации данных. Проверьте правильность заполнения формы.",
+    no_tours: "Нет доступных экскурсий",
+    virtual_departure_error: "Не удалось создать отправление. Пожалуйста, выберите другую дату.",
   },
   en: {
     loading: "Loading…",
@@ -83,6 +87,10 @@ const messages: Record<Lang, Record<string, string>> = {
     processing: "Processing...",
     hours: "h",
     minutes: "min",
+    auth_required: "Authentication required. Please restart the bot.",
+    validation_error: "Data validation error. Please check your form inputs.",
+    no_tours: "No available tours",
+    virtual_departure_error: "Failed to create departure. Please select a different date.",
   },
 };
 
