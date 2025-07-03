@@ -46,34 +46,54 @@
 - ✅ Architecture documentation
 - ✅ Refactoring guide
 
+### 4.1 Additional Services
+- ✅ AdminService - Platform administration business logic
+- ✅ LandlordService - Landlord operations and commission management
+
+### 4.2 Additional Schemas  
+- ✅ Admin schemas (MaxCommissionBody, MetricsOut, ApiKeyOut, UserOut, etc.)
+- ✅ Landlord schemas (ApartmentIn/Out, CommissionBody/Out, TourForLandlord, EarningsOut)
+
+### 4.3 Additional Endpoints
+- ✅ Admin endpoints (`/api/v1/admin`)
+  - Tour max commission management
+  - Platform metrics
+  - API key CRUD
+  - User management CRUD
+- ✅ Landlord endpoints (`/api/v1/landlord`)
+  - Apartment CRUD
+  - Commission management
+  - Earnings tracking
+  - QR code generation
+
 ## In Progress 🚧
 
 ### Remaining Endpoints to Refactor:
-1. **Admin endpoints**
-   - Tour management
-   - Agency management
-   - User management
-   - Settings management
-
-2. **Landlord endpoints**
-   - Dashboard
-   - Apartment management
-   - Commission management
-
-3. **Public endpoints**
-   - Tour search
+1. **Public endpoints**
+   - Tour search with filters
+   - Tour categories listing
+   - Price quotes
    - Departure availability
+   - Various list endpoints (cities, tour categories, etc.)
 
-4. **Agency Manager endpoints**
+2. **Agency Manager endpoints**
    - Manager CRUD operations
+
+3. **Other endpoints**
+   - External API endpoints
+   - Broadcast endpoints
+   - Referral endpoints
 
 ## TODO 📋
 
 ### 1. Complete Remaining Endpoints
-- [ ] Create AdminService for admin business logic
-- [ ] Create LandlordService for landlord features
+- [x] Create AdminService for admin business logic
+- [x] Create LandlordService for landlord features
 - [ ] Create PublicService for public API
-- [ ] Refactor all remaining endpoints
+- [ ] Create ManagerService for agency manager operations
+- [ ] Refactor public endpoints
+- [ ] Refactor agency manager endpoints
+- [ ] Refactor other miscellaneous endpoints
 
 ### 2. Testing
 - [ ] Unit tests for services
