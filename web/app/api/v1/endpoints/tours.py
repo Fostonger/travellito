@@ -2,6 +2,7 @@ from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, status, Query
 
 from app.api.v1.schemas import TourIn, TourOut, ImagesOut
+from app.api.v1.endpoints.utils import get_agency_id
 from app.deps import SessionDep
 from app.security import current_user, role_required
 from app.services import TourService
@@ -9,14 +10,6 @@ from app.core import BaseError
 
 
 router = APIRouter()
-
-
-def get_agency_id(user: dict) -> int:
-    """Extract agency ID from user token"""
-    agency_id = user.get("agency_id")
-    if not agency_id:
-        raise BaseError("No agency associated with user", status_code=403)
-    return int(agency_id)
 
 
 @router.get("/", response_model=List[TourOut])

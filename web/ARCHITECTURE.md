@@ -22,6 +22,90 @@ This backend follows Clean Architecture principles with clear separation of conc
 └─────────────────────────────────────────────────────────────┘
 ```
 
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        A[Web Browser]
+        B[Mobile App]
+        C[API Consumer]
+    end
+    
+    subgraph "API Layer /api/v1"
+        D[Auth Endpoints<br/>Login/Logout/Refresh]
+        E[Tour Endpoints<br/>CRUD Operations]
+        F[Departure Endpoints<br/>Schedule Management]
+        G[Booking Endpoints<br/>Reservation Management]
+        H[Admin Endpoints<br/>Platform Management]
+    end
+    
+    subgraph "Service Layer"
+        I[AuthService<br/>Authentication Logic]
+        J[TourService<br/>Tour Business Rules]
+        K[DepartureService<br/>Schedule Logic]
+        L[BookingService<br/>Reservation Logic]
+        M[AdminService<br/>Admin Operations]
+    end
+    
+    subgraph "Repository Layer"
+        N[UserRepository]
+        O[TourRepository]
+        P[DepartureRepository]
+        Q[PurchaseRepository]
+        R[AgencyRepository]
+    end
+    
+    subgraph "Database"
+        S[(PostgreSQL)]
+    end
+    
+    subgraph "External Services"
+        T[S3/MinIO<br/>File Storage]
+        U[Telegram Bot API]
+        V[External Agency APIs]
+    end
+    
+    A --> D
+    B --> D
+    C --> D
+    
+    D --> I
+    E --> J
+    F --> K
+    G --> L
+    H --> M
+    
+    I --> N
+    J --> O
+    J --> T
+    K --> P
+    K --> O
+    L --> Q
+    L --> P
+    M --> N
+    M --> O
+    M --> R
+    
+    N --> S
+    O --> S
+    P --> S
+    Q --> S
+    R --> S
+    
+    style A fill:#e3f2fd
+    style B fill:#e3f2fd
+    style C fill:#e3f2fd
+    style I fill:#fff3e0
+    style J fill:#fff3e0
+    style K fill:#fff3e0
+    style L fill:#fff3e0
+    style M fill:#fff3e0
+    style N fill:#e8f5e9
+    style O fill:#e8f5e9
+    style P fill:#e8f5e9
+    style Q fill:#e8f5e9
+    style R fill:#e8f5e9
+```
+
 ### Dependency Flow
 
 - Controllers → Services → Repositories → Database
