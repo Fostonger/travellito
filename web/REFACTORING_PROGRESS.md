@@ -51,12 +51,18 @@
 - ✅ LandlordService - Landlord operations and commission management
 - ✅ PublicService - Public API operations (search, categories, quotes, etc.)
 - ✅ ManagerService - Agency manager CRUD operations
+- ✅ ExternalService - External API operations (capacity updates, booking exports)
+- ✅ BroadcastService - Broadcast messaging to tourists
+- ✅ ReferralService - QR code scanning and referral tracking
 
 ### 4.2 Additional Schemas  
 - ✅ Admin schemas (MaxCommissionBody, MetricsOut, ApiKeyOut, UserOut, etc.)
 - ✅ Landlord schemas (ApartmentIn/Out, CommissionBody/Out, TourForLandlord, EarningsOut)
 - ✅ Public schemas (TourSearchOut, QuoteIn/Out, DepartureListOut, CategoryOut, etc.)
 - ✅ Manager schemas (ManagerIn, ManagerOut)
+- ✅ External schemas (CapacityBody, CapacityOut, BookingExportItem)
+- ✅ Broadcast schemas (BroadcastBody, BroadcastResponse, DepartureOut)
+- ✅ Referral schemas (ReferralIn, ScanIn, ReferralResponse)
 
 ### 4.3 Additional Endpoints
 - ✅ Admin endpoints (`/api/v1/admin`)
@@ -77,30 +83,63 @@
   - List endpoints (cities, tour categories, ticket classes, repetition types)
 - ✅ Manager endpoints (`/api/v1/agency/managers`)
   - Manager CRUD operations
+- ✅ External endpoints (`/api/v1/external`)
+  - Departure capacity updates
+  - Booking exports (JSON/CSV)
+- ✅ Broadcast endpoints (`/api/v1/departures`)
+  - Broadcast messages to tourists
+  - List departures for broadcast
+- ✅ Referral endpoints (`/api/v1/referrals`)
+  - Record landlord referrals
+  - Record apartment scans
 
-## In Progress 🚧
+### 4.4 Additional Components
+- ✅ Helper module for shared utilities (`helpers.py`)
+- ✅ All endpoints follow clean architecture
+- ✅ Complete separation of concerns achieved
 
-### Remaining Endpoints to Refactor:
-1. **Other endpoints**
-   - External API endpoints
-   - Broadcast endpoints  
-   - Referral endpoints
-   - Legacy endpoints
+## ✅ REFACTORING COMPLETE!
 
-## TODO 📋
+All endpoints have been successfully refactored to follow clean architecture principles.
 
-### 1. Complete Remaining Endpoints
-- [x] Create AdminService for admin business logic
-- [x] Create LandlordService for landlord features
-- [x] Create PublicService for public API
-- [x] Create ManagerService for agency manager operations
-- [x] Refactor admin endpoints
-- [x] Refactor landlord endpoints
-- [x] Refactor public endpoints
-- [x] Refactor agency manager endpoints
-- [ ] Refactor external API endpoints
-- [ ] Refactor broadcast endpoints
-- [ ] Refactor referral endpoints
+## Migration Guide 📋
+
+### 1. Update main.py
+Replace the old `main.py` with a new version that:
+- Uses only the v1 API routes from `/api/v1`
+- Removes all old endpoint definitions
+- Keeps HTML templates temporarily for backward compatibility
+
+### 2. Update imports in existing code
+Change imports from:
+```python
+from app.api.agency import ...
+from app.api.bookings import ...
+```
+To:
+```python
+from app.api.v1.endpoints.tours import ...
+from app.api.v1.endpoints.bookings import ...
+```
+
+### 3. Delete old API files
+Once migration is verified, delete:
+- `app/api/admin.py`
+- `app/api/agency.py`
+- `app/api/auth.py`
+- `app/api/bookings.py`
+- `app/api/broadcast.py`
+- `app/api/external.py`
+- `app/api/landlord.py`
+- `app/api/legacy.py`
+- `app/api/public.py`
+- `app/api/referral.py`
+
+### 4. Update environment variables
+Ensure all required environment variables are set:
+- `BOT_TOKEN` - Required for broadcast service
+- `BOT_ALIAS` - Telegram bot alias
+- `CORS_ALLOW_ORIGINS` - CORS configuration
 
 ### 2. Testing
 - [ ] Unit tests for services
