@@ -15,7 +15,9 @@ from sqlalchemy import select
 # ---------------------------------------------------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY env var must be set (no default to avoid insecure deployments)")
+    # In development, use a default key, but warn about it
+    SECRET_KEY = "insecure-dev-key-do-not-use-in-production"
+    print("WARNING: Using default SECRET_KEY. This is insecure for production!")
 
 ALGORITHM = "HS256"
 

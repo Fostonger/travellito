@@ -128,7 +128,13 @@ class AuthService(BaseService):
     
     def _verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify password against hash"""
-        return bcrypt.checkpw(
-            plain_password.encode('utf-8'),
-            hashed_password.encode('utf-8')
-        ) 
+        try:
+            return bcrypt.checkpw(
+                plain_password.encode('utf-8'),
+                hashed_password.encode('utf-8')
+            )
+        except ValueError as e:
+            # Log the error (in a real system, use a proper logger)
+            print(f"Password verification error: {str(e)}")
+            # If the hash is invalid, authentication fails
+            return False 

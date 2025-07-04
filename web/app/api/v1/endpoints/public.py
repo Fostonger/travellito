@@ -23,6 +23,7 @@ from ..schemas.public_schemas import (
     TourCategoryOut,
     TicketClassOut,
     RepetitionTypeOut,
+    LandlordSignupRequest,
 )
 
 router = APIRouter()
@@ -184,4 +185,21 @@ async def list_repetition_types(sess: SessionDep):
     """Return all repetition types for dropdown selection."""
     service = PublicService(sess)
     types = await service.list_repetition_types()
-    return [RepetitionTypeOut(**typ) for typ in types] 
+    return [RepetitionTypeOut(**typ) for typ in types]
+
+@router.post("/signup/landlord", status_code=status.HTTP_201_CREATED)
+async def landlord_signup(
+    payload: LandlordSignupRequest,
+    sess: SessionDep
+):
+    """Create a new landlord user."""
+    service = PublicService(sess)
+    try:
+        result = await service.create_landlord(
+            name=payload.name,
+            email=payload.email,
+            password=payload.password
+        )
+        return {"success": True, "user_id": result["user_id"]}
+    except ValidationError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) 

@@ -36,7 +36,6 @@ except ImportError:
     HAS_QR_SUPPORT = False
 
 router = APIRouter(
-    prefix="/landlord",
     tags=["landlord"],
     dependencies=[Depends(role_required("landlord"))],
 )
@@ -44,10 +43,13 @@ router = APIRouter(
 BOT_ALIAS = os.getenv("BOT_ALIAS", "TravellitoBot")
 
 
-def _get_landlord_id(user: dict) -> int:
+async def _get_landlord_id(sess: SessionDep, user: dict) -> int:
     """Extract landlord ID from user token."""
     try:
-        return int(user["sub"])
+        user_id = int(user["sub"])
+        service = LandlordService(sess)
+        landlord = await service.get_landlord_by_user_id(user_id)
+        return landlord.id
     except (KeyError, ValueError):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid landlord token")
 
@@ -66,7 +68,7 @@ async def list_apartments(
     user=Depends(current_user),
 ):
     """List apartments for the landlord."""
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     apartments = await service.list_apartments(landlord_id, limit, offset)
     return [ApartmentOut.model_validate(apt) for apt in apartments]
@@ -77,7 +79,7 @@ async def create_apartment(
     payload: ApartmentIn, sess: SessionDep, user=Depends(current_user)
 ):
     """Create a new apartment."""
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     apt = await service.create_apartment(
         landlord_id=landlord_id,
@@ -100,7 +102,7 @@ async def update_apartment(
     if payload is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty payload")
 
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     
     data = payload if isinstance(payload, dict) else payload.model_dump(exclude_unset=True)
@@ -128,7 +130,7 @@ async def set_tour_commission(
     if body is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty payload")
 
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     
     try:
@@ -150,7 +152,7 @@ async def list_commissions(
     user=Depends(current_user),
 ):
     """List all commission settings."""
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     commissions = await service.list_commissions(landlord_id, limit, offset)
     return [CommissionOut(**comm) for comm in commissions]
@@ -164,7 +166,7 @@ async def list_tours_for_commission(
     user=Depends(current_user),
 ):
     """List all tours with commission settings."""
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     tours = await service.list_tours_with_commission(landlord_id, limit, offset)
     return [TourForLandlord(**tour) for tour in tours]
@@ -176,7 +178,7 @@ async def earnings(
     sess: SessionDep, period: str = "30d", user=Depends(current_user)
 ):
     """Get earnings statistics."""
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     
     try:
@@ -189,7 +191,7 @@ async def earnings(
 @router.get("/earnings.csv", summary="Download detailed last-30-days earnings as CSV")
 async def earnings_csv(sess: SessionDep, user=Depends(current_user)):
     """Export earnings details as CSV."""
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     
     details = await service.get_earnings_details(landlord_id, days=30)
@@ -215,9 +217,13 @@ async def earnings_csv(sess: SessionDep, user=Depends(current_user)):
 
 
 # QR Code Generation
-@router.get("/apartments/qr-pdf", response_class=Response,
+@router.get("/apartments/{apt_id}/qr-pdf", response_class=Response,
             summary="Download a single PDF containing one QR code per apartment")
-async def apartments_qr_pdf(sess: SessionDep, user=Depends(current_user)):
+async def apartments_qr_pdf(
+    sess: SessionDep,
+    apt_id: int = Path(..., gt=0),
+    user=Depends(current_user)
+):
     """Generate QR codes for all apartments as PDF."""
     if not HAS_QR_SUPPORT:
         raise HTTPException(
@@ -225,10 +231,10 @@ async def apartments_qr_pdf(sess: SessionDep, user=Depends(current_user)):
             detail="QR code generation not available. Install qrcode and reportlab packages."
         )
     
-    landlord_id = _get_landlord_id(user)
+    landlord_id = await _get_landlord_id(sess, user)
     service = LandlordService(sess)
     
-    apartments = await service.get_apartments_for_qr(landlord_id)
+    apartments = await service.get_apartments_for_qr(landlord_id, apt_id)
     if not apartments:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No apartments found")
     
@@ -270,4 +276,17 @@ async def apartments_qr_pdf(sess: SessionDep, user=Depends(current_user)):
     buf.seek(0)
     
     headers = {"Content-Disposition": "attachment; filename=qrcodes.pdf"}
-    return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers) 
+    return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
+
+
+@router.get("/dashboard", response_model=None)
+async def get_dashboard(sess: SessionDep, user=Depends(current_user)):
+    """Get landlord dashboard data."""
+    user_id = await _get_landlord_id(sess, user)
+    service = LandlordService(sess)
+    
+    try:
+        data = await service.get_dashboard_data(user_id)
+        return data
+    except NotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e)) 

@@ -11,6 +11,8 @@ from contextlib import asynccontextmanager
 import os
 import asyncio
 from datetime import datetime, timedelta
+import httpx
+from fastapi.responses import Response
 
 from .infrastructure.database import engine, AsyncSessionFactory
 from .deps import SessionDep
@@ -18,7 +20,7 @@ from .models import Setting, Departure, Tour, Base
 from .api.v1.api import api_v1_router
 from .api.v1.middleware import exception_handler
 from .storage import client, BUCKET
-from .security import role_required
+from .security import role_required, current_user
 
 # Rate limiting
 from slowapi import Limiter
@@ -177,8 +179,31 @@ async def admin_settings(request: Request):
 
 # Partner pages
 @app.get("/partner", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
-async def landlord_dashboard(request: Request):
-    return templates.TemplateResponse("landlord_dashboard.html", {"request": request})
+async def landlord_dashboard(request: Request, sess: SessionDep, user=Depends(current_user)):
+    """Landlord dashboard page."""
+    from app.services.landlord_service import LandlordService
+    from app.core.exceptions import NotFoundError
+    
+    # Get landlord data via service (following clean architecture)
+    try:
+        service = LandlordService(sess)
+        data = await service.get_dashboard_data(int(user["sub"]))
+        
+        return templates.TemplateResponse("landlord_dashboard.html", {
+            "request": request,
+            "landlord": data["landlord"],
+            "apartments": data["apartments"],
+            "total_qty": data["metrics"]["total_qty"],
+            "total_amount": data["metrics"]["total_amount"],
+            "last_qty": data["metrics"]["last_qty"],
+            "last_amount": data["metrics"]["last_amount"]
+        })
+    except NotFoundError:
+        # If landlord not found, render with default values
+        return templates.TemplateResponse("landlord_dashboard.html", {
+            "request": request,
+            "apartments": []
+        })
 
 @app.get("/partner/apartments/new", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
 async def new_apartment_form(request: Request):
@@ -187,6 +212,20 @@ async def new_apartment_form(request: Request):
 @app.get("/signup/landlord", response_class=HTMLResponse)
 def landlord_signup_page(request: Request):
     return templates.TemplateResponse("landlord_signup.html", {"request": request})
+
+@app.post("/signup/landlord")
+async def landlord_signup_redirect(request: Request):
+    """Redirect to the API endpoint for landlord signup."""
+    data = await request.json()
+    
+    # Forward the request to our API endpoint
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{request.base_url}api/v1/public/signup/landlord",
+            json=data
+        )
+        
+        return Response(content=response.content, status_code=response.status_code)
 
 # Agency pages
 @app.get("/agency", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])

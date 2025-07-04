@@ -50,6 +50,7 @@ api_v1_router.include_router(
 # Include landlord endpoints (landlord access)
 api_v1_router.include_router(
     landlord.router,
+    prefix="/landlord",
     tags=["landlord"]
 )
 

@@ -458,10 +458,54 @@ class PublicService(BaseService):
         return [{"id": id, "code": code, "name": name} for id, code, name in result]
     
     async def list_repetition_types(self) -> List[Dict[str, Any]]:
-        """List all repetition types for dropdown selection."""
-        stmt = select(RepetitionType.id, RepetitionType.name).order_by(RepetitionType.name)
-        result = await self.session.execute(stmt)
-        return [{"id": id, "name": name} for id, name in result]
+        """Return all repetition types for dropdown selection."""
+        stmt = select(RepetitionType).order_by(RepetitionType.id)
+        rows = await self.session.scalars(stmt)
+        return [{"id": r.id, "name": r.name} for r in rows.all()]
+    
+    async def create_landlord(
+        self, 
+        name: str, 
+        email: str, 
+        password: str
+    ) -> Dict[str, Any]:
+        """Create a new landlord user and landlord record.
+        
+        Args:
+            name: Landlord name
+            email: Email address
+            password: Password (will be hashed)
+            
+        Returns:
+            Dictionary with user and landlord info
+            
+        Raises:
+            ValidationError: If email already exists
+        """
+        from app.services.auth_service import AuthService
+        from app.models import Landlord
+        from app.roles import Role
+        
+        # Create user with landlord role
+        auth_service = AuthService(self.session)
+        user = await auth_service.create_user(
+            email=email,
+            password=password,
+            role=Role.landlord.value,
+            first=name
+        )
+        
+        # Create landlord record
+        landlord = Landlord(name=name, user_id=user.id)
+        self.session.add(landlord)
+        await self.session.commit()
+        
+        return {
+            "user_id": user.id,
+            "landlord_id": landlord.id,
+            "name": name,
+            "email": email
+        }
     
     async def list_tours(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """List tours with basic information."""

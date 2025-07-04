@@ -25,6 +25,28 @@ class LandlordService(BaseService):
         self.user_repository = UserRepository(session)
         self.tour_repository = TourRepository(session)
 
+    # User Management
+
+    async def get_landlord_by_user_id(self, user_id: int) -> Landlord:
+        """Get landlord by user ID.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Landlord object
+            
+        Raises:
+            NotFoundError: If landlord not found
+        """
+        stmt = select(Landlord).where(Landlord.user_id == user_id)
+        landlord = await self.session.scalar(stmt)
+        
+        if not landlord:
+            raise NotFoundError(f"Landlord not found for user ID {user_id}")
+        
+        return landlord
+
     # Apartment Management
     
     async def list_apartments(
@@ -123,6 +145,43 @@ class LandlordService(BaseService):
             
         await self.session.commit()
         return apt
+
+    async def get_dashboard_data(self, user_id: int) -> Dict[str, Any]:
+        """Get landlord dashboard data.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Dictionary with landlord data, apartments, and metrics
+            
+        Raises:
+            NotFoundError: If landlord not found
+        """
+        # Get landlord data
+        stmt = select(Landlord).where(Landlord.user_id == user_id)
+        landlord = await self.session.scalar(stmt)
+        
+        if not landlord:
+            raise NotFoundError("Landlord not found")
+        
+        # Get apartments
+        apartments = await self.list_apartments(landlord.id)
+        
+        # Get metrics (simplified for now)
+        # In a real implementation, you would calculate actual metrics from purchases
+        metrics = {
+            "total_qty": 0,
+            "total_amount": "0",
+            "last_qty": 0,
+            "last_amount": "0"
+        }
+        
+        return {
+            "landlord": landlord,
+            "apartments": apartments,
+            "metrics": metrics
+        }
 
     # Commission Management
     
@@ -340,15 +399,22 @@ class LandlordService(BaseService):
         
         return details
 
-    async def get_apartments_for_qr(self, landlord_id: int) -> List[Apartment]:
+    async def get_apartments_for_qr(self, landlord_id: int, apt_id: int | None = None) -> List[Apartment]:
         """Get all apartments for QR code generation.
         
         Args:
             landlord_id: Landlord ID
-            
+            apt_id: Optional apartment ID to filter by
         Returns:
             List of Apartment objects
         """
+        if apt_id:
+            stmt = select(Apartment).where(
+                Apartment.landlord_id == landlord_id,
+                Apartment.id == apt_id
+            )
+        else:
+            stmt = select(Apartment).where(Apartment.landlord_id == landlord_id)
         stmt = (
             select(Apartment)
             .where(Apartment.landlord_id == landlord_id)

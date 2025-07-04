@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 
 
 # Tour schemas
@@ -92,5 +92,13 @@ class TicketClassOut(BaseModel):
 
 
 class RepetitionTypeOut(BaseModel):
+    """Schema for repetition type output."""
     id: int
-    name: str 
+    name: str
+
+
+class LandlordSignupRequest(BaseModel):
+    """Schema for landlord signup request."""
+    name: str = Field(..., min_length=2, max_length=120)
+    email: EmailStr
+    password: str = Field(..., min_length=6) 
