@@ -345,7 +345,6 @@ class PublicService(BaseService):
         Raises:
             NotFoundError: If tour not found
         """
-        from ..api.bookings import _seats_taken  # Import helper function
         
         now = datetime.utcnow()
         
@@ -368,7 +367,7 @@ class PublicService(BaseService):
         # Process existing departures
         existing_dates = set()
         for dep in deps:
-            taken = await _seats_taken(self.session, dep.id)
+            taken = await self.departure_repository.get_seats_taken(dep.id)
             all_departures.append({
                 "id": dep.id,
                 "starts_at": dep.starts_at,
@@ -533,7 +532,10 @@ class PublicService(BaseService):
         Raises:
             NotFoundError: If tour not found
         """
-        tour: Tour | None = await self.session.get(Tour, tour_id)
+        # Use selectinload to eagerly load the images relationship
+        stmt = select(Tour).options(selectinload(Tour.images)).where(Tour.id == tour_id)
+        tour = await self.session.scalar(stmt)
+        
         if not tour:
             raise NotFoundError("Tour not found")
         

@@ -66,9 +66,9 @@ export default function TourDetail() {
       {tour.images?.length > 0 && (
         <div className="relative mb-4 rounded-xl overflow-hidden shadow-lg">
           <img
-            src={tour.images[imgIdx]}
+            src={tour.images[imgIdx].url}
             className="w-full h-72 object-cover cursor-pointer"
-            onClick={() => setFullscreenImg(tour.images[imgIdx])}
+            onClick={() => setFullscreenImg(tour.images[imgIdx].url)}
           />
           {tour.images.length > 1 && (
             <>
