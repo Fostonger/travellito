@@ -188,7 +188,7 @@ async def cmd_start(msg: Message):
             # Continue anyway - the webapp will handle auth if needed
 
     # Preserve the raw payload (after /start) – contains QR metadata like
-    # `ap_<apartment_id>_<city>_<ref>` which the WebApp will parse.
+    # `apt_<apartment_id>` which the WebApp will parse.
     args: str | None = None
     if msg.text and len(msg.text.split(maxsplit=1)) == 2:
         args = msg.text.split(maxsplit=1)[1]
@@ -217,6 +217,12 @@ async def cmd_start(msg: Message):
     )
 
     await msg.answer(_("greet", lang), reply_markup=kb)
+
+# Handle deep links with start parameters
+@router.message(lambda msg: msg.text and msg.text.startswith("/start "))
+async def cmd_start_with_args(msg: Message):
+    # Just forward to the main start handler
+    await cmd_start(msg)
 
 
 @router.message()

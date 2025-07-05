@@ -249,7 +249,7 @@ async def apartments_qr_pdf(
     x, y = 50, page_h - 250  # initial cursor
     
     for apt in apartments:
-        payload = f"apt_{apt.id}_{apt.city}_{landlord_id}"
+        payload = f"apt_{apt.id}"
         url = _bot_link(payload)
         
         qr_img = qrcode.make(url, image_factory=PilImage)
