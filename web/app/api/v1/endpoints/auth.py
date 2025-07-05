@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Depends, Response, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, Response, status, HTTPException, Security
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBasic, HTTPBasicCredentials
+import os
+import secrets
+import time
+from typing import Dict
 
 from app.api.v1.schemas.auth_schemas import (
     LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -7,13 +11,16 @@ from app.api.v1.schemas.auth_schemas import (
 )
 from app.deps import SessionDep
 from app.services.auth_service import AuthService
-from app.security import current_user
+from app.security import current_user, decode_token, ACCESS_TOKEN_EXP_SECONDS
 
 
 router = APIRouter()
 
 # OAuth2 scheme for Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+# Basic auth for token introspection
+security = HTTPBasic()
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -135,4 +142,84 @@ async def get_current_user(
     if not user_obj:
         raise Exception("User not found")
     
-    return UserOut.model_validate(user_obj) 
+    return UserOut.model_validate(user_obj)
+
+
+@router.post("/telegram/bot")
+async def telegram_bot_auth(
+    user_data: Dict,
+    sess: SessionDep
+):
+    """Authenticate a user from Telegram bot
+    
+    This endpoint is called by the bot to authenticate users based on their Telegram ID.
+    It creates or updates a user record and returns JWT tokens.
+    """
+    from app.models import User
+    from app.roles import Role
+    
+    if not user_data.get("id"):
+        raise HTTPException(status_code=400, detail="Invalid user data")
+    
+    # Get or create user
+    user = await User.get_or_create(
+        sess, 
+        user_data,
+        role=Role.bot_user
+    )
+    
+    # Generate tokens
+    service = AuthService(sess)
+    _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
+    
+    await sess.commit()
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id": user.id,
+            "role": user.role,
+            "first": user.first,
+            "last": user.last
+        }
+    }
+
+
+@router.post("/introspect")
+async def introspect_token(
+    token: str,
+    credentials: HTTPBasicCredentials = Security(security)
+):
+    """Verify a token and return its claims
+    
+    This endpoint is protected by HTTP Basic Auth and is used to validate tokens.
+    """
+    # Check basic auth credentials
+    admin_user = os.getenv("ADMIN_USER", "admin")
+    admin_pass = os.getenv("ADMIN_PASSWORD", "")
+    
+    is_correct_username = secrets.compare_digest(credentials.username, admin_user)
+    is_correct_password = secrets.compare_digest(credentials.password, admin_pass)
+    
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    
+    try:
+        payload = decode_token(token)
+        # Add additional validation as needed
+        return {
+            "active": True,
+            "exp": payload.get("exp"),
+            "sub": payload.get("sub"),
+            "role": payload.get("role")
+        }
+    except Exception as e:
+        return {
+            "active": False,
+            "error": str(e)
+        } 

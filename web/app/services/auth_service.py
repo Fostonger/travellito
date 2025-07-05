@@ -1,5 +1,5 @@
 from typing import Optional, Tuple
-import bcrypt
+from passlib.hash import bcrypt
 
 from app.core import BaseService, ValidationError, AuthenticationError
 from app.infrastructure.repositories import UserRepository
@@ -40,6 +40,37 @@ class AuthService(BaseService):
         
         return user, access_token, refresh_token
     
+    async def authenticate_user_by_id(self, user_id: int) -> Tuple[User, str, str]:
+        """Authenticate user by ID (for Telegram bot users)
+        
+        This method is used when we already have a verified user ID from a trusted source
+        like the Telegram Bot API, and we want to issue tokens for that user.
+        """
+        # Find user by ID
+        user = await self.user_repo.get(user_id)
+        if not user:
+            raise AuthenticationError("User not found")
+        
+        # Generate tokens
+        extra_claims = {}
+        if user.agency_id:
+            extra_claims["agency_id"] = user.agency_id
+        
+        # Ensure we have valid values for sub and role
+        if user.id is None:
+            raise AuthenticationError("User ID is missing")
+        
+        if not user.role:
+            raise AuthenticationError("User role is missing")
+        
+        access_token, refresh_token = mint_tokens(
+            sub=user.id,
+            role=user.role,
+            **extra_claims
+        )
+        
+        return user, access_token, refresh_token
+    
     async def refresh_access_token(self, refresh_token: str) -> str:
         """Generate new access token from refresh token"""
         
@@ -51,10 +82,17 @@ class AuthService(BaseService):
         # Verify token is a refresh token (has longer expiry)
         # This is a simple check - in production, you might want to store token types
         
+        # Ensure we have required claims
+        sub = payload.get("sub")
+        role = payload.get("role")
+        
+        if not sub or not role:
+            raise AuthenticationError("Invalid token claims")
+        
         # Generate new access token with same claims
         access_token = create_token(
-            sub=payload.get("sub"),
-            role=payload.get("role"),
+            sub=sub,
+            role=role,
             **{k: v for k, v in payload.items() if k not in ["sub", "role", "exp"]}
         )
         
@@ -124,15 +162,12 @@ class AuthService(BaseService):
     
     def _hash_password(self, password: str) -> str:
         """Hash password using bcrypt"""
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        return bcrypt.hash(password)
     
     def _verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify password against hash"""
         try:
-            return bcrypt.checkpw(
-                plain_password.encode('utf-8'),
-                hashed_password.encode('utf-8')
-            )
+            return bcrypt.verify(plain_password, hashed_password)
         except ValueError as e:
             # Log the error (in a real system, use a proper logger)
             print(f"Password verification error: {str(e)}")

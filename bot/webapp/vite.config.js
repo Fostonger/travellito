@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['rarely-metal-reflection-prefer.trycloudflare.com']
+    allowedHosts: ['niger-limited-copyrights-twins.trycloudflare.com']
   },
 }); 

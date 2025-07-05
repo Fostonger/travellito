@@ -75,13 +75,38 @@ user_tokens = {}
 # ---------------------------------------------------------------------------
 
 async def authenticate_user(user_id: int) -> dict:
-    """Authenticate a user with the web API and store their tokens."""
+    """Authenticate a user with the web API and store their tokens.
+    
+    This function will:
+    1. Check if the user already has a valid token
+    2. If token exists and is not close to expiry, return it
+    3. If token doesn't exist or is close to expiry, get a new one
+    4. Store the token for future use
+    """
     logging.info(f"Starting authentication for user_id: {user_id}")
     
+    # Check if user already has a token
     if user_id in user_tokens:
-        logging.info(f"Using cached token for user_id: {user_id}")
-        return user_tokens[user_id]
+        token_data = user_tokens[user_id]
         
+        # Check if token is about to expire (within 5 minutes)
+        try:
+            # Decode token without verification to check expiry
+            payload = jwt.decode(token_data.get('access_token', ''), 
+                                options={"verify_signature": False})
+            exp = payload.get('exp', 0)
+            now = int(time.time())
+            
+            # If token is valid for more than 5 minutes, reuse it
+            if exp > now + 300:  # 5 minutes = 300 seconds
+                logging.info(f"Using cached token for user_id: {user_id} (expires in {exp - now} seconds)")
+                return token_data
+            else:
+                logging.info(f"Token for user_id: {user_id} is about to expire, refreshing")
+        except Exception as e:
+            logging.warning(f"Error checking token expiry: {str(e)}")
+            # Continue to get a new token
+    
     # Get user info from Telegram
     try:
         user = await bot.get_chat(user_id)
@@ -181,6 +206,7 @@ async def cmd_start(msg: Message):
     tokens = None
     if msg.from_user:
         try:
+            # This will automatically handle token expiry and refresh
             tokens = await authenticate_user(msg.from_user.id)
             logging.info(f"Got tokens for user {msg.from_user.id}: {tokens is not None}")
         except Exception as e:
