@@ -245,198 +245,66 @@ async def agency_managers_page(request: Request):
 async def agency_bookings_page(request: Request):
     return templates.TemplateResponse("agency/bookings.html", {"request": request})
 
-@app.get("/agency/bookings/data", dependencies=[Depends(role_required("agency"))])
-async def agency_bookings_data(
+# Add routes to redirect to the API endpoints
+@app.get("/agency/bookings/data")
+async def agency_bookings_data_redirect(
     request: Request,
-    sess: SessionDep,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    user=Depends(current_user)
+    format: Optional[str] = None
 ):
-    """Get bookings data for agency dashboard"""
-    from app.services.booking_service import BookingService
-    from datetime import datetime, date
-    import json
-    from fastapi.responses import JSONResponse
-    
-    # Extract agency ID from user token
-    agency_id = user.get("agency_id")
-    if not agency_id:
-        return JSONResponse(
-            status_code=403,
-            content={"error": "No agency associated with user"}
-        )
-    
-    # Parse date parameters
-    from_date_obj = None
-    to_date_obj = None
-    
+    """Redirect to API endpoint for bookings data"""
+    params = []
     if from_date:
-        try:
-            from_date_obj = date.fromisoformat(from_date)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid from_date format. Use YYYY-MM-DD"}
-            )
-    
+        params.append(f"from_date={from_date}")
     if to_date:
-        try:
-            to_date_obj = date.fromisoformat(to_date)
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid to_date format. Use YYYY-MM-DD"}
-            )
+        params.append(f"to_date={to_date}")
+    if format:
+        params.append(f"format={format}")
     
-    service = BookingService(sess)
+    query_string = "&".join(params)
+    target_url = f"/api/v1/agency/bookings/?{query_string}" if query_string else "/api/v1/agency/bookings/"
     
-    try:
-        # Get bookings data directly from service
-        bookings_data = await service.export_bookings(
-            agency_id=int(agency_id),
-            from_date=from_date_obj,
-            to_date=to_date_obj,
-            format="json"
-        )
-        
-        # Convert Decimal to float for JSON serialization
-        for booking in bookings_data:
-            if "commission_percent" not in booking:
-                booking["commission_percent"] = 0.0
-            if "commission_amount" not in booking:
-                booking["commission_amount"] = 0.0
-        
-        # Return as raw JSON to bypass validation
-        return bookings_data
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "type": str(type(e))}
-        )
+    return Response(
+        status_code=307,
+        headers={"Location": target_url}
+    )
 
-@app.patch("/agency/bookings/{booking_id}/status", dependencies=[Depends(role_required("agency"))])
-async def agency_booking_status_update(
+@app.patch("/agency/bookings/{booking_id}/status")
+async def agency_booking_status_redirect(
     booking_id: int,
-    request: Request,
-    sess: AsyncSession = Depends(AsyncSessionFactory),
-    user=Depends(current_user)
+    request: Request
 ):
-    """Update booking status"""
-    from app.services.booking_service import BookingService
-    from app.core.exceptions import BaseError
-    from fastapi.responses import JSONResponse
-    
-    # Extract agency ID from user token
-    agency_id = user.get("agency_id")
-    if not agency_id:
-        return JSONResponse(
-            status_code=403,
-            content={"error": "No agency associated with user"}
-        )
-    
-    # Parse request body
-    try:
-        data = await request.json()
-        status = data.get("status")
-        if status not in ["confirmed", "rejected"]:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Invalid status. Must be 'confirmed' or 'rejected'"}
-            )
-    except Exception:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Invalid request body"}
-        )
-    
-    service = BookingService(sess)
-    
-    try:
-        booking = await service.update_booking_status(
-            booking_id=booking_id,
-            agency_id=int(agency_id),
-            status=status
-        )
-        
-        await sess.commit()
-        
-        return {"success": True, "booking_id": booking.id, "status": booking.status}
-    except BaseError as e:
-        return JSONResponse(
-            status_code=e.status_code,
-            content={"error": e.message}
-        )
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)}
-        )
+    """Redirect to API endpoint for booking status update"""
+    # Simple redirect - the client will need to resend the request body
+    return Response(
+        status_code=307,
+        headers={
+            "Location": f"/api/v1/agency/bookings/{booking_id}/status"
+        }
+    )
 
 @app.get("/agency/bookings/export")
-async def agency_bookings_export(
+async def agency_bookings_export_redirect(
     request: Request,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    format: str = "csv",
-    sess: AsyncSession = Depends(AsyncSessionFactory),
-    user=Depends(current_user)
+    format: str = "csv"
 ):
-    """Export bookings data"""
-    from app.services.booking_service import BookingService
-    import io
-    import csv
-    from fastapi.responses import StreamingResponse
-    from datetime import date
-    
-    # Extract agency ID from user token
-    agency_id = user.get("agency_id")
-    if not agency_id:
-        return Response(status_code=403, content="No agency associated with user")
-    
-    # Parse date parameters
-    from_date_obj = None
-    to_date_obj = None
-    
+    """Redirect to API endpoint for bookings export"""
+    params = []
     if from_date:
-        try:
-            from_date_obj = date.fromisoformat(from_date)
-        except ValueError:
-            return Response(status_code=400, content="Invalid from_date format. Use YYYY-MM-DD")
-    
+        params.append(f"from_date={from_date}")
     if to_date:
-        try:
-            to_date_obj = date.fromisoformat(to_date)
-        except ValueError:
-            return Response(status_code=400, content="Invalid to_date format. Use YYYY-MM-DD")
+        params.append(f"to_date={to_date}")
+    params.append(f"format={format}")
     
-    service = BookingService(sess)
+    query_string = "&".join(params)
+    target_url = f"/api/v1/agency/bookings/?{query_string}"
     
-    # Get bookings data
-    bookings_data = await service.export_bookings(
-        agency_id=int(agency_id),
-        from_date=from_date_obj,
-        to_date=to_date_obj,
-        format="json"  # Always get JSON from service
-    )
-    
-    # Return CSV
-    output = io.StringIO()
-    if bookings_data:
-        # Create CSV with all fields except categories (too complex for CSV)
-        fieldnames = [k for k in bookings_data[0].keys() if k != "categories"]
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
-        writer.writeheader()
-        
-        for booking in bookings_data:
-            row = {k: v for k, v in booking.items() if k != "categories"}
-            writer.writerow(row)
-    
-    output.seek(0)
-    return StreamingResponse(
-        io.BytesIO(output.getvalue().encode()),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=bookings.csv"}
+    return Response(
+        status_code=307,
+        headers={"Location": target_url}
     )
 
 @app.get("/agency/departures", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])

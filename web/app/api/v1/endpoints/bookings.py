@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 import io
 import csv
+import json
 
 from app.api.v1.schemas.booking_schemas import (
     BookingStatusUpdate, BookingOut, BookingExportOut, BookingMetrics
@@ -28,45 +29,86 @@ def get_agency_id(user: dict) -> int:
 @router.get("/", response_model=List[BookingExportOut])
 async def list_bookings(
     sess: SessionDep,
-    from_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD) inclusive"),
-    to_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD) inclusive"),
+    request: Request,
+    from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD) inclusive"),
+    to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD) inclusive"),
     format: Optional[str] = Query(None, enum=["json", "csv"], description="Response format"),
     user=Depends(current_user),
 ):
     """List bookings with optional date filtering and export format"""
-    agency_id = get_agency_id(user)
-    service = BookingService(sess)
-    
-    # Get bookings data
-    bookings_data = await service.export_bookings(
-        agency_id=agency_id,
-        from_date=from_date,
-        to_date=to_date,
-        format=format or "json"
-    )
-    
-    # Return CSV if requested
-    if format == "csv":
-        output = io.StringIO()
-        if bookings_data:
-            # Create CSV with all fields except categories (too complex for CSV)
-            fieldnames = [k for k in bookings_data[0].keys() if k != "categories"]
-            writer = csv.DictWriter(output, fieldnames=fieldnames)
-            writer.writeheader()
-            
-            for booking in bookings_data:
-                row = {k: v for k, v in booking.items() if k != "categories"}
-                writer.writerow(row)
+    try:
+        agency_id = get_agency_id(user)
+        service = BookingService(sess)
         
-        output.seek(0)
-        return StreamingResponse(
-            io.BytesIO(output.getvalue().encode()),
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=bookings.csv"}
+        # Parse date parameters
+        from_date_obj = None
+        to_date_obj = None
+        
+        if from_date:
+            try:
+                from_date_obj = date.fromisoformat(from_date)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid from_date format. Use YYYY-MM-DD"}
+                )
+        
+        if to_date:
+            try:
+                to_date_obj = date.fromisoformat(to_date)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid to_date format. Use YYYY-MM-DD"}
+                )
+        
+        # Get bookings data
+        bookings_data = await service.export_bookings(
+            agency_id=agency_id,
+            from_date=from_date_obj,
+            to_date=to_date_obj,
+            format=format or "json"
         )
-    
-    # Return JSON
-    return bookings_data
+        
+        # Add missing fields required by schema
+        for booking in bookings_data:
+            if "commission_percent" not in booking:
+                booking["commission_percent"] = 0.0
+            if "commission_amount" not in booking:
+                booking["commission_amount"] = 0.0
+        
+        # Return CSV if requested
+        if format == "csv":
+            output = io.StringIO()
+            if bookings_data:
+                # Create CSV with all fields except categories (too complex for CSV)
+                fieldnames = [k for k in bookings_data[0].keys() if k != "categories"]
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+                
+                for booking in bookings_data:
+                    row = {k: v for k, v in booking.items() if k != "categories"}
+                    writer.writerow(row)
+            
+            output.seek(0)
+            return StreamingResponse(
+                io.BytesIO(output.getvalue().encode()),
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=bookings.csv"}
+            )
+        
+        # Return JSON
+        return bookings_data
+    except BaseError as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"error": e.message}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "type": str(type(e))}
+        )
 
 
 @router.get("/metrics", response_model=BookingMetrics)
@@ -90,17 +132,28 @@ async def update_booking_status(
     user=Depends(current_user),
 ):
     """Update booking status (confirm or reject)"""
-    agency_id = get_agency_id(user)
-    service = BookingService(sess)
-    
-    booking = await service.update_booking_status(
-        booking_id=booking_id,
-        agency_id=agency_id,
-        status=payload.status
-    )
-    
-    await sess.commit()
-    
-    # TODO: Send notification to tourist about status change
-    
-    return {"success": True, "booking_id": booking.id, "status": booking.status} 
+    try:
+        agency_id = get_agency_id(user)
+        service = BookingService(sess)
+        
+        booking = await service.update_booking_status(
+            booking_id=booking_id,
+            agency_id=agency_id,
+            status=payload.status
+        )
+        
+        await sess.commit()
+        
+        # TODO: Send notification to tourist about status change
+        
+        return {"success": True, "booking_id": booking.id, "status": booking.status}
+    except BaseError as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"error": e.message}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        ) 
