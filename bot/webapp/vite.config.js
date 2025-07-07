@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['probe-assisted-sacramento-precious.trycloudflare.com']
+    allowedHosts: ['publications-trackback-raised-preparation.trycloudflare.com']
   },
 }); 

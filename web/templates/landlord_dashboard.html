@@ -24,7 +24,7 @@
   <!-- Apartments table -->
   <div class="flex justify-between items-center mb-4">
     <h2 class="text-2xl font-bold">Квартиры</h2>
-    <a href="/partner/apartments/new" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">+ Добавить квартиру</a>
+    <a href="/api/v1/landlord/apartments/new" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">+ Добавить квартиру</a>
   </div>
   <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200">
@@ -41,7 +41,7 @@
           <td class="px-4 py-2 whitespace-nowrap">{{ a.name or 'Apartment #' ~ a.id }}</td>
           <td class="px-4 py-2 whitespace-nowrap">{{ a.city }}</td>
           <td class="px-4 py-2 whitespace-nowrap">
-            <a href="/partner/apartments/{{ a.id }}/qrcode" target="_blank" class="text-emerald-600 hover:underline">Скачать</a>
+            <a href="/api/v1/landlord/apartments/{{ a.id }}/qr-pdf" target="_blank" class="text-emerald-600 hover:underline">Скачать</a>
           </td>
         </tr>
         {% endfor %}

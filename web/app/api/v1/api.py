@@ -57,6 +57,7 @@ api_v1_router.include_router(
 # Include public endpoints (public access)
 api_v1_router.include_router(
     public.router,
+    prefix="/public",
     tags=["public"]
 )
 

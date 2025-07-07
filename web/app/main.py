@@ -178,7 +178,7 @@ async def admin_settings(request: Request):
     return templates.TemplateResponse("admin/settings.html", {"request": request})
 
 # Partner pages
-@app.get("/partner", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
+@app.get("/api/v1/landlord", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
 async def landlord_dashboard(request: Request, sess: SessionDep, user=Depends(current_user)):
     """Landlord dashboard page."""
     from app.services.landlord_service import LandlordService
@@ -205,7 +205,7 @@ async def landlord_dashboard(request: Request, sess: SessionDep, user=Depends(cu
             "apartments": []
         })
 
-@app.get("/partner/apartments/new", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
+@app.get("/api/v1/landlord/apartments/new", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
 async def new_apartment_form(request: Request):
     return templates.TemplateResponse("apartment_form.html", {"request": request})
 

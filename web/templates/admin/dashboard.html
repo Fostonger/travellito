@@ -24,7 +24,7 @@
 <script>
 (async () => {
   try {
-    const res = await fetch('/admin/metrics');
+    const res = await fetch('/api/v1/admin/metrics');
     if (!res.ok) return;
     const data = await res.json();
     document.getElementById('totalTours').textContent = data.tours;
