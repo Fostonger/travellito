@@ -45,11 +45,26 @@ class AuthService(BaseService):
         
         This method is used when we already have a verified user ID from a trusted source
         like the Telegram Bot API, and we want to issue tokens for that user.
+        
+        For newly created users, the ID might be None if the session hasn't been flushed yet.
+        In that case, we'll flush the session to get the ID.
         """
+        # For newly created users that haven't been committed yet
+        if user_id is None:
+            await self.session.flush()
+            # If after flushing we still don't have an ID, something is wrong
+            if user_id is None:
+                raise AuthenticationError("User ID is missing")
+        
         # Find user by ID
         user = await self.user_repo.get(user_id)
         if not user:
-            raise AuthenticationError("User not found")
+            # Try to flush the session in case the user was just created but not yet persisted
+            await self.session.flush()
+            # Try again after flushing
+            user = await self.user_repo.get(user_id)
+            if not user:
+                raise AuthenticationError("User not found")
         
         # Generate tokens
         extra_claims = {}

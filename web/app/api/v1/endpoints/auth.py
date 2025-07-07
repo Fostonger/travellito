@@ -168,6 +168,9 @@ async def telegram_bot_auth(
         role=Role.bot_user
     )
     
+    # Flush the session to ensure the user has an ID before authentication
+    await sess.flush()
+    
     # Generate tokens
     service = AuthService(sess)
     _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
