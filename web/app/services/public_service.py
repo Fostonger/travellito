@@ -14,7 +14,7 @@ from ..core.exceptions import NotFoundError, ValidationError
 from ..models import (
     Tour, Departure, Purchase, TicketCategory, Referral, 
     LandlordCommission, City, TourCategory, TicketClass, 
-    RepetitionType, Apartment
+    RepetitionType, Apartment, PurchaseItem, User
 )
 from ..infrastructure.repositories import TourRepository, DepartureRepository
 from ..storage import presigned
@@ -78,28 +78,38 @@ class PublicService(BaseService):
         This is used when a user tries to book a virtual departure that doesn't
         exist in the database yet. We materialize it on demand.
         """
-        # First check if a departure at this exact time already exists
-        stmt = select(Departure).where(
-            Departure.tour_id == tour_id,
-            Departure.starts_at == starts_at
-        )
-        existing = await self.session.scalar(stmt)
-        if existing:
-            return existing
-        
-        # Create a new departure
-        departure = Departure(
-            tour_id=tour_id,
-            starts_at=starts_at,
-            capacity=capacity,
-            modifiable=True
-        )
-        
-        self.session.add(departure)
-        await self.session.flush()
-        await self.session.commit()
-        
-        return departure
+        try:
+            # First check if a departure at this exact time already exists
+            stmt = select(Departure).where(
+                Departure.tour_id == tour_id,
+                Departure.starts_at == starts_at
+            )
+            existing = await self.session.scalar(stmt)
+            if existing:
+                return existing
+            
+            # Verify the tour exists
+            tour = await self.session.get(Tour, tour_id)
+            if not tour:
+                raise ValidationError(f"Tour with ID {tour_id} not found")
+            
+            # Create a new departure
+            departure = Departure(
+                tour_id=tour_id,
+                starts_at=starts_at,
+                capacity=capacity,
+                modifiable=True
+            )
+            
+            self.session.add(departure)
+            await self.session.flush()
+            await self.session.commit()
+            
+            return departure
+        except Exception as e:
+            # Roll back the transaction if there was an error
+            await self.session.rollback()
+            raise ValidationError(f"Failed to materialize virtual departure: {e}")
     
     # Tour Search and Listing
     
@@ -248,12 +258,19 @@ class PublicService(BaseService):
         Returns:
             Quote with total price and availability
         """
+        # Validate items
+        if not items:
+            raise ValidationError("No items provided in the quote request")
+            
         # Handle virtual departures
         if departure_id < 0:
-            tour_id, starts_at = await self._decode_virtual_departure(
-                departure_id, virtual_timestamp
-            )
-            dep = await self._materialize_virtual_departure(tour_id, starts_at)
+            try:
+                tour_id, starts_at = await self._decode_virtual_departure(
+                    departure_id, virtual_timestamp
+                )
+                dep = await self._materialize_virtual_departure(tour_id, starts_at)
+            except Exception as e:
+                raise ValidationError(f"Failed to process virtual departure: {e}")
         else:
             dep: Departure | None = await self.session.get(Departure, departure_id)
             if not dep:
@@ -283,17 +300,40 @@ class PublicService(BaseService):
         cat_map = {c.id: c for c in cats}
         
         total_net = Decimal("0")
+        total_qty = 0
+        items_out = []
         for item in items:
-            cat = cat_map.get(item["category_id"])
+            cat_id = item.get("category_id")
+            qty = item.get("qty", 0)
+            
+            if not cat_id or not isinstance(cat_id, int):
+                raise ValidationError("Invalid category_id format")
+                
+            if not qty or not isinstance(qty, int) or qty <= 0:
+                raise ValidationError("Invalid quantity format")
+                
+            cat = cat_map.get(cat_id)
             if not cat:
-                raise ValidationError("Invalid category id")
+                raise ValidationError(f"Invalid category id: {cat_id}")
+                
             net_price = self._discounted_price(cat.price, tour.max_commission_pct, chosen_comm)
-            total_net += net_price * item["qty"]
+            total_net += net_price * qty
+            total_qty += qty
+            items_out.append({
+                "category_id": cat.id,
+                "qty": qty,
+                "amount": net_price * qty
+            })
+        
+        if total_qty > dep.capacity:
+            raise ValidationError("Not enough seats available")
         
         return {
             "total_net": total_net.quantize(Decimal("0.01")),
             "seats_left": max(remaining, 0),
             "departure_id": dep.id,
+            "total_qty": total_qty,
+            "items": items_out
         }
     
     async def _decode_virtual_departure(
@@ -305,7 +345,7 @@ class PublicService(BaseService):
             
             # Try to find a valid tour ID by checking different prefixes
             tour_id = None
-            for prefix_length in range(1, 4):  # Try 1, 2, or 3 digit tour IDs
+            for prefix_length in range(1, 6):  # Try 1-5 digit tour IDs
                 if prefix_length >= len(encoded_id):
                     continue
                 
@@ -314,6 +354,14 @@ class PublicService(BaseService):
                 if tour is not None:
                     tour_id = potential_tour_id
                     break
+            
+            if tour_id is None:
+                # Fallback: try to extract tour ID from the first digit
+                if len(encoded_id) > 0:
+                    potential_tour_id = int(encoded_id[0])
+                    tour = await self.session.get(Tour, potential_tour_id)
+                    if tour is not None:
+                        tour_id = potential_tour_id
             
             if tour_id is None:
                 raise ValidationError("Could not determine tour from virtual departure ID")
@@ -578,4 +626,96 @@ class PublicService(BaseService):
             "capacity": dep.capacity,
             "seats_taken": taken,
             "seats_left": max(dep.capacity - taken, 0)
+        }
+
+    async def create_booking(
+        self,
+        departure_id: int,
+        items: List[Dict[str, int]],
+        user_id: int,
+        contact_name: str,
+        contact_phone: str,
+        virtual_timestamp: int | None = None,
+    ) -> Dict[str, Any]:
+        """Create a booking for a user.
+        
+        Args:
+            departure_id: Departure ID (negative for virtual)
+            items: List of {"category_id": int, "qty": int}
+            user_id: User ID for discount calculation
+            contact_name: Customer name
+            contact_phone: Customer phone
+            virtual_timestamp: Timestamp for virtual departures
+            
+        Returns:
+            Dict with booking details
+            
+        Raises:
+            NotFoundError: If departure or categories not found
+            ValidationError: If validation fails
+            ConflictError: If not enough seats
+        """
+        from ..models import Purchase, PurchaseItem, User
+        
+        # Validate inputs
+        if not items:
+            raise ValidationError("No items provided in the booking request")
+        
+        # First calculate the quote to validate availability and get prices
+        try:
+            quote = await self.calculate_price_quote(
+                departure_id=departure_id,
+                items=items,
+                user_id=user_id,
+                virtual_timestamp=virtual_timestamp
+            )
+        except Exception as e:
+            raise ValidationError(f"Failed to calculate price quote: {e}")
+        
+        # Get the departure
+        departure = await self.session.get(Departure, quote["departure_id"])
+        if not departure:
+            raise NotFoundError("Departure not found")
+            
+        # Get the user
+        user = await self.session.get(User, user_id)
+        if not user:
+            raise NotFoundError("User not found")
+            
+        # Update user contact info if provided
+        if contact_name:
+            user.first = contact_name
+        if contact_phone:
+            user.phone = contact_phone
+            
+        # Create the purchase record
+        purchase = Purchase(
+            departure_id=departure.id,
+            user_id=user_id,
+            qty=quote["total_qty"],
+            amount=Decimal(quote["total_net"]),
+            status="pending",
+            viewed=False
+        )
+        
+        self.session.add(purchase)
+        await self.session.flush()  # To get the purchase ID
+        
+        # Create purchase items
+        for item_data in quote["items"]:
+            item = PurchaseItem(
+                purchase_id=purchase.id,
+                category_id=item_data["category_id"],
+                qty=item_data["qty"],
+                amount=Decimal(item_data["amount"])
+            )
+            self.session.add(item)
+            
+        # Commit the transaction
+        await self.session.commit()
+        
+        return {
+            "booking_id": purchase.id,
+            "total_amount": str(purchase.amount),
+            "seats_left": quote["seats_left"] - quote["total_qty"]
         }

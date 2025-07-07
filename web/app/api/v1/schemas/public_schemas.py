@@ -101,4 +101,20 @@ class LandlordSignupRequest(BaseModel):
     """Schema for landlord signup request."""
     name: str = Field(..., min_length=2, max_length=120)
     email: EmailStr
-    password: str = Field(..., min_length=6) 
+    password: str = Field(..., min_length=6)
+
+
+class BookingIn(BaseModel):
+    """Schema for creating a booking."""
+    departure_id: int
+    items: List[QuoteItem]
+    contact_name: str
+    contact_phone: str
+    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures
+
+
+class BookingCreatedResponse(BaseModel):
+    """Response for successful booking creation."""
+    booking_id: int
+    total_amount: str
+    seats_left: int 

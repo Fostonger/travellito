@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ....deps import SessionDep
 from ....security import current_user, role_required
 from ....services.public_service import PublicService
-from ....core.exceptions import NotFoundError, ValidationError
+from ....core.exceptions import NotFoundError, ValidationError, ConflictError
 from ..schemas.public_schemas import (
     TourSearchOut,
     TourListOut,
@@ -24,6 +24,8 @@ from ..schemas.public_schemas import (
     TicketClassOut,
     RepetitionTypeOut,
     LandlordSignupRequest,
+    BookingIn,
+    BookingCreatedResponse,
 )
 
 router = APIRouter()
@@ -202,4 +204,26 @@ async def landlord_signup(
         )
         return {"success": True, "user_id": result["user_id"]}
     except ValidationError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) 
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.post("/bookings", response_model=BookingCreatedResponse, dependencies=[Depends(role_required("bot_user"))])
+async def create_booking(payload: BookingIn, sess: SessionDep, user=Depends(current_user)):
+    """Create a new booking."""
+    service = PublicService(sess)
+    
+    try:
+        result = await service.create_booking(
+            departure_id=payload.departure_id,
+            items=[{"category_id": item.category_id, "qty": item.qty} for item in payload.items],
+            user_id=int(user["sub"]),
+            contact_name=payload.contact_name,
+            contact_phone=payload.contact_phone,
+            virtual_timestamp=payload.virtual_timestamp,
+        )
+        return BookingCreatedResponse(**result)
+    except NotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ConflictError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) 

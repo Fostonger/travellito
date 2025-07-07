@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['niger-limited-copyrights-twins.trycloudflare.com']
+    allowedHosts: ['probe-assisted-sacramento-precious.trycloudflare.com']
   },
 }); 
