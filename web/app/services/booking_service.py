@@ -114,8 +114,6 @@ class BookingService(BaseService):
                 "customer_phone": booking.user.phone or "",
                 "total_quantity": booking.qty,
                 "total_amount": float(booking.amount),
-                "commission_percent": float(booking.commission_pct) if booking.commission_pct else 0,
-                "commission_amount": float(booking.amount_gross * (booking.commission_pct / 100)) if booking.commission_pct else 0,
                 "status": booking.status,
                 "viewed": booking.viewed,
                 "categories": categories

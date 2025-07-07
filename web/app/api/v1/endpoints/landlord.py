@@ -245,6 +245,8 @@ async def apartments_qr_pdf(
     buf = io.BytesIO()
     pdf = _canvas.Canvas(buf, pagesize=A4)
     page_w, page_h = A4
+    ## if apartment is single, use its name; otherwise use "Apartments"
+    apt_name = apartments[0].name if len(apartments) == 1 else "Apartments"
     
     x, y = 50, page_h - 250  # initial cursor
     
@@ -275,7 +277,7 @@ async def apartments_qr_pdf(
     pdf.save()
     buf.seek(0)
     
-    headers = {"Content-Disposition": "attachment; filename=qrcodes.pdf"}
+    headers = {"Content-Disposition": f"attachment; filename={apt_name}.pdf"}
     return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
 
 

@@ -32,7 +32,7 @@
     const out = await res.json();
     document.getElementById('msg').textContent = res.ok ? `✅ Квартира #${out.id} создана!` : `❌ ${out.detail || 'Ошибка'}`;
     if (res.ok) {
-      setTimeout(() => window.location.href = '/partner', 1200);
+      setTimeout(() => window.location.href = '/api/v1/landlord', 1200);
     }
   });
 </script>
