@@ -30,7 +30,7 @@ export default function Checkout() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await axios.get(`${apiBase}/tours/${tourId}/categories`);
+      const { data } = await axios.get(`${apiBase}/public/tours/${tourId}/categories`);
       setCategories(data);
     };
     load();
@@ -73,7 +73,7 @@ export default function Checkout() {
         console.log('Including virtual timestamp in quote:', departure.virtual_timestamp);
       }
       
-      const { data } = await axios.post(`${apiBase}/quote`, quotePayload, {
+      const { data } = await axios.post(`${apiBase}/public/quote`, quotePayload, {
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : undefined
         }
@@ -171,7 +171,7 @@ export default function Checkout() {
         console.log('Including virtual timestamp:', departure.virtual_timestamp);
       }
       
-      await axios.post(`${apiBase}/bookings`, bookingPayload, {
+      await axios.post(`${apiBase}/public/bookings`, bookingPayload, {
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : undefined
         }

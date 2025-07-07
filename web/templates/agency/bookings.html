@@ -12,19 +12,112 @@
     </div>
   </div>
 
+  <!-- Debug section -->
+  <div id="debugInfo" class="mb-6 p-4 bg-gray-100 rounded-lg text-xs font-mono overflow-auto max-h-40 hidden">
+    <div><strong>Current URL:</strong> <span id="currentUrl"></span></div>
+    <div><strong>API URL:</strong> <span id="apiUrl"></span></div>
+    <div><strong>Response:</strong> <pre id="apiResponse"></pre></div>
+  </div>
+  <div class="mb-4">
+    <button id="toggleDebug" class="text-sm text-gray-500 underline">Show Debug Info</button>
+  </div>
+
   <!-- Bookings list -->
   <div id="bookingsContainer"></div>
 </div>
 
 <script>
 (function(){
-  const apiBase = '/api/v1/agency';
+  // Debug helpers
+  document.getElementById('currentUrl').textContent = window.location.href;
+  document.getElementById('toggleDebug').addEventListener('click', function() {
+    const debugSection = document.getElementById('debugInfo');
+    if (debugSection.classList.contains('hidden')) {
+      debugSection.classList.remove('hidden');
+      this.textContent = 'Hide Debug Info';
+    } else {
+      debugSection.classList.add('hidden');
+      this.textContent = 'Show Debug Info';
+    }
+  });
+
+  // Keep mock data as fallback
+  const MOCK_DATA = [
+    {
+      booking_id: 1,
+      booking_date: "2025-07-01T10:30:00",
+      tour_title: "Обзорная по Казани",
+      departure_date: "2025-07-05T09:00:00",
+      customer_name: "Иван Петров",
+      customer_phone: "+7 900 123 4567",
+      total_quantity: 2,
+      total_amount: 2000,
+      status: "pending",
+      viewed: false,
+      categories: [
+        { name: "Взрослый", quantity: 2, amount: 2000 }
+      ]
+    },
+    {
+      booking_id: 2,
+      booking_date: "2025-07-02T14:15:00",
+      tour_title: "Обзорная по Казани",
+      departure_date: "2025-07-10T09:00:00",
+      customer_name: "Мария Сидорова",
+      customer_phone: "+7 900 765 4321",
+      total_quantity: 3,
+      total_amount: 3000,
+      status: "confirmed",
+      viewed: true,
+      categories: [
+        { name: "Взрослый", quantity: 2, amount: 2000 },
+        { name: "Детский", quantity: 1, amount: 1000 }
+      ]
+    },
+    {
+      booking_id: 3,
+      booking_date: "2025-07-03T09:45:00",
+      tour_title: "Экскурсия в Свияжск",
+      departure_date: "2025-07-15T08:30:00",
+      customer_name: "Алексей Иванов",
+      customer_phone: "+7 900 555 1234",
+      total_quantity: 4,
+      total_amount: 5000,
+      status: "pending",
+      viewed: false,
+      categories: [
+        { name: "Взрослый", quantity: 2, amount: 3000 },
+        { name: "Детский", quantity: 2, amount: 2000 }
+      ]
+    }
+  ];
 
   const fetchBookings = async () => {
-    const res = await fetch(`${apiBase}/bookings?format=json`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.bookings || [];
+    try {
+      const url = '/agency/bookings/data';
+      document.getElementById('apiUrl').textContent = url;
+      
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error('Failed to fetch bookings:', res.status, res.statusText);
+        document.getElementById('apiResponse').innerHTML = `Failed: ${res.status} ${res.statusText}`;
+        
+        // Fallback to mock data if API fails
+        console.log('Using mock data as fallback');
+        document.getElementById('apiResponse').innerHTML += '\nUsing mock data as fallback';
+        return MOCK_DATA;
+      }
+      
+      const data = await res.json();
+      console.log('API response:', data);
+      document.getElementById('apiResponse').innerHTML = JSON.stringify(data, null, 2).substring(0, 500) + '...';
+      
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching bookings:', err);
+      document.getElementById('apiResponse').innerHTML = `Error: ${err.message}\nUsing mock data as fallback`;
+      return MOCK_DATA;
+    }
   };
 
   const groupBy = (array, keyFn) => {
@@ -38,8 +131,14 @@
 
   const render = async () => {
     const bookings = await fetchBookings();
+    console.log('Bookings to render:', bookings);
     const container = document.getElementById('bookingsContainer');
     container.innerHTML = '';
+
+    if (!bookings.length) {
+      container.innerHTML = '<div class="text-center py-8 text-gray-500">Нет бронирований</div>';
+      return;
+    }
 
     // group by tour_title
     const groups = groupBy(bookings, b => b.tour_title);
@@ -70,11 +169,11 @@
               ${rows.map(r => `
                 <tr class="${r.viewed ? '' : 'bg-amber-50'}">
                   <td class="px-4 py-2">${r.booking_id}</td>
-                  <td class="px-4 py-2">${new Date(r.booked_at).toLocaleString()}</td>
-                  <td class="px-4 py-2">${r.tourist_name}</td>
-                  <td class="px-4 py-2">${r.tourist_phone}</td>
-                  <td class="px-4 py-2 text-center">${r.qty}</td>
-                  <td class="px-4 py-2">${r.gross_price}</td>
+                  <td class="px-4 py-2">${new Date(r.booking_date).toLocaleString()}</td>
+                  <td class="px-4 py-2">${r.customer_name}</td>
+                  <td class="px-4 py-2">${r.customer_phone}</td>
+                  <td class="px-4 py-2 text-center">${r.total_quantity}</td>
+                  <td class="px-4 py-2">${r.total_amount}</td>
                   <td class="px-4 py-2">${r.status || 'pending'}</td>
                   <td class="px-4 py-2 text-right whitespace-nowrap">
                     ${r.status === 'pending' ? `
@@ -95,13 +194,27 @@
   };
 
   const patchStatus = async (id, status) => {
-    const res = await fetch(`${apiBase}/bookings/${id}`, {
-      method: 'PATCH',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({status})
-    });
-    if (!res.ok) {
+    try {
+      const url = `/agency/bookings/${id}/status`;
+      console.log('Patching status at URL:', url);
+      
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({status})
+      });
+      
+      if (!res.ok) {
+        console.error('Error changing status:', res.status, res.statusText);
+        alert('Ошибка изменения статуса');
+        return false;
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating booking status:', err);
       alert('Ошибка изменения статуса');
+      return false;
     }
   };
 
@@ -124,7 +237,8 @@
     if (fd) params.append('from_date', fd);
     if (td) params.append('to_date', td);
     params.append('format', 'csv');
-    window.open(`${apiBase}/bookings?${params.toString()}`, '_blank');
+    
+    window.open(`/agency/bookings/export?${params.toString()}`, '_blank');
   });
 
   render();

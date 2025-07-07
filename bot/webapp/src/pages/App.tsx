@@ -21,7 +21,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await axios.get(`${apiBase}/tours/search`, {
+        const { data } = await axios.get(`${apiBase}/public/tours/search`, {
           params: { limit: 50 },
           withCredentials: true,
         });

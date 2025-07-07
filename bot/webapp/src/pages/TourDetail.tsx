@@ -19,8 +19,8 @@ export default function TourDetail() {
     const load = async () => {
       if (!id) return;
       const [tourRes, depRes] = await Promise.all([
-        axios.get(`${apiBase}/tours/${id}`),
-        axios.get(`${apiBase}/tours/${id}/departures`, { params: { limit: 30 } }),
+        axios.get(`${apiBase}/public/tours/${id}`),
+        axios.get(`${apiBase}/public/tours/${id}/departures`, { params: { limit: 30 } }),
       ]);
       setTour(tourRes.data);
       setDepartures(depRes.data);
