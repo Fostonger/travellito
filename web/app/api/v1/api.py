@@ -85,4 +85,12 @@ api_v1_router.include_router(
 api_v1_router.include_router(
     referrals.router,
     tags=["referrals"]
+)
+
+# Include tourist booking endpoints (bot user access)
+api_v1_router.include_router(
+    bookings.router,
+    prefix="/bookings",
+    tags=["tourist-bookings"],
+    dependencies=[Depends(role_required("bot_user"))]
 ) 

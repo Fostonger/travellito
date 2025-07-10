@@ -176,8 +176,7 @@ async def telegram_bot_auth(
     _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
     
     await sess.commit()
-    
-    return {
+    token =  {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "user": {
@@ -187,6 +186,11 @@ async def telegram_bot_auth(
             "last": user.last
         }
     }
+
+    # TODO: remove this
+    print(token)
+    
+    return token
 
 
 @router.post("/introspect")

@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['aaron-fuzzy-progressive-slideshow.trycloudflare.com']
+    allowedHosts: ['correspondence-categories-physics-temp.trycloudflare.com']
   },
 }); 

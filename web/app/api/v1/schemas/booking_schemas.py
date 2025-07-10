@@ -60,3 +60,17 @@ class BookingMetrics(BaseModel):
     pending: int
     confirmed: int
     rejected: int 
+
+
+class TouristBookingOut(BaseModel):
+    """Schema for tourist bookings with tour and departure details"""
+    id: int
+    amount: float
+    status: str
+    created: datetime
+    departure_date: datetime
+    tour_title: str
+    tour_id: int
+    departure_id: int
+    is_cancellable: bool = False
+    items: List[Dict[str, Any]] = [] 

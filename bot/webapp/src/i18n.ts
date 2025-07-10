@@ -1,62 +1,5 @@
-/* Lightweight i18n helper – keep it dependency-free for the mini-app. */
-export type Lang = "ru" | "en";
-
-// -----------------------------------------------------------------------------
-//  Language detection
-// -----------------------------------------------------------------------------
-
-function detectLang(): Lang {
-  // 1) URL query param ?lang=ru|en (preferred)
-  const qs = new URLSearchParams(window.location.search);
-  const qp = qs.get("lang");
-  if (qp === "ru" || qp === "en") return qp;
-  // 2) Browser / Telegram@WebApp language, e.g. "ru-RU"
-  if (navigator.language && navigator.language.toLowerCase().startsWith("ru")) return "ru";
-  return "en";
-}
-
-export const lang: Lang = detectLang();
-
-// -----------------------------------------------------------------------------
-//  Messages
-// -----------------------------------------------------------------------------
-
-const messages: Record<Lang, Record<string, string>> = {
-  ru: {
-    loading: "Загрузка…",
-    available_tours: "Доступные экскурсии",
-    seats_left: "осталось мест",
-    my_bookings: "Мои бронирования",
-    back: "Назад",
-    cancel: "Отменить",
-    checkout: "Бронирование – {date}",
-    total: "Итого:",
-    confirm: "Подтвердить бронирование",
-    booking_confirmed: "Бронирование подтверждено!",
-    missing_ctx: "Недостаточно данных",
-    not_found: "Не найдено",
-    upcoming_departures: "Ближайшие даты",
-    book: "Забронировать",
-    seats: "мест",
-    no_departures: "Нет доступных дат",
-    contact_info: "Контактная информация",
-    name: "Имя",
-    phone: "Телефон",
-    enter_name: "Введите ваше имя",
-    enter_phone: "Введите номер телефона",
-    select_tickets: "Выберите билеты",
-    name_required: "Пожалуйста, укажите имя",
-    phone_required: "Пожалуйста, укажите номер телефона",
-    booking_error: "Ошибка при бронировании. Пожалуйста, попробуйте еще раз.",
-    quote_error: "Ошибка при расчете стоимости. Пожалуйста, попробуйте еще раз.",
-    processing: "Обработка...",
-    hours: "ч",
-    minutes: "мин",
-    auth_required: "Требуется авторизация. Пожалуйста, перезапустите бот.",
-    validation_error: "Ошибка валидации данных. Проверьте правильность заполнения формы.",
-    no_tours: "Нет доступных экскурсий",
-    virtual_departure_error: "Не удалось создать отправление. Пожалуйста, выберите другую дату.",
-  },
+// Simple i18n implementation
+const translations = {
   en: {
     loading: "Loading…",
     available_tours: "Available Tours",
@@ -91,16 +34,88 @@ const messages: Record<Lang, Record<string, string>> = {
     validation_error: "Data validation error. Please check your form inputs.",
     no_tours: "No available tours",
     virtual_departure_error: "Failed to create departure. Please select a different date.",
+    no_bookings: 'You have no bookings yet',
+    no_upcoming_bookings: 'You have no upcoming bookings',
+    no_past_bookings: 'You have no past bookings',
+    tab_upcoming: 'Upcoming',
+    tab_past: 'Past',
+    status_confirmed: 'Confirmed',
+    status_rejected: 'Rejected',
+    status_cancelled: 'Cancelled',
+    status_pending: 'Pending',
+    error: 'Error',
+    error_loading_bookings: 'Failed to load bookings',
+    error_canceling_booking: 'Failed to cancel booking',
+    error_unauthorized: 'Please log in to view your bookings',
   },
+  ru: {
+    loading: "Загрузка…",
+    available_tours: "Доступные экскурсии",
+    seats_left: "осталось мест",
+    my_bookings: "Мои бронирования",
+    back: "Назад",
+    cancel: "Отменить",
+    checkout: "Бронирование – {date}",
+    total: "Итого:",
+    confirm: "Подтвердить бронирование",
+    booking_confirmed: "Бронирование подтверждено!",
+    missing_ctx: "Недостаточно данных",
+    not_found: "Не найдено",
+    upcoming_departures: "Ближайшие даты",
+    book: "Забронировать",
+    seats: "мест",
+    no_departures: "Нет доступных дат",
+    contact_info: "Контактная информация",
+    name: "Имя",
+    phone: "Телефон",
+    enter_name: "Введите ваше имя",
+    enter_phone: "Введите номер телефона",
+    select_tickets: "Выберите билеты",
+    name_required: "Пожалуйста, укажите имя",
+    phone_required: "Пожалуйста, укажите номер телефона",
+    booking_error: "Ошибка при бронировании. Пожалуйста, попробуйте еще раз.",
+    quote_error: "Ошибка при расчете стоимости. Пожалуйста, попробуйте еще раз.",
+    processing: "Обработка...",
+    hours: "ч",
+    minutes: "мин",
+    auth_required: "Требуется авторизация. Пожалуйста, перезапустите бот.",
+    validation_error: "Ошибка валидации данных. Проверьте правильность заполнения формы.",
+    no_tours: "Нет доступных экскурсий",
+    virtual_departure_error: "Не удалось создать отправление. Пожалуйста, выберите другую дату.",
+    no_bookings: 'У вас пока нет бронирований',
+    no_upcoming_bookings: 'У вас нет предстоящих бронирований',
+    no_past_bookings: 'У вас нет прошедших бронирований',
+    tab_upcoming: 'Предстоящие',
+    tab_past: 'Прошедшие',
+    status_confirmed: 'Подтверждено',
+    status_rejected: 'Отклонено',
+    status_cancelled: 'Отменено',
+    status_pending: 'В ожидании',
+    error: 'Ошибка',
+    error_loading_bookings: 'Не удалось загрузить бронирования',
+    error_canceling_booking: 'Не удалось отменить бронирование',
+    error_unauthorized: 'Пожалуйста, войдите в систему для просмотра бронирований',
+  }
 };
 
-export function t(key: string, vars: Record<string, string | number> = {}): string {
-  let str = messages[lang][key] || key;
-  for (const [k, v] of Object.entries(vars)) str = str.replace(`{${k}}`, String(v));
-  return str;
-}
+// Get user's language or default to English
+const getUserLanguage = () => {
+  const lang = navigator.language?.split('-')[0] || 'en';
+  return translations[lang] ? lang : 'en';
+};
 
-export function fmtPrice(value: string | number): string {
-  const num = typeof value === "string" ? value : value.toString();
-  return `${num} ₽`;
-} 
+const currentLang = getUserLanguage();
+
+export const t = (key: string): string => {
+  return translations[currentLang]?.[key] || key;
+};
+
+// Format price with currency
+export const fmtPrice = (amount: number): string => {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}; 

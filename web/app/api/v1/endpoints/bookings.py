@@ -7,7 +7,8 @@ import csv
 import json
 
 from app.api.v1.schemas.booking_schemas import (
-    BookingStatusUpdate, BookingOut, BookingExportOut, BookingMetrics
+    BookingStatusUpdate, BookingOut, BookingExportOut, BookingMetrics,
+    TouristBookingOut
 )
 from app.deps import SessionDep
 from app.security import current_user
@@ -147,6 +148,62 @@ async def update_booking_status(
         # TODO: Send notification to tourist about status change
         
         return {"success": True, "booking_id": booking.id, "status": booking.status}
+    except BaseError as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"error": e.message}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+
+# Tourist booking endpoints
+@router.get("/tourist", response_model=List[TouristBookingOut])
+async def list_tourist_bookings(
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """List all bookings for the current tourist user"""
+    try:
+        user_id = int(user["sub"])
+        service = BookingService(sess)
+        
+        bookings = await service.get_tourist_bookings(user_id)
+        return bookings
+    except BaseError as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"error": e.message}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+
+@router.patch("/tourist/{booking_id}/cancel")
+async def cancel_tourist_booking(
+    booking_id: int,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """Cancel a booking for the current tourist user"""
+    try:
+        user_id = int(user["sub"])
+        service = BookingService(sess)
+        
+        result = await service.cancel_tourist_booking(
+            booking_id=booking_id,
+            user_id=user_id
+        )
+        
+        await sess.commit()
+        
+        return {"success": True, "booking_id": booking_id}
     except BaseError as e:
         return JSONResponse(
             status_code=e.status_code,
