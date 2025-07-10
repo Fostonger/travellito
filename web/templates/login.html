@@ -56,7 +56,7 @@
     }
 
     const data = await res.json();
-    switch (data.role) {
+    switch (data.user.role) {
       case 'admin':
         window.location.href = '/admin';
         break;
@@ -64,7 +64,7 @@
         window.location.href = '/agency';
         break;
       case 'landlord':
-        window.location.href = '/partner';
+        window.location.href = '/api/v1/landlord';
         break;
       default:
         // Fallback
