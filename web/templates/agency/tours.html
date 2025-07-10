@@ -155,7 +155,7 @@
   cancelBtn.addEventListener('click', closeModal);
 
   const loadTours = async () => {
-    const res = await fetch('/api/v1/agency/tours');
+    const res = await fetch('/api/v1/agency/tours/list');
     if (!res.ok) return;
     const tours = await res.json();
     const body = document.getElementById('toursBody');
@@ -214,15 +214,15 @@
 
   async function preloadSelects(){
     // cities
-    const cities = await fetch('/api/v1/cities').then(r=>r.json()).catch(()=>[]);
+    const cities = await fetch('/api/v1/public/cities').then(r=>r.json()).catch(()=>[]);
     const citySel = document.getElementById('tourCity');
     citySel.innerHTML = '<option value="">—</option>' + cities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
     // tour categories
-    const tCats = await fetch('/api/v1/tour_categories').then(r=>r.json()).catch(()=>[]);
+    const tCats = await fetch('/api/v1/public/tour_categories').then(r=>r.json()).catch(()=>[]);
     const catSel = document.getElementById('tourCat');
     catSel.innerHTML = '<option value="">—</option>' + tCats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
     // ticket classes
-    const tClass = await fetch('/api/v1/ticket_classes').then(r=>r.json()).catch(()=>[]);
+    const tClass = await fetch('/api/v1/public/ticket_classes').then(r=>r.json()).catch(()=>[]);
     const clsSel = document.getElementById('ticketClassSel');
     clsSel.innerHTML = '<option value="">Тип</option>' + tClass.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
     // repetition types
@@ -336,7 +336,7 @@
     const city_id = document.getElementById('tourCity').value || null;
     const category_id = document.getElementById('tourCat').value || null;
     if (!title || !price) return;
-    const res = await fetch('/api/v1/agency/tours', {
+    const res = await fetch('/api/v1/agency/tours/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description, price, city_id, category_id })
@@ -397,7 +397,7 @@
   // Load repetition types
   async function loadRepetitionTypes() {
     try {
-      const res = await fetch('/api/v1/repetition_types');
+      const res = await fetch('/api/v1/public/repetition_types');
       if (!res.ok) throw new Error('Failed to load repetition types');
       
       const types = await res.json();

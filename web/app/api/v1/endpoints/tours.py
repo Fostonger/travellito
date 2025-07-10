@@ -11,8 +11,7 @@ from app.core import BaseError
 
 router = APIRouter()
 
-
-@router.get("/", response_model=List[TourOut])
+@router.get("/list", response_model=List[TourOut])
 async def list_tours(
     sess: SessionDep,
     limit: int = Query(50, gt=0, le=100),
@@ -28,11 +27,13 @@ async def list_tours(
         skip=offset,
         limit=limit
     )
+
+    print(tours)
     
     return [TourOut.model_validate(tour) for tour in tours]
 
 
-@router.post("/", response_model=TourOut, status_code=status.HTTP_201_CREATED)
+@router.post("/create", response_model=TourOut, status_code=status.HTTP_201_CREATED)
 async def create_tour(
     payload: TourIn,
     sess: SessionDep,
