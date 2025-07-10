@@ -14,7 +14,7 @@
         <tr>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цена</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Билеты</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Расписание</th>
           <th class="px-6 py-3"></th>
         </tr>
@@ -38,8 +38,13 @@
         <textarea id="tourDesc" class="w-full px-3 py-2 border rounded"></textarea>
       </div>
       <div>
-        <label class="block text-sm font-medium mb-1" for="tourPrice">Базовая цена</label>
-        <input id="tourPrice" type="number" step="0.01" min="0" required class="w-full px-3 py-2 border rounded" />
+        <h3 class="font-medium mb-2">Типы билетов</h3>
+        <div id="ticketRows" class="space-y-2"></div>
+        <div class="flex gap-2 mt-2">
+          <select id="ticketClassSel" class="flex-1 border rounded px-2 py-1 text-sm"></select>
+          <input id="ticketPriceInput" type="number" step="0.01" min="0" placeholder="Цена" class="flex-1 border rounded px-2 py-1 text-sm" />
+          <button type="button" id="addTicketBtn" class="px-3 py-1 bg-emerald-600 text-white rounded">Добавить</button>
+        </div>
       </div>
 
       <div class="flex gap-4">
@@ -139,6 +144,35 @@
   </div>
 </div>
 
+<!-- Modal for ticket categories -->
+<div id="ticketsModal" class="fixed inset-0 bg-black/50 flex items-start justify-center hidden overflow-y-auto py-10">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6 my-auto max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-semibold mb-4">Управление билетами</h2>
+    <input type="hidden" id="ticketsTourId">
+    
+    <div class="mb-4">
+      <h3 class="text-md font-medium mb-2">Текущие типы билетов</h3>
+      <div id="currentTickets" class="space-y-2 mb-4">
+        <!-- Ticket rows will be inserted here -->
+        <div class="text-gray-500 italic">Загрузка...</div>
+      </div>
+      
+      <div class="border-t pt-4 mt-4">
+        <h3 class="text-md font-medium mb-2">Добавить новый тип билета</h3>
+        <div class="flex gap-2">
+          <select id="ticketModalClassSel" class="flex-1 border rounded px-3 py-2 text-sm"></select>
+          <input id="ticketModalPriceInput" type="number" step="0.01" min="0" placeholder="Цена" class="flex-1 border rounded px-3 py-2 text-sm" />
+          <button type="button" id="addModalTicketBtn" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Добавить</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="flex justify-end gap-3 pt-4 border-t">
+      <button type="button" id="closeTicketsModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   const modal = document.getElementById('tourModal');
@@ -166,7 +200,9 @@
       tr.innerHTML = `
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.id}</td>
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.title}</td>
-        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.price}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
+          <button data-id="${t.id}" class="viewTickets px-2 rounded bg-blue-200 hover:bg-blue-300">Билеты</button>
+        </td>
         <td class='px-6 py-4 whitespace-nowrap text-sm space-x-1'>${badge} <button data-id="${t.id}" class="addSched px-2 rounded bg-gray-200 hover:bg-gray-300">＋</button></td>
         <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'></td>`;
       body.appendChild(tr);
@@ -174,6 +210,11 @@
     body.querySelectorAll('.addSched').forEach(btn=>btn.addEventListener('click', (e)=>{
       const tid = e.target.getAttribute('data-id');
       openRecModal(tours.find(x=>x.id==tid));
+    }));
+    
+    body.querySelectorAll('.viewTickets').forEach(btn=>btn.addEventListener('click', (e)=>{
+      const tid = e.target.getAttribute('data-id');
+      openTicketsModal(tid);
     }));
   };
 
@@ -332,14 +373,26 @@
     e.preventDefault();
     const title = document.getElementById('tourTitle').value.trim();
     const description = document.getElementById('tourDesc').value.trim();
-    const price = document.getElementById('tourPrice').value;
     const city_id = document.getElementById('tourCity').value || null;
     const category_id = document.getElementById('tourCat').value || null;
-    if (!title || !price) return;
+    
+    // Validate that at least one ticket category is added
+    if (!title || ticketRows.length === 0) {
+      alert('Пожалуйста, добавьте хотя бы один тип билета');
+      return;
+    }
+    
+    // Check if standard ticket (id=0) is included
+    const hasStandardTicket = ticketRows.some(t => t.ticket_class_id === 0);
+    if (!hasStandardTicket) {
+      alert('Необходимо добавить стандартный тип билета (id=0)');
+      return;
+    }
+    
     const res = await fetch('/api/v1/agency/tours/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, price, city_id, category_id })
+      body: JSON.stringify({ title, description, city_id, category_id })
     });
     if (!res.ok) { alert('Ошибка при создании экскурсии'); return; }
     closeModal();
@@ -386,6 +439,15 @@
   const repeatTimeInput = document.getElementById('repeatTime');
   const weekdayCbs = document.querySelectorAll('.weekday-cb');
   const cancelScheduleBtn = document.getElementById('cancelScheduleModal');
+  
+  // Tickets modal
+  const ticketsModal = document.getElementById('ticketsModal');
+  const ticketsTourIdInput = document.getElementById('ticketsTourId');
+  const currentTicketsContainer = document.getElementById('currentTickets');
+  const ticketModalClassSel = document.getElementById('ticketModalClassSel');
+  const ticketModalPriceInput = document.getElementById('ticketModalPriceInput');
+  const addModalTicketBtn = document.getElementById('addModalTicketBtn');
+  const closeTicketsModal = document.getElementById('closeTicketsModal');
 
   // Show/hide sections based on repeat type
   repeatTypeSelect.addEventListener('change', () => {
@@ -451,9 +513,173 @@
     scheduleModal.classList.remove('hidden');
   }
   
+  // Open tickets modal
+  async function openTicketsModal(tourId) {
+    ticketsTourIdInput.value = tourId;
+    
+    // Load ticket classes if not already loaded
+    if (ticketModalClassSel.children.length === 0) {
+      const tClass = await fetch('/api/v1/public/ticket_classes').then(r=>r.json()).catch(()=>[]);
+      ticketModalClassSel.innerHTML = '<option value="">Выберите тип</option>' + 
+        tClass.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    }
+    
+    // Load current ticket categories
+    await loadTicketCategories(tourId);
+    
+    // Show modal
+    ticketsModal.classList.remove('hidden');
+  }
+  
+  // Load ticket categories for a tour
+  async function loadTicketCategories(tourId) {
+    try {
+      currentTicketsContainer.innerHTML = '<div class="text-gray-500 italic">Загрузка...</div>';
+      
+      const res = await fetch(`/api/v1/agency/tours/${tourId}/categories`);
+      if (!res.ok) throw new Error('Failed to load ticket categories');
+      
+      const categories = await res.json();
+      
+      if (categories.length === 0) {
+        currentTicketsContainer.innerHTML = '<div class="text-gray-500 italic">Нет типов билетов</div>';
+        return;
+      }
+      
+      // Render ticket categories
+      currentTicketsContainer.innerHTML = categories.map(cat => `
+        <div class="flex justify-between items-center bg-gray-50 px-3 py-2 rounded">
+          <span>${cat.name}</span>
+          <div class="flex items-center gap-2">
+            <span class="font-medium">${cat.price}</span>
+            <button type="button" data-id="${cat.id}" data-tour-id="${tourId}" class="editTicket px-2 rounded bg-amber-200 hover:bg-amber-300">✎</button>
+            <button type="button" data-id="${cat.id}" data-tour-id="${tourId}" class="deleteTicket px-2 rounded bg-red-200 hover:bg-red-300">×</button>
+          </div>
+        </div>
+      `).join('');
+      
+      // Add event listeners
+      currentTicketsContainer.querySelectorAll('.editTicket').forEach(btn => {
+        btn.addEventListener('click', editTicketCategory);
+      });
+      
+      currentTicketsContainer.querySelectorAll('.deleteTicket').forEach(btn => {
+        btn.addEventListener('click', deleteTicketCategory);
+      });
+      
+    } catch (err) {
+      console.error('Error loading ticket categories:', err);
+      currentTicketsContainer.innerHTML = '<div class="text-red-500">Ошибка загрузки типов билетов</div>';
+    }
+  }
+  
+  // Edit ticket category
+  async function editTicketCategory(e) {
+    const catId = e.target.getAttribute('data-id');
+    const tourId = e.target.getAttribute('data-tour-id');
+    const newPrice = prompt('Введите новую цену:');
+    
+    if (!newPrice || isNaN(newPrice) || parseFloat(newPrice) <= 0) {
+      alert('Пожалуйста, введите корректную цену');
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/v1/agency/tours/${tourId}/categories/${catId}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          ticket_class_id: 0, // Not used for update, but required by schema
+          price: parseFloat(newPrice)
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to update ticket category');
+      
+      // Reload ticket categories
+      await loadTicketCategories(tourId);
+      
+    } catch (err) {
+      console.error('Error updating ticket category:', err);
+      alert('Ошибка при обновлении типа билета');
+    }
+  }
+  
+  // Delete ticket category
+  async function deleteTicketCategory(e) {
+    const catId = e.target.getAttribute('data-id');
+    const tourId = e.target.getAttribute('data-tour-id');
+    
+    if (!confirm('Вы уверены, что хотите удалить этот тип билета?')) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/v1/agency/tours/${tourId}/categories/${catId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!res.ok) {
+        if (res.status === 400) {
+          alert('Нельзя удалить стандартный тип билета. Экскурсия должна иметь хотя бы один тип билета.');
+        } else {
+          throw new Error('Failed to delete ticket category');
+        }
+      }
+      
+      // Reload ticket categories
+      await loadTicketCategories(tourId);
+      
+    } catch (err) {
+      console.error('Error deleting ticket category:', err);
+      alert('Ошибка при удалении типа билета');
+    }
+  }
+  
   // Close schedule modal
   cancelScheduleBtn.addEventListener('click', () => {
     scheduleModal.classList.add('hidden');
+  });
+  
+  // Close tickets modal
+  closeTicketsModal.addEventListener('click', () => {
+    ticketsModal.classList.add('hidden');
+  });
+  
+  // Add ticket category from modal
+  addModalTicketBtn.addEventListener('click', async () => {
+    const tourId = ticketsTourIdInput.value;
+    const ticketClassId = ticketModalClassSel.value;
+    const price = ticketModalPriceInput.value;
+    
+    if (!ticketClassId || !price || isNaN(price) || parseFloat(price) <= 0) {
+      alert('Пожалуйста, выберите тип билета и введите корректную цену');
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/v1/agency/tours/${tourId}/categories`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          ticket_class_id: parseInt(ticketClassId),
+          price: parseFloat(price)
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to add ticket category');
+      
+      // Reset form
+      ticketModalClassSel.value = '';
+      ticketModalPriceInput.value = '';
+      
+      // Reload ticket categories
+      await loadTicketCategories(tourId);
+      
+    } catch (err) {
+      console.error('Error adding ticket category:', err);
+      alert('Ошибка при добавлении типа билета');
+    }
   });
   
   // Submit schedule form

@@ -152,10 +152,17 @@ class PublicService(BaseService):
         stmt = select(Tour).options(selectinload(Tour.category))
         
         # Price filters (raw list price)
-        if price_min is not None:
-            stmt = stmt.where(Tour.price >= price_min)
-        if price_max is not None:
-            stmt = stmt.where(Tour.price <= price_max)
+        if price_min is not None or price_max is not None:
+            # Join with TicketCategory to filter by price
+            price_subq = select(TicketCategory.tour_id, TicketCategory.price)\
+                .where(TicketCategory.ticket_class_id == 0)\
+                .subquery()
+            stmt = stmt.join(price_subq, Tour.id == price_subq.c.tour_id)
+            
+            if price_min is not None:
+                stmt = stmt.where(price_subq.c.price >= price_min)
+            if price_max is not None:
+                stmt = stmt.where(price_subq.c.price <= price_max)
         
         # Date range - need to join departures
         if date_from or date_to:
@@ -182,13 +189,14 @@ class PublicService(BaseService):
         
         out: List[Dict[str, Any]] = []
         for t in tours:
-            chosen_comm = await self._chosen_commission(landlord_id, t.id, t.max_commission_pct)
-            price_net = self._discounted_price(t.price, t.max_commission_pct, chosen_comm)
+            # chosen_comm = await self._chosen_commission(landlord_id, t.id, t.max_commission_pct)
+            price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == t.id, TicketCategory.ticket_class_id == 0))
+            # price_net = self._discounted_price(price, t.max_commission_pct, chosen_comm)
             out.append({
                 "id": t.id,
                 "title": t.title,
-                "price_raw": str(t.price),
-                "price_net": str(price_net),
+                "price_raw": str(price),
+                "price_net": str(price),
                 "category": t.category.name if t.category is not None else None,
             })
         
@@ -557,17 +565,27 @@ class PublicService(BaseService):
     async def list_tours(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """List tours with basic information."""
         stmt = (
-            select(Tour.id, Tour.title, Tour.price)
+            select(Tour)
             .order_by(Tour.id.desc())
             .limit(limit)
             .offset(offset)
         )
-        result = await self.session.execute(stmt)
-        return [
-            {"id": id, "title": title, "price": str(price)}
-            for id, title, price in result
-        ]
-    
+        tours = await self.session.scalars(stmt)
+        
+        result = []
+        for tour in tours:
+            # Get the standard price from TicketCategory with id=0
+            price = await self.session.scalar(
+                select(TicketCategory.price)
+                .where(TicketCategory.tour_id == tour.id, TicketCategory.ticket_class_id == 0)
+            )
+            result.append({
+                "id": tour.id,
+                "title": tour.title,
+                "price": str(price) if price else None
+            })
+        
+        return result
     async def get_tour_detail(self, tour_id: int) -> Dict[str, Any]:
         """Get full tour details including images.
         
@@ -583,6 +601,7 @@ class PublicService(BaseService):
         # Use selectinload to eagerly load the images relationship
         stmt = select(Tour).options(selectinload(Tour.images)).where(Tour.id == tour_id)
         tour = await self.session.scalar(stmt)
+        tour_standart_price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == tour_id, TicketCategory.ticket_class_id == 0))
         
         if not tour:
             raise NotFoundError("Tour not found")
@@ -591,7 +610,7 @@ class PublicService(BaseService):
             "id": tour.id,
             "title": tour.title,
             "description": tour.description,
-            "price": str(tour.price),
+            "price": str(tour_standart_price),
             "duration_minutes": tour.duration_minutes,
             "images": [
                 {"key": img.key, "url": presigned(img.key)}

@@ -7,7 +7,6 @@ class TourIn(BaseModel):
     """Schema for creating/updating tours"""
     title: str
     description: Optional[str] = None
-    price: Decimal = Field(..., gt=0)
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -23,7 +22,6 @@ class TourOut(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
-    price: Decimal
     duration_minutes: Optional[int] = None
     city_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -53,3 +51,22 @@ class ImagesOut(BaseModel):
     """Schema for image upload response"""
     keys: List[str]
     urls: List[str] 
+
+
+class TicketCategoryIn(BaseModel):
+    """Schema for creating/updating ticket categories"""
+    ticket_class_id: int
+    price: Decimal = Field(..., gt=0)
+
+
+class TicketCategoryOut(BaseModel):
+    """Schema for ticket category responses"""
+    id: int
+    tour_id: int
+    ticket_class_id: int
+    name: str
+    price: Decimal
+
+    model_config = {
+        "from_attributes": True,
+    } 

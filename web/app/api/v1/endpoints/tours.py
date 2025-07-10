@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, status, Query
 
-from app.api.v1.schemas import TourIn, TourOut, ImagesOut
+from app.api.v1.schemas import TourIn, TourOut, ImagesOut, TicketCategoryIn, TicketCategoryOut
 from app.api.v1.endpoints.utils import get_agency_id
 from app.deps import SessionDep
 from app.security import current_user, role_required
@@ -47,7 +47,6 @@ async def create_tour(
         agency_id=agency_id,
         title=payload.title,
         description=payload.description,
-        price=payload.price,
         duration_minutes=payload.duration_minutes,
         city_id=payload.city_id,
         category_id=payload.category_id,
@@ -123,3 +122,92 @@ async def upload_tour_images(
     )
     
     return ImagesOut(**result) 
+
+
+@router.post("/{tour_id}/categories", response_model=TicketCategoryOut, status_code=status.HTTP_201_CREATED)
+async def add_ticket_category(
+    tour_id: int,
+    payload: TicketCategoryIn,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """Add a ticket category to a tour"""
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    
+    category = await service.add_ticket_category(
+        tour_id=tour_id,
+        agency_id=agency_id,
+        ticket_class_id=payload.ticket_class_id,
+        price=payload.price
+    )
+    
+    await sess.commit()
+    await sess.refresh(category)
+    
+    return TicketCategoryOut.model_validate(category)
+
+
+@router.patch("/{tour_id}/categories/{category_id}", response_model=TicketCategoryOut)
+async def update_ticket_category(
+    tour_id: int,
+    category_id: int,
+    payload: TicketCategoryIn,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """Update a ticket category price"""
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    
+    category = await service.update_ticket_category(
+        tour_id=tour_id,
+        category_id=category_id,
+        agency_id=agency_id,
+        price=payload.price
+    )
+    
+    await sess.commit()
+    await sess.refresh(category)
+    
+    return TicketCategoryOut.model_validate(category)
+
+
+@router.get("/{tour_id}/categories", response_model=List[TicketCategoryOut])
+async def list_ticket_categories(
+    tour_id: int,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """List ticket categories for a tour"""
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    
+    categories = await service.get_tour_ticket_categories(
+        tour_id=tour_id,
+        agency_id=agency_id
+    )
+    
+    return [TicketCategoryOut.model_validate(cat) for cat in categories]
+
+
+@router.delete("/{tour_id}/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ticket_category(
+    tour_id: int,
+    category_id: int,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """Delete a ticket category from a tour"""
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    
+    await service.delete_ticket_category(
+        tour_id=tour_id,
+        category_id=category_id,
+        agency_id=agency_id
+    )
+    
+    await sess.commit()
+    
+    return None 

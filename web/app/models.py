@@ -87,7 +87,6 @@ class Tour(Base):
     title       = mapped_column(String(200))
     description = mapped_column(String(2000))
     description_translations = mapped_column(JSON, nullable=True, comment="{lang: description}")
-    price       = mapped_column(Numeric(10, 2))
     max_commission_pct = mapped_column(Numeric(5, 2), default=10)  # system admin configurable
     free_cancellation_cutoff_h = mapped_column(Integer, default=24, nullable=False, comment="Hours before start when free cancellation is allowed")
     # Optional additional metadata used for filtering / future geo features
