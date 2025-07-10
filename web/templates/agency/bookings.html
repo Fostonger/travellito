@@ -41,82 +41,19 @@
     }
   });
 
-  // Keep mock data as fallback
-  const MOCK_DATA = [
-    {
-      booking_id: 1,
-      booking_date: "2025-07-01T10:30:00",
-      tour_title: "Обзорная по Казани",
-      departure_date: "2025-07-05T09:00:00",
-      customer_name: "Иван Петров",
-      customer_phone: "+7 900 123 4567",
-      total_quantity: 2,
-      total_amount: 2000,
-      status: "pending",
-      viewed: false,
-      categories: [
-        { name: "Взрослый", quantity: 2, amount: 2000 }
-      ]
-    },
-    {
-      booking_id: 2,
-      booking_date: "2025-07-02T14:15:00",
-      tour_title: "Обзорная по Казани",
-      departure_date: "2025-07-10T09:00:00",
-      customer_name: "Мария Сидорова",
-      customer_phone: "+7 900 765 4321",
-      total_quantity: 3,
-      total_amount: 3000,
-      status: "confirmed",
-      viewed: true,
-      categories: [
-        { name: "Взрослый", quantity: 2, amount: 2000 },
-        { name: "Детский", quantity: 1, amount: 1000 }
-      ]
-    },
-    {
-      booking_id: 3,
-      booking_date: "2025-07-03T09:45:00",
-      tour_title: "Экскурсия в Свияжск",
-      departure_date: "2025-07-15T08:30:00",
-      customer_name: "Алексей Иванов",
-      customer_phone: "+7 900 555 1234",
-      total_quantity: 4,
-      total_amount: 5000,
-      status: "pending",
-      viewed: false,
-      categories: [
-        { name: "Взрослый", quantity: 2, amount: 3000 },
-        { name: "Детский", quantity: 2, amount: 2000 }
-      ]
-    }
-  ];
-
   const fetchBookings = async () => {
     try {
-      const url = '/agency/bookings/data';
+      const url = '/api/v1/agency/bookings/';
       document.getElementById('apiUrl').textContent = url;
       
       const res = await fetch(url);
-      if (!res.ok) {
-        console.error('Failed to fetch bookings:', res.status, res.statusText);
-        document.getElementById('apiResponse').innerHTML = `Failed: ${res.status} ${res.statusText}`;
-        
-        // Fallback to mock data if API fails
-        console.log('Using mock data as fallback');
-        document.getElementById('apiResponse').innerHTML += '\nUsing mock data as fallback';
-        return MOCK_DATA;
-      }
       
       const data = await res.json();
-      console.log('API response:', data);
       document.getElementById('apiResponse').innerHTML = JSON.stringify(data, null, 2).substring(0, 500) + '...';
       
       return data || [];
     } catch (err) {
-      console.error('Error fetching bookings:', err);
-      document.getElementById('apiResponse').innerHTML = `Error: ${err.message}\nUsing mock data as fallback`;
-      return MOCK_DATA;
+      document.getElementById('apiResponse').innerHTML = `Error: ${err.message}`;
     }
   };
 
@@ -195,7 +132,7 @@
 
   const patchStatus = async (id, status) => {
     try {
-      const url = `/agency/bookings/${id}/status`;
+      const url = `/api/v1/agency/bookings/${id}/status`;
       console.log('Patching status at URL:', url);
       
       const res = await fetch(url, {
@@ -238,7 +175,7 @@
     if (td) params.append('to_date', td);
     params.append('format', 'csv');
     
-    window.open(`/agency/bookings/export?${params.toString()}`, '_blank');
+    window.open(`/api/v1/agency/bookings/?${params.toString()}`, '_blank');
   });
 
   render();

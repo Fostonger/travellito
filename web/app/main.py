@@ -245,68 +245,6 @@ async def agency_managers_page(request: Request):
 async def agency_bookings_page(request: Request):
     return templates.TemplateResponse("agency/bookings.html", {"request": request})
 
-# Add routes to redirect to the API endpoints
-@app.get("/agency/bookings/data")
-async def agency_bookings_data_redirect(
-    request: Request,
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
-    format: Optional[str] = None
-):
-    """Redirect to API endpoint for bookings data"""
-    params = []
-    if from_date:
-        params.append(f"from_date={from_date}")
-    if to_date:
-        params.append(f"to_date={to_date}")
-    if format:
-        params.append(f"format={format}")
-    
-    query_string = "&".join(params)
-    target_url = f"/api/v1/agency/bookings/?{query_string}" if query_string else "/api/v1/agency/bookings/"
-    
-    return Response(
-        status_code=307,
-        headers={"Location": target_url}
-    )
-
-@app.patch("/agency/bookings/{booking_id}/status")
-async def agency_booking_status_redirect(
-    booking_id: int,
-    request: Request
-):
-    """Redirect to API endpoint for booking status update"""
-    # Simple redirect - the client will need to resend the request body
-    return Response(
-        status_code=307,
-        headers={
-            "Location": f"/api/v1/agency/bookings/{booking_id}/status"
-        }
-    )
-
-@app.get("/agency/bookings/export")
-async def agency_bookings_export_redirect(
-    request: Request,
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
-    format: str = "csv"
-):
-    """Redirect to API endpoint for bookings export"""
-    params = []
-    if from_date:
-        params.append(f"from_date={from_date}")
-    if to_date:
-        params.append(f"to_date={to_date}")
-    params.append(f"format={format}")
-    
-    query_string = "&".join(params)
-    target_url = f"/api/v1/agency/bookings/?{query_string}"
-    
-    return Response(
-        status_code=307,
-        headers={"Location": target_url}
-    )
-
 @app.get("/agency/departures", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
 async def agency_departures_page(request: Request):
     return templates.TemplateResponse("agency/departures.html", {"request": request})
