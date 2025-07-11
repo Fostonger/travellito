@@ -9,13 +9,18 @@ from pydantic import BaseModel, Field
 # Apartment schemas
 class ApartmentIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
-    city: str | None = Field(None, max_length=64)
+    city_id: int = Field(..., gt=0)
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
 
 
-class ApartmentOut(ApartmentIn):
+class ApartmentOut(BaseModel):
     id: int
+    name: str
+    city_id: int
+    city_name: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     model_config = {"from_attributes": True}
 

@@ -39,7 +39,7 @@
         {% for a in apartments %}
         <tr>
           <td class="px-4 py-2 whitespace-nowrap">{{ a.name or 'Apartment #' ~ a.id }}</td>
-          <td class="px-4 py-2 whitespace-nowrap">{{ a.city }}</td>
+          <td class="px-4 py-2 whitespace-nowrap">{{ a.city.name if a.city else 'Не указан' }}</td>
           <td class="px-4 py-2 whitespace-nowrap">
             <a href="/api/v1/landlord/apartments/{{ a.id }}/qr-pdf" target="_blank" class="text-emerald-600 hover:underline">Скачать</a>
           </td>

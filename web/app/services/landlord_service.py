@@ -60,10 +60,13 @@ class LandlordService(BaseService):
             offset: Number of results to skip
             
         Returns:
-            List of Apartment objects
+            List of Apartment objects with eagerly loaded city relationship
         """
+        from sqlalchemy.orm import selectinload
+        
         stmt = (
             select(Apartment)
+            .options(selectinload(Apartment.city))
             .where(Apartment.landlord_id == landlord_id)
             .order_by(Apartment.id)
             .limit(limit)
@@ -76,7 +79,7 @@ class LandlordService(BaseService):
         self,
         landlord_id: int,
         name: str,
-        city: str | None = None,
+        city_id: int,
         latitude: float | None = None,
         longitude: float | None = None,
     ) -> Apartment:
@@ -85,7 +88,7 @@ class LandlordService(BaseService):
         Args:
             landlord_id: Landlord ID
             name: Apartment name
-            city: City name (optional)
+            city_id: City ID
             latitude: Latitude coordinate (optional)
             longitude: Longitude coordinate (optional)
             
@@ -95,7 +98,7 @@ class LandlordService(BaseService):
         apt = Apartment(
             landlord_id=landlord_id,
             name=name,
-            city=city,
+            city_id=city_id,
             latitude=latitude,
             longitude=longitude,
         )
@@ -110,7 +113,7 @@ class LandlordService(BaseService):
         landlord_id: int,
         apt_id: int,
         name: str | None = None,
-        city: str | None = None,
+        city_id: int | None = None,
         latitude: float | None = None,
         longitude: float | None = None,
     ) -> Apartment:
@@ -120,7 +123,7 @@ class LandlordService(BaseService):
             landlord_id: Landlord ID (for ownership verification)
             apt_id: Apartment ID
             name: New name (optional)
-            city: New city (optional)
+            city_id: New city ID (optional)
             latitude: New latitude (optional)
             longitude: New longitude (optional)
             
@@ -136,8 +139,8 @@ class LandlordService(BaseService):
             
         if name is not None:
             apt.name = name
-        if city is not None:
-            apt.city = city
+        if city_id is not None:
+            apt.city_id = city_id
         if latitude is not None:
             apt.latitude = latitude
         if longitude is not None:

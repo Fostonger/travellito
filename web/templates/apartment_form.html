@@ -10,25 +10,125 @@
     </div>
     <div>
       <label class="block mb-2 font-medium">Город</label>
-      <input name="city" required class="w-full rounded-lg border border-emerald-300 p-2.5 focus:ring-2 focus:ring-emerald-500">
+      <div class="relative">
+        <input id="cityInput" type="text" autocomplete="off" class="w-full rounded-lg border border-emerald-300 p-2.5 focus:ring-2 focus:ring-emerald-500" placeholder="Начните вводить название города">
+        <input type="hidden" id="cityId" name="city_id" required>
+        <div id="cityDropdown" class="absolute z-10 hidden w-full mt-1 max-h-60 overflow-auto bg-white border border-emerald-200 rounded-lg shadow-lg">
+          <div id="noResultsMsg" class="hidden p-3 text-gray-500 text-center">Город не найден</div>
+          <ul id="cityResults" class="py-1"></ul>
+        </div>
+      </div>
     </div>
     <button class="w-full py-3 mt-4 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition">Сохранить</button>
   </form>
   <p id="msg" class="text-center mt-4"></p>
 </div>
 <script>
+  // Fetch all cities when the page loads
+  let allCities = [];
+  
+  async function fetchCities() {
+    try {
+      const response = await fetch('/api/v1/public/cities');
+      if (response.ok) {
+        allCities = await response.json();
+      } else {
+        console.error('Failed to fetch cities');
+      }
+    } catch (error) {
+      console.error('Error fetching cities:', error);
+    }
+  }
+  
+  function filterCities(query) {
+    if (!query) return [];
+    query = query.toLowerCase();
+    return allCities.filter(city => city.name.toLowerCase().includes(query));
+  }
+  
+  function displayCities(cities) {
+    const dropdown = document.getElementById('cityDropdown');
+    const resultsList = document.getElementById('cityResults');
+    const noResults = document.getElementById('noResultsMsg');
+    
+    resultsList.innerHTML = '';
+    
+    if (cities.length === 0) {
+      noResults.classList.remove('hidden');
+      resultsList.classList.add('hidden');
+    } else {
+      noResults.classList.add('hidden');
+      resultsList.classList.remove('hidden');
+      
+      cities.forEach(city => {
+        const li = document.createElement('li');
+        li.className = 'px-4 py-2 cursor-pointer hover:bg-emerald-50';
+        li.textContent = city.name;
+        li.addEventListener('click', () => {
+          document.getElementById('cityInput').value = city.name;
+          document.getElementById('cityId').value = city.id;
+          dropdown.classList.add('hidden');
+        });
+        resultsList.appendChild(li);
+      });
+    }
+    
+    dropdown.classList.remove('hidden');
+  }
+  
+  document.addEventListener('DOMContentLoaded', async () => {
+    await fetchCities();
+    
+    const cityInput = document.getElementById('cityInput');
+    const dropdown = document.getElementById('cityDropdown');
+    
+    cityInput.addEventListener('input', () => {
+      const query = cityInput.value.trim();
+      const filteredCities = filterCities(query);
+      displayCities(filteredCities);
+      
+      // Clear the selected city if the input changes
+      if (document.getElementById('cityId').value) {
+        document.getElementById('cityId').value = '';
+      }
+    });
+    
+    cityInput.addEventListener('focus', () => {
+      if (cityInput.value.trim()) {
+        const filteredCities = filterCities(cityInput.value.trim());
+        displayCities(filteredCities);
+      }
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!cityInput.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+  });
+
   document.getElementById('aptForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
+    
+    // Validate that a city is selected
+    if (!form.city_id.value) {
+      document.getElementById('msg').textContent = '❌ Пожалуйста, выберите город из списка';
+      return;
+    }
+    
     const payload = {
       name: form.name.value || null,
-      city: form.city.value
+      city_id: parseInt(form.city_id.value)
     };
+    
     const res = await fetch('/api/v1/landlord/apartments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    
     const out = await res.json();
     document.getElementById('msg').textContent = res.ok ? `✅ Квартира #${out.id} создана!` : `❌ ${out.detail || 'Ошибка'}`;
     if (res.ok) {

@@ -84,7 +84,7 @@ async def create_apartment(
     apt = await service.create_apartment(
         landlord_id=landlord_id,
         name=payload.name,
-        city=payload.city,
+        city_id=payload.city_id,
         latitude=payload.latitude,
         longitude=payload.longitude,
     )

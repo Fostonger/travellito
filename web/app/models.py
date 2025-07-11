@@ -213,11 +213,12 @@ class Apartment(Base):
     id           = mapped_column(Integer, primary_key=True)
     landlord_id  = mapped_column(ForeignKey("landlords.user_id"), nullable=False)
     name         = mapped_column(String(120))
-    city         = mapped_column(String(64))
+    city_id      = mapped_column(ForeignKey("cities.id"), nullable=False)
     latitude     = mapped_column(Numeric(8, 6))   # optional
     longitude    = mapped_column(Numeric(9, 6))   # optional
 
     landlord = relationship("Landlord", back_populates="apartments")
+    city = relationship("City")
 
 # ---------- Platform-wide settings (key → JSON value) ----------------------
 class Setting(Base):
@@ -254,6 +255,7 @@ class City(Base):
     name = mapped_column(String(64), unique=True, nullable=False, index=True)
 
     tours = relationship("Tour", back_populates="city")
+    apartments = relationship("Apartment", back_populates="city")
 
 
 class TicketClass(Base):
