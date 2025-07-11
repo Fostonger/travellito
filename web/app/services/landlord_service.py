@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import List, Dict, Any
-from sqlalchemy import select, func
+from sqlalchemy import select, func, literal, column, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.base import BaseService
@@ -158,6 +158,8 @@ class LandlordService(BaseService):
         Raises:
             NotFoundError: If landlord not found
         """
+        from datetime import datetime, timedelta
+        
         # Get landlord data
         stmt = select(Landlord).where(Landlord.user_id == user_id)
         landlord = await self.session.scalar(stmt)
@@ -168,13 +170,70 @@ class LandlordService(BaseService):
         # Get apartments
         apartments = await self.list_apartments(landlord.id)
         
-        # Get metrics (simplified for now)
-        # In a real implementation, you would calculate actual metrics from purchases
+        # Get apartment IDs for this landlord
+        apartment_ids = [apt.id for apt in apartments]
+        
+        if not apartment_ids:
+            # No apartments, return zero metrics
+            metrics = {
+                "total_qty": 0,
+                "total_amount": "0",
+                "last_qty": 0,
+                "last_amount": "0"
+            }
+            return {
+                "landlord": landlord,
+                "apartments": apartments,
+                "metrics": metrics
+            }
+        
+        # Calculate metrics from purchases with apartment_id referrals
+        # Get all confirmed purchases with apartment_id in the landlord's apartments
+        stmt_all = (
+            select(
+                func.count(Purchase.id).label("count"),
+                func.sum(Purchase.qty).label("qty"),
+                func.sum(Purchase.amount).label("amount")
+            )
+            .where(
+                Purchase.apartment_id.in_(apartment_ids),
+                Purchase.status == "confirmed"
+            )
+        )
+        
+        # Get purchases from the last 30 days
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        stmt_recent = (
+            select(
+                func.count(Purchase.id).label("count"),
+                func.sum(Purchase.qty).label("qty"),
+                func.sum(Purchase.amount).label("amount")
+            )
+            .where(
+                Purchase.apartment_id.in_(apartment_ids),
+                Purchase.status == "confirmed",
+                Purchase.ts >= thirty_days_ago
+            )
+        )
+        
+        # Execute both queries
+        result_all = await self.session.execute(stmt_all)
+        all_count, all_qty, all_amount = result_all.one()
+        
+        result_recent = await self.session.execute(stmt_recent)
+        recent_count, recent_qty, recent_amount = result_recent.one()
+        
+        # Handle None values
+        all_qty = int(all_qty or 0)
+        all_amount = all_amount or Decimal("0")
+        recent_qty = int(recent_qty or 0)
+        recent_amount = recent_amount or Decimal("0")
+        
         metrics = {
-            "total_qty": 0,
-            "total_amount": "0",
-            "last_qty": 0,
-            "last_amount": "0"
+            "total_qty": all_qty,
+            "total_amount": str(all_amount),
+            "last_qty": recent_qty,
+            "last_amount": str(recent_amount)
         }
         
         return {
@@ -320,7 +379,7 @@ class LandlordService(BaseService):
             period: Period for calculations ("all" or "Nd" where N is days)
             
         Returns:
-            Dictionary with earnings statistics
+            Dictionary with earnings statistics including both direct referrals and apartment referrals
         """
         # Parse period parameter
         if period == "all":
@@ -335,36 +394,79 @@ class LandlordService(BaseService):
             except ValueError:
                 raise ValidationError("Invalid period value")
         
-        # Aggregate totals and earnings using commission stored per purchase
-        stmt_base = select(
+        # Get apartment IDs for this landlord
+        stmt_apartments = select(Apartment.id).where(Apartment.landlord_id == landlord_id)
+        apartment_ids = [row[0] for row in await self.session.execute(stmt_apartments)]
+        
+        # Aggregate totals and earnings from direct referrals
+        stmt_base_direct = select(
             func.coalesce(func.sum(Purchase.qty), 0).label("tickets"),
             func.coalesce(
-                func.sum(Purchase.amount_gross * (Purchase.commission_pct / Decimal("100"))),
+                func.sum(Purchase.amount * (Purchase.commission_pct / Decimal("100"))),
                 0
             ).label("earnings"),
-        ).where(Purchase.landlord_id == landlord_id)
+        ).where(Purchase.landlord_id == landlord_id, Purchase.status == "confirmed")
         
-        result_all = await self.session.execute(stmt_base)
-        tickets_all, earnings_all = result_all.one()
+        # Aggregate totals and earnings from apartment referrals
+        stmt_base_apt = select(
+            func.coalesce(func.sum(Purchase.qty), 0).label("tickets"),
+            func.coalesce(func.sum(Purchase.amount), 0).label("earnings"),
+        ).where(
+            Purchase.apartment_id.in_(apartment_ids) if apartment_ids else False,
+            Purchase.status == "confirmed"
+        )
         
-        tickets_all = int(tickets_all or 0)
-        earnings_all = Decimal(earnings_all or 0)
+        # Get all-time metrics
+        result_direct_all = await self.session.execute(stmt_base_direct)
+        tickets_direct_all, earnings_direct_all = result_direct_all.one()
+        
+        result_apt_all = await self.session.execute(stmt_base_apt)
+        tickets_apt_all, earnings_apt_all = result_apt_all.one()
+        
+        # Convert to appropriate types
+        tickets_direct_all = int(tickets_direct_all or 0)
+        earnings_direct_all = Decimal(earnings_direct_all or 0)
+        tickets_apt_all = int(tickets_apt_all or 0)
+        earnings_apt_all = Decimal(earnings_apt_all or 0)
+        
+        # Calculate totals
+        tickets_all = tickets_direct_all + tickets_apt_all
+        earnings_all = earnings_direct_all + earnings_apt_all
+        
+        # Default values for period metrics
+        tickets_period = tickets_all
+        earnings_period = earnings_all
         
         if cutoff:
-            stmt_30 = stmt_base.where(Purchase.ts >= cutoff)
-            result_30 = await self.session.execute(stmt_30)
-            tickets_30, earnings_30 = result_30.one()
-            tickets_30 = int(tickets_30 or 0)
-            earnings_30 = Decimal(earnings_30 or 0)
-        else:
-            tickets_30 = tickets_all
-            earnings_30 = earnings_all
+            # Get period-specific metrics for direct referrals
+            stmt_direct_period = stmt_base_direct.where(Purchase.ts >= cutoff)
+            result_direct_period = await self.session.execute(stmt_direct_period)
+            tickets_direct_period, earnings_direct_period = result_direct_period.one()
+            
+            # Get period-specific metrics for apartment referrals
+            stmt_apt_period = stmt_base_apt.where(Purchase.ts >= cutoff)
+            result_apt_period = await self.session.execute(stmt_apt_period)
+            tickets_apt_period, earnings_apt_period = result_apt_period.one()
+            
+            # Convert to appropriate types
+            tickets_direct_period = int(tickets_direct_period or 0)
+            earnings_direct_period = Decimal(earnings_direct_period or 0)
+            tickets_apt_period = int(tickets_apt_period or 0)
+            earnings_apt_period = Decimal(earnings_apt_period or 0)
+            
+            # Calculate period totals
+            tickets_period = tickets_direct_period + tickets_apt_period
+            earnings_period = earnings_direct_period + earnings_apt_period
         
         return {
             "total_tickets": tickets_all,
-            "tickets_last_30d": tickets_30,
+            "tickets_last_30d": tickets_period,
             "total_earnings": earnings_all.quantize(Decimal("0.01")),
-            "earnings_last_30d": earnings_30.quantize(Decimal("0.01")),
+            "earnings_last_30d": earnings_period.quantize(Decimal("0.01")),
+            "direct_referral_tickets": tickets_direct_all,
+            "direct_referral_earnings": earnings_direct_all.quantize(Decimal("0.01")),
+            "apartment_referral_tickets": tickets_apt_all,
+            "apartment_referral_earnings": earnings_apt_all.quantize(Decimal("0.01")),
         }
 
     async def get_earnings_details(
@@ -377,25 +479,74 @@ class LandlordService(BaseService):
             days: Number of days to look back
             
         Returns:
-            List of purchase records with earnings details
+            List of purchase records with earnings details including both direct and apartment referrals
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
         
-        stmt = (
-            select(Purchase.ts, Purchase.qty, Purchase.amount, Purchase.commission_pct)
-            .where(Purchase.landlord_id == landlord_id, Purchase.ts >= cutoff)
-            .order_by(Purchase.ts.desc())
+        # Get apartment IDs for this landlord
+        stmt_apartments = select(Apartment.id).where(Apartment.landlord_id == landlord_id)
+        apartment_ids = [row[0] for row in await self.session.execute(stmt_apartments)]
+        
+        # Get direct referral purchases
+        stmt_direct = (
+            select(
+                Purchase.id,
+                Purchase.ts,
+                Purchase.qty,
+                Purchase.amount,
+                Purchase.commission_pct,
+                literal('direct').label('referral_type')
+            )
+            .where(
+                Purchase.landlord_id == landlord_id,
+                Purchase.status == "confirmed",
+                Purchase.ts >= cutoff
+            )
         )
+        
+        # Get apartment referral purchases
+        stmt_apt = (
+            select(
+                Purchase.id,
+                Purchase.ts,
+                Purchase.qty,
+                Purchase.amount,
+                literal(None).label('commission_pct'),
+                literal('apartment').label('referral_type'),
+                Apartment.name.label('apartment_name')
+            )
+            .join(Apartment, Purchase.apartment_id == Apartment.id)
+            .where(
+                Purchase.apartment_id.in_(apartment_ids) if apartment_ids else False,
+                Purchase.status == "confirmed",
+                Purchase.ts >= cutoff
+            )
+        )
+        
+        # Union the two queries and order by timestamp
+        stmt = stmt_direct.union(stmt_apt).order_by(desc(column('ts')))
+        
         rows = await self.session.execute(stmt)
         
         details = []
-        for ts, qty, amount, comm in rows:
-            details.append({
+        for row in rows:
+            purchase_id, ts, qty, amount, comm_pct, referral_type = row[:6]
+            apartment_name = row[6] if len(row) > 6 and referral_type == 'apartment' else None
+            
+            detail = {
+                "id": purchase_id,
                 "timestamp": ts.isoformat(),
                 "tickets": qty,
                 "amount_net": str(amount),
-                "commission_pct": str(comm or 0),
-            })
+                "referral_type": referral_type
+            }
+            
+            if referral_type == 'direct':
+                detail["commission_pct"] = str(comm_pct or 0)
+            elif referral_type == 'apartment':
+                detail["apartment_name"] = apartment_name
+                
+            details.append(detail)
         
         return details
 
