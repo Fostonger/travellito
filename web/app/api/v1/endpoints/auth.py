@@ -4,6 +4,7 @@ import os
 import secrets
 import time
 from typing import Dict
+import logging
 
 from app.api.v1.schemas.auth_schemas import (
     LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -154,9 +155,12 @@ async def telegram_bot_auth(
     
     This endpoint is called by the bot to authenticate users based on their Telegram ID.
     It creates or updates a user record and returns JWT tokens.
+    
+    Optional apartment_id can be provided to track user origin from QR codes.
     """
     from app.models import User
     from app.roles import Role
+    from datetime import datetime
     
     if not user_data.get("id"):
         raise HTTPException(status_code=400, detail="Invalid user data")
@@ -167,6 +171,19 @@ async def telegram_bot_auth(
         user_data,
         role=Role.bot_user
     )
+    
+    # Handle apartment_id if provided
+    apartment_id = user_data.get("apartment_id")
+    if apartment_id:
+        try:
+            # Convert to integer (it comes as string from the bot)
+            apartment_id = int(apartment_id)
+            # Update apartment_id and timestamp
+            user.apartment_id = apartment_id
+            user.apartment_set_at = datetime.utcnow()
+        except (ValueError, TypeError):
+            # Log error but continue with authentication
+            logging.error(f"Invalid apartment_id format: {apartment_id}")
     
     # Flush the session to ensure the user has an ID before authentication
     await sess.flush()

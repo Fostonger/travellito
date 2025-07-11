@@ -74,7 +74,7 @@ user_tokens = {}
 #  Authentication helper
 # ---------------------------------------------------------------------------
 
-async def authenticate_user(user_id: int) -> dict:
+async def authenticate_user(user_id: int, apartment_id: str = None) -> dict:
     """Authenticate a user with the web API and store their tokens.
     
     This function will:
@@ -82,8 +82,12 @@ async def authenticate_user(user_id: int) -> dict:
     2. If token exists and is not close to expiry, return it
     3. If token doesn't exist or is close to expiry, get a new one
     4. Store the token for future use
+    
+    Args:
+        user_id: Telegram user ID
+        apartment_id: Optional apartment ID from QR code
     """
-    logging.info(f"Starting authentication for user_id: {user_id}")
+    logging.info(f"Starting authentication for user_id: {user_id}, apartment_id: {apartment_id}")
     
     # Check if user already has a token
     if user_id in user_tokens:
@@ -125,6 +129,10 @@ async def authenticate_user(user_id: int) -> dict:
         "last_name": user.last_name,
         "username": user.username,
     }
+    
+    # Add apartment_id if provided
+    if apartment_id:
+        user_data["apartment_id"] = apartment_id
     
     logging.info(f"Authenticating user: {user_data}")
     
@@ -202,12 +210,22 @@ async def cmd_start(msg: Message):
         await msg.answer(_("manager_greet", lang))
         return
 
+    # Parse start parameters
+    args: str | None = None
+    apartment_id: str | None = None
+    if msg.text and len(msg.text.split(maxsplit=1)) == 2:
+        args = msg.text.split(maxsplit=1)[1]
+        # Check if args contains apartment_id in format "apt_XXX"
+        if args.startswith("apt_"):
+            apartment_id = args[4:]  # Extract ID after "apt_" prefix
+            logging.info(f"Detected apartment_id: {apartment_id} from start command")
+
     # Authenticate user first to ensure we have valid tokens
     tokens = None
     if msg.from_user:
         try:
             # This will automatically handle token expiry and refresh
-            tokens = await authenticate_user(msg.from_user.id)
+            tokens = await authenticate_user(msg.from_user.id, apartment_id)
             logging.info(f"Got tokens for user {msg.from_user.id}: {tokens is not None}")
         except Exception as e:
             logging.warning(f"Authentication failed: {str(e)}")
@@ -215,10 +233,6 @@ async def cmd_start(msg: Message):
 
     # Preserve the raw payload (after /start) – contains QR metadata like
     # `apt_<apartment_id>` which the WebApp will parse.
-    args: str | None = None
-    if msg.text and len(msg.text.split(maxsplit=1)) == 2:
-        args = msg.text.split(maxsplit=1)[1]
-
     lang = _detect_lang(msg)
     launch_url = settings.WEBAPP_URL
     query_params = []
@@ -247,7 +261,11 @@ async def cmd_start(msg: Message):
 # Handle deep links with start parameters
 @router.message(lambda msg: msg.text and msg.text.startswith("/start "))
 async def cmd_start_with_args(msg: Message):
-    # Just forward to the main start handler
+    """Handler for deep links with start parameters.
+    
+    This handles cases like /start apt_123 where apt_123 is the apartment ID.
+    """
+    # Just forward to the main start handler which now handles apartment_id parsing
     await cmd_start(msg)
 
 

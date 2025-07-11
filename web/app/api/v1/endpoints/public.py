@@ -208,7 +208,11 @@ async def landlord_signup(
 
 @router.post("/bookings", response_model=BookingCreatedResponse, dependencies=[Depends(role_required("bot_user"))])
 async def create_booking(payload: BookingIn, sess: SessionDep, user=Depends(current_user)):
-    """Create a new booking."""
+    """Create a new booking.
+    
+    If the user has an apartment_id set within the last week, it will be associated with the booking.
+    Otherwise, the apartment_id will be cleared from the user profile.
+    """
     service = PublicService(sess)
     
     try:

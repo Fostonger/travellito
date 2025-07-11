@@ -55,8 +55,12 @@ class User(Base):
     agency_id = mapped_column(ForeignKey("agencies.id"), nullable=True)
     created   = mapped_column(DateTime, server_default=func.now())
     phone     = mapped_column(String(32))  # optional Telegram phone
+    # Apartment reference for tracking user origin
+    apartment_id = mapped_column(ForeignKey("apartments.id"), nullable=True)
+    apartment_set_at = mapped_column(DateTime, nullable=True)
 
     agency    = relationship("Agency", lazy="joined")
+    apartment = relationship("Apartment", lazy="joined")
 
     @classmethod
     async def get_or_create(cls, session, tg: dict, *, role: "Role | str" = Role.bot_user):
@@ -156,6 +160,7 @@ class Purchase(Base):
     user_id      = mapped_column(ForeignKey("users.id"))
     departure_id = mapped_column(ForeignKey("departures.id"))
     landlord_id  = mapped_column(ForeignKey("landlords.id"))
+    apartment_id = mapped_column(ForeignKey("apartments.id"), nullable=True)
     qty          = mapped_column(Integer, default=1)
     amount       = mapped_column(Numeric(10, 2))
     ts           = mapped_column(DateTime, server_default=func.now())
@@ -167,6 +172,7 @@ class Purchase(Base):
     user         = relationship("User")
     departure    = relationship("Departure")
     items        = relationship("PurchaseItem", back_populates="purchase")
+    apartment    = relationship("Apartment")
 
     # Speed up look-ups of bookings for a departure (cancellation window job, capacity checks)
     __table_args__ = (

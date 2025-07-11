@@ -675,7 +675,8 @@ class PublicService(BaseService):
             ConflictError: If not enough seats
         """
         from ..models import Purchase, PurchaseItem, User
-        
+        from datetime import datetime, timedelta
+
         # Validate inputs
         if not items:
             raise ValidationError("No items provided in the booking request")
@@ -706,6 +707,20 @@ class PublicService(BaseService):
             user.first = contact_name
         if contact_phone:
             user.phone = contact_phone
+        
+        # Handle apartment_id referral logic
+        apartment_id = None
+        if user.apartment_id and user.apartment_set_at:
+            # Check if apartment_id was set less than a week ago
+            one_week_ago = datetime.utcnow() - timedelta(days=7)
+            
+            if user.apartment_set_at > one_week_ago:
+                # Less than a week - use the apartment_id for this purchase
+                apartment_id = user.apartment_id
+            else:
+                # More than a week - clear the apartment_id from user
+                user.apartment_id = None
+                user.apartment_set_at = None
             
         # Create the purchase record
         purchase = Purchase(
@@ -714,7 +729,8 @@ class PublicService(BaseService):
             qty=quote["total_qty"],
             amount=Decimal(quote["total_net"]),
             status="pending",
-            viewed=False
+            viewed=False,
+            apartment_id=apartment_id
         )
         
         self.session.add(purchase)

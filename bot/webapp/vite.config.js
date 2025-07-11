@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['correspondence-categories-physics-temp.trycloudflare.com']
+    allowedHosts: ['poet-median-baptist-adsl.trycloudflare.com']
   },
 }); 
