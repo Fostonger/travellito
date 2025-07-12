@@ -203,12 +203,22 @@
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
           <button data-id="${t.id}" class="viewTickets px-2 rounded bg-blue-200 hover:bg-blue-300">Билеты</button>
         </td>
-        <td class='px-6 py-4 whitespace-nowrap text-sm space-x-1'>${badge} <button data-id="${t.id}" class="addSched px-2 rounded bg-gray-200 hover:bg-gray-300">＋</button></td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm space-x-1'>
+          ${t.repeat_type ? 
+            `<button data-id="${t.id}" class="editSched w-full text-left px-0">${badge}</button>` : 
+            `${badge} <button data-id="${t.id}" class="addSched px-2 rounded bg-gray-200 hover:bg-gray-300">＋</button>`
+          }
+        </td>
         <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'></td>`;
       body.appendChild(tr);
     });
     body.querySelectorAll('.addSched').forEach(btn=>btn.addEventListener('click', (e)=>{
       const tid = e.target.getAttribute('data-id');
+      openRecModal(tours.find(x=>x.id==tid));
+    }));
+    
+    body.querySelectorAll('.editSched').forEach(btn=>btn.addEventListener('click', (e)=>{
+      const tid = e.currentTarget.getAttribute('data-id');
       openRecModal(tours.find(x=>x.id==tid));
     }));
     
@@ -421,12 +431,12 @@
   function fmtTime(t){return t?.slice(0,5);} // HH:MM
   const weekdaysRU=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   function formatScheduleBadge(t){
-    if(t.repeat_type==='daily') return `<span class="inline-block px-2 bg-emerald-100 rounded">🗓 ${fmtTime(t.repeat_time)}</span>`;
+    if(t.repeat_type==='daily') return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${fmtTime(t.repeat_time)}</span>`;
     if(t.repeat_type==='weekly'){
       const days=t.repeat_weekdays.map(i=>weekdaysRU[i]).join(' ');
-      return `<span class="inline-block px-2 bg-amber-100 rounded">⏲ ${fmtTime(t.repeat_time)} — ${days}</span>`;
+      return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${fmtTime(t.repeat_time)} — ${days}</span>`;
     }
-    return '<span class="inline-block px-2 bg-gray-100 rounded">—</span>';
+    return '<span class="inline-block px-2 bg-gray-100 rounded">+</span>';
   }
 
   // Schedule modal
