@@ -158,7 +158,8 @@ class BookingService:
         for booking in bookings:
             # Check if booking is cancellable (based on departure time and tour's cancellation policy)
             is_cancellable = False
-            if booking.status == "pending":
+            # Allow cancellation for both pending and confirmed bookings
+            if booking.status in ["pending", "confirmed"]:
                 tour = booking.departure.tour
                 cutoff_time = booking.departure.starts_at - timedelta(hours=tour.free_cancellation_cutoff_h)
                 is_cancellable = now < cutoff_time
@@ -201,7 +202,10 @@ class BookingService:
                 Purchase.id == booking_id,
                 Purchase.user_id == user_id
             )
-            .options(joinedload(Purchase.departure).joinedload(Departure.tour))
+            .options(
+                joinedload(Purchase.departure).joinedload(Departure.tour),
+                joinedload(Purchase.items).joinedload(PurchaseItem.category)
+            )
         )
         
         result = await self.session.execute(stmt)
@@ -210,8 +214,9 @@ class BookingService:
         if not booking:
             raise BaseError("Booking not found", status_code=404)
         
-        if booking.status != "pending":
-            raise BaseError("Only pending bookings can be cancelled", status_code=400)
+        # Allow cancelling both pending and confirmed bookings
+        if booking.status not in ["pending", "confirmed"]:
+            raise BaseError("Only pending or confirmed bookings can be cancelled", status_code=400)
         
         # Check cancellation policy
         now = datetime.utcnow()
@@ -227,5 +232,9 @@ class BookingService:
         # Cancel the booking
         booking.status = "cancelled"
         booking.status_changed_at = datetime.utcnow()
+        
+        # No need to explicitly update quotas as they are calculated dynamically
+        # based on active bookings (non-cancelled, non-rejected)
+        # The query in DepartureRepository.get_seats_taken already excludes cancelled bookings
         
         return True 

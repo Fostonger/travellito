@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['poet-median-baptist-adsl.trycloudflare.com']
+    allowedHosts: ['premises-forecast-receptor-did.trycloudflare.com']
   },
 }); 

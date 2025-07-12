@@ -47,6 +47,10 @@ const translations = {
     error_loading_bookings: 'Failed to load bookings',
     error_canceling_booking: 'Failed to cancel booking',
     error_unauthorized: 'Please log in to view your bookings',
+    confirm_cancel_title: 'Cancel booking?',
+    confirm_cancel_description: 'Are you sure you want to cancel this booking?',
+    yes_cancel: 'Yes, cancel',
+    no_keep: 'No, keep it',
   },
   ru: {
     loading: "Загрузка…",
@@ -95,6 +99,10 @@ const translations = {
     error_loading_bookings: 'Не удалось загрузить бронирования',
     error_canceling_booking: 'Не удалось отменить бронирование',
     error_unauthorized: 'Пожалуйста, войдите в систему для просмотра бронирований',
+    confirm_cancel_title: 'Отменить бронирование?',
+    confirm_cancel_description: 'Вы уверены, что хотите отменить это бронирование?',
+    yes_cancel: 'Да, отменить',
+    no_keep: 'Нет, оставить',
   }
 };
 

@@ -68,7 +68,10 @@ class DepartureRepository(BaseRepository[Departure]):
         """Get number of seats taken for a departure"""
         stmt = (
             select(func.coalesce(func.sum(Purchase.qty), 0))
-            .where(Purchase.departure_id == departure_id)
+            .where(
+                Purchase.departure_id == departure_id,
+                Purchase.status.in_(["pending", "confirmed"])  # Only count active bookings
+            )
         )
         result = await self.session.execute(stmt)
         return result.scalar() or 0

@@ -255,6 +255,21 @@ interface BookingCardProps {
 }
 
 function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
+  const [showConfirm, setShowConfirm] = useState(false);
+  
+  const handleCancelClick = () => {
+    setShowConfirm(true);
+  };
+  
+  const confirmCancel = () => {
+    onCancel(booking.id);
+    setShowConfirm(false);
+  };
+  
+  const cancelAction = () => {
+    setShowConfirm(false);
+  };
+  
   return (
     <Card className="overflow-hidden bg-gray-50 border-gray-200">
       <CardHeader className="pb-2 bg-white">
@@ -287,15 +302,40 @@ function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
             </div>
           </div>
         )}
+        
+        {showConfirm && (
+          <Alert className="mt-2 bg-yellow-50 border-yellow-300 text-yellow-800">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>{t('confirm_cancel_title')}</AlertTitle>
+            <AlertDescription>{t('confirm_cancel_description')}</AlertDescription>
+            <div className="flex gap-2 mt-2">
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={confirmCancel}
+              >
+                {t('yes_cancel')}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={cancelAction}
+              >
+                {t('no_keep')}
+              </Button>
+            </div>
+          </Alert>
+        )}
       </CardContent>
       
-      {booking.is_cancellable && !isPast && (
+      {booking.is_cancellable && !isPast && !showConfirm && (
         <CardFooter className="pt-0 bg-white">
           <Button 
             variant="destructive" 
             size="sm" 
             className="w-full bg-red-600 hover:bg-red-700 text-white"
-            onClick={() => onCancel(booking.id)}
+            onClick={handleCancelClick}
           >
             {t('cancel')}
           </Button>
