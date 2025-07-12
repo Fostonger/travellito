@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.base import BaseService
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models import (
-    Apartment, Landlord, Purchase, Tour, LandlordCommission,
+    Apartment, Landlord, Purchase, Tour, Departure, LandlordCommission,
     TicketCategory, Referral
 )
 from ..infrastructure.repositories import UserRepository, TourRepository
@@ -196,8 +196,10 @@ class LandlordService(BaseService):
             select(
                 func.count(Purchase.id).label("count"),
                 func.sum(Purchase.qty).label("qty"),
-                func.sum(Purchase.amount).label("amount")
+                func.ceil(func.sum(Purchase.amount * Tour.max_commission_pct / 100)).label("amount")
             )
+            .join(Departure, Purchase.departure_id == Departure.id)
+            .join(Tour, Departure.tour_id == Tour.id)
             .where(
                 Purchase.apartment_id.in_(apartment_ids),
                 Purchase.status == "confirmed"
@@ -210,8 +212,10 @@ class LandlordService(BaseService):
             select(
                 func.count(Purchase.id).label("count"),
                 func.sum(Purchase.qty).label("qty"),
-                func.sum(Purchase.amount).label("amount")
+                func.ceil(func.sum(Purchase.amount * Tour.max_commission_pct / 100)).label("amount")
             )
+            .join(Departure, Purchase.departure_id == Departure.id)
+            .join(Tour, Departure.tour_id == Tour.id)
             .where(
                 Purchase.apartment_id.in_(apartment_ids),
                 Purchase.status == "confirmed",

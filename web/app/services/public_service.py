@@ -323,14 +323,13 @@ class PublicService(BaseService):
             cat = cat_map.get(cat_id)
             if not cat:
                 raise ValidationError(f"Invalid category id: {cat_id}")
-                
-            net_price = self._discounted_price(cat.price, tour.max_commission_pct, chosen_comm)
-            total_net += net_price * qty
+            
+            total_net += cat.price * qty
             total_qty += qty
             items_out.append({
                 "category_id": cat.id,
                 "qty": qty,
-                "amount": net_price * qty
+                "amount": cat.price * qty
             })
         
         if total_qty > dep.capacity:
