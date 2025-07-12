@@ -57,6 +57,21 @@
           <select id="tourCat" class="w-full px-3 py-2 border rounded"></select>
         </div>
       </div>
+      
+      <div>
+        <label class="block text-sm font-medium mb-1">Место отправления</label>
+        <div class="mb-2 text-sm text-gray-600">Выберите точку на карте или воспользуйтесь поиском</div>
+        <div id="map" class="h-64 w-full rounded border mb-2"></div>
+        <div class="flex flex-col gap-2 bg-gray-50 p-3 rounded">
+          <div class="text-sm font-medium">Адрес места сбора:</div>
+          <div id="addressDisplay" class="text-gray-700">—</div>
+          <input id="tourAddress" type="hidden" />
+          <div class="flex gap-4 text-sm text-gray-500 mt-1">
+            <div>Широта: <span id="latValue">—</span></div>
+            <div>Долгота: <span id="lngValue">—</span></div>
+          </div>
+        </div>
+      </div>
 
       <div>
         <label class="block text-sm font-medium mb-1" for="tourImages">Фотографии</label>
@@ -71,15 +86,6 @@
         </div>
       </div>
 
-      <div>
-        <h3 class="font-medium mb-2">Типы билетов</h3>
-        <div id="ticketRows" class="space-y-2"></div>
-        <div class="flex gap-2 mt-2">
-          <select id="ticketClassSel" class="flex-1 border rounded px-2 py-1 text-sm"></select>
-          <input id="ticketPriceInput" type="number" step="0.01" min="0" placeholder="Цена" class="flex-1 border rounded px-2 py-1 text-sm" />
-          <button type="button" id="addTicketBtn" class="px-3 py-1 bg-emerald-600 text-white rounded">Добавить</button>
-        </div>
-      </div>
       <div class="flex justify-end gap-3 pt-4">
         <button type="button" id="cancelModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
         <button type="submit" class="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700">Создать</button>
@@ -144,6 +150,18 @@
   </div>
 </div>
 
+<!-- Modal for location view -->
+<div id="locationModal" class="fixed inset-0 bg-black/50 flex items-start justify-center hidden overflow-y-auto py-10">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6 my-auto max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-semibold mb-4">Место отправления</h2>
+    <div id="addressDisplay" class="mb-4 text-gray-700"></div>
+    <div id="viewMap" class="h-80 w-full rounded border mb-4"></div>
+    <div class="flex justify-end gap-3">
+      <button type="button" id="closeLocationModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal for ticket categories -->
 <div id="ticketsModal" class="fixed inset-0 bg-black/50 flex items-start justify-center hidden overflow-y-auto py-10">
   <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6 my-auto max-h-[90vh] overflow-y-auto">
@@ -173,6 +191,7 @@
   </div>
 </div>
 
+<script src="https://api-maps.yandex.ru/2.1/?apikey=538e9cdd-117d-4fae-824a-767930c27f1e&lang=ru_RU" type="text/javascript"></script>
 <script>
 (function(){
   const modal = document.getElementById('tourModal');
@@ -199,7 +218,10 @@
       const badge = formatScheduleBadge(t);
       tr.innerHTML = `
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.id}</td>
-        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.title}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
+          ${t.title}
+          ${t.address ? `<div class="text-xs text-gray-500 mt-1">📍 ${t.address}</div>` : ''}
+        </td>
         <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
           <button data-id="${t.id}" class="viewTickets px-2 rounded bg-blue-200 hover:bg-blue-300">Билеты</button>
         </td>
@@ -209,7 +231,12 @@
             `${badge} <button data-id="${t.id}" class="addSched px-2 rounded bg-gray-200 hover:bg-gray-300">＋</button>`
           }
         </td>
-        <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'></td>`;
+        <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'>
+          <button data-id="${t.id}" data-lat="${t.latitude || ''}" data-lng="${t.longitude || ''}" 
+                  data-address="${t.address || ''}" class="viewLocation px-2 rounded bg-cyan-200 hover:bg-cyan-300">
+            🗺️
+          </button>
+        </td>`;
       body.appendChild(tr);
     });
     body.querySelectorAll('.addSched').forEach(btn=>btn.addEventListener('click', (e)=>{
@@ -225,6 +252,13 @@
     body.querySelectorAll('.viewTickets').forEach(btn=>btn.addEventListener('click', (e)=>{
       const tid = e.target.getAttribute('data-id');
       openTicketsModal(tid);
+    }));
+    
+    body.querySelectorAll('.viewLocation').forEach(btn=>btn.addEventListener('click', (e)=>{
+      const lat = e.target.getAttribute('data-lat');
+      const lng = e.target.getAttribute('data-lng');
+      const address = e.target.getAttribute('data-address');
+      openLocationModal(lat, lng, address);
     }));
   };
 
@@ -379,12 +413,105 @@
     });
   }
 
+  // Initialize Yandex Map
+  let myMap, myPlacemark;
+  let mapInitialized = false;
+  
+  function initMap() {
+    if (mapInitialized) return;
+    
+    ymaps.ready(() => {
+      // Default center (Moscow)
+      const defaultCenter = [55.76, 37.64];
+      
+      myMap = new ymaps.Map('map', {
+        center: defaultCenter,
+        zoom: 12,
+        controls: ['zoomControl', 'searchControl']
+      });
+      
+      // Create a placemark
+      myPlacemark = new ymaps.Placemark(defaultCenter, {
+        hintContent: 'Место отправления'
+      }, {
+        draggable: true
+      });
+      
+      // Add placemark to map
+      myMap.geoObjects.add(myPlacemark);
+      
+      // Update coordinates when placemark is dragged
+      myPlacemark.events.add('dragend', function() {
+        const coords = myPlacemark.geometry.getCoordinates();
+        updateCoordinates(coords[0], coords[1]);
+        reverseGeocode(coords);
+      });
+      
+      // Click on map to move placemark
+      myMap.events.add('click', function(e) {
+        const coords = e.get('coords');
+        myPlacemark.geometry.setCoordinates(coords);
+        updateCoordinates(coords[0], coords[1]);
+        reverseGeocode(coords);
+      });
+      
+      // Search control events
+      const searchControl = myMap.controls.get('searchControl');
+      searchControl.events.add('resultselect', function(e) {
+        const results = searchControl.getResultsArray();
+        const selected = results[e.get('index')];
+        const coords = selected.geometry.getCoordinates();
+        
+        myPlacemark.geometry.setCoordinates(coords);
+        updateCoordinates(coords[0], coords[1]);
+        
+        // Get full address from search result
+        const address = selected.properties.get('text');
+        document.getElementById('tourAddress').value = address;
+        document.getElementById('addressDisplay').textContent = address;
+      });
+      
+      mapInitialized = true;
+    });
+  }
+  
+  // Update coordinate display
+  function updateCoordinates(lat, lng) {
+    document.getElementById('latValue').textContent = lat.toFixed(6);
+    document.getElementById('lngValue').textContent = lng.toFixed(6);
+  }
+  
+  // Reverse geocode to get address from coordinates
+  function reverseGeocode(coords) {
+    ymaps.geocode(coords).then(function(res) {
+      const firstGeoObject = res.geoObjects.get(0);
+      if (firstGeoObject) {
+        // Get full address
+        const address = firstGeoObject.getAddressLine();
+        
+        // Update hidden input and display
+        document.getElementById('tourAddress').value = address;
+        document.getElementById('addressDisplay').textContent = address;
+      }
+    });
+  }
+  
+  // Initialize map when modal is opened
+  document.getElementById('newTourBtn').addEventListener('click', function() {
+    setTimeout(initMap, 100); // Small delay to ensure DOM is ready
+  });
+  
   document.getElementById('tourForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('tourTitle').value.trim();
     const description = document.getElementById('tourDesc').value.trim();
     const city_id = document.getElementById('tourCity').value || null;
     const category_id = document.getElementById('tourCat').value || null;
+    const address = document.getElementById('tourAddress').value.trim();
+    const latitude = document.getElementById('latValue').textContent !== '—' ? 
+                     parseFloat(document.getElementById('latValue').textContent) : null;
+    const longitude = document.getElementById('lngValue').textContent !== '—' ? 
+                      parseFloat(document.getElementById('lngValue').textContent) : null;
     
     // Validate that at least one ticket category is added
     if (!title || ticketRows.length === 0) {
@@ -402,7 +529,15 @@
     const res = await fetch('/api/v1/agency/tours/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, city_id, category_id })
+      body: JSON.stringify({ 
+        title, 
+        description, 
+        city_id, 
+        category_id,
+        address,
+        latitude,
+        longitude
+      })
     });
     if (!res.ok) { alert('Ошибка при создании экскурсии'); return; }
     closeModal();
@@ -654,6 +789,52 @@
   // Close tickets modal
   closeTicketsModal.addEventListener('click', () => {
     ticketsModal.classList.add('hidden');
+  });
+  
+  // Location modal
+  const locationModal = document.getElementById('locationModal');
+  const closeLocationModal = document.getElementById('closeLocationModal');
+  let viewMap;
+  
+  function openLocationModal(lat, lng, address) {
+    // Display address
+    document.getElementById('addressDisplay').textContent = address || 'Адрес не указан';
+    
+    // Show modal
+    locationModal.classList.remove('hidden');
+    
+    // Initialize map
+    setTimeout(() => {
+      ymaps.ready(() => {
+        // Default center if no coordinates
+        const center = (lat && lng) ? [parseFloat(lat), parseFloat(lng)] : [55.76, 37.64];
+        
+        viewMap = new ymaps.Map('viewMap', {
+          center: center,
+          zoom: 15,
+          controls: ['zoomControl']
+        });
+        
+        if (lat && lng) {
+          // Add placemark
+          const placemark = new ymaps.Placemark([parseFloat(lat), parseFloat(lng)], {
+            hintContent: address || 'Место отправления'
+          });
+          
+          viewMap.geoObjects.add(placemark);
+        }
+      });
+    }, 100);
+  }
+  
+  // Close location modal
+  closeLocationModal.addEventListener('click', () => {
+    locationModal.classList.add('hidden');
+    // Destroy map to prevent memory leaks
+    if (viewMap) {
+      viewMap.destroy();
+      viewMap = null;
+    }
   });
   
   // Add ticket category from modal

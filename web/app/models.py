@@ -104,6 +104,8 @@ class Tour(Base):
     repeat_weekdays = mapped_column(JSON, nullable=True)
     # Time of day (HH:MM:SS) when repeat departs
     repeat_time = mapped_column(Time, nullable=True)
+    # Location information
+    address    = mapped_column(String(500), nullable=True)  # Human-readable address
     latitude   = mapped_column(Numeric(8, 6))   # nullable
     longitude  = mapped_column(Numeric(9, 6))
     agency      = relationship("Agency", back_populates="tours")

@@ -10,6 +10,7 @@ class TourIn(BaseModel):
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
     category_id: Optional[int] = None
+    address: Optional[str] = None
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
@@ -24,6 +25,7 @@ class TourUpdate(BaseModel):
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
     category_id: Optional[int] = None
+    address: Optional[str] = None
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
@@ -38,6 +40,7 @@ class TourOut(BaseModel):
     duration_minutes: Optional[int] = None
     city_id: Optional[int] = None
     category_id: Optional[int] = None
+    address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     repeat_type: Optional[str] = None
