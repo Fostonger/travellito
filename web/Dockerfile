@@ -4,8 +4,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Needed for HEALTHCHECK curl
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# Install fonts with Cyrillic support and curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    fonts-dejavu \
+    fontconfig \
+    && rm -rf /var/lib/apt/lists/*
+
+# Refresh font cache
+RUN fc-cache -f -v
 
 COPY alembic.ini .
 COPY migrations/ ./migrations/

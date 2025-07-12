@@ -572,12 +572,8 @@ class LandlordService(BaseService):
                 Apartment.id == apt_id
             )
         else:
-            stmt = select(Apartment).where(Apartment.landlord_id == landlord_id)
-        stmt = (
-            select(Apartment)
-            .where(Apartment.landlord_id == landlord_id)
-            .order_by(Apartment.id)
-        )
+            stmt = select(Apartment).where(Apartment.landlord_id == landlord_id).order_by(Apartment.id)
+        
         apartments = await self.session.scalars(stmt)
         return apartments.all()
 

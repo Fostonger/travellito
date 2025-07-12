@@ -5,11 +5,13 @@ from __future__ import annotations
 import io
 import csv
 import os
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, quote
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status, Query, Response
 from fastapi.responses import Response as FastAPIResponse
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from ....deps import SessionDep
 from ....security import current_user, role_required
@@ -245,10 +247,46 @@ async def apartments_qr_pdf(
     buf = io.BytesIO()
     pdf = _canvas.Canvas(buf, pagesize=A4)
     page_w, page_h = A4
-    ## if apartment is single, use its name; otherwise use "Apartments"
+
+    # Register a TrueType font that supports Cyrillic characters
+    # We'll use DejaVu Sans which has good Unicode support
+    # If DejaVu is not available, fall back to Helvetica
+    try:
+        # Try system fonts first (installed via Dockerfile)
+        system_font_paths = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # Debian/Ubuntu
+            '/usr/share/fonts/dejavu/DejaVuSans.ttf',          # Some Linux distros
+        ]
+        
+        font_found = False
+        for font_path in system_font_paths:
+            if os.path.exists(font_path):
+                pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
+                font_name = 'DejaVuSans'
+                font_found = True
+                break
+        
+        # If system fonts not found, try our static directory
+        if not font_found:
+            static_font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 
+                                    'static', 'fonts', 'DejaVuSans.ttf')
+            if os.path.exists(static_font_path):
+                pdfmetrics.registerFont(TTFont('DejaVuSans', static_font_path))
+                font_name = 'DejaVuSans'
+            else:
+                raise FileNotFoundError(f"Font not found at {static_font_path}")
+                
+    except Exception as e:
+        # Fall back to Helvetica (built-in) if no TTF fonts are available
+        font_name = 'Helvetica'
+    
+    # If apartment is single, use its name; otherwise use "Apartments"
     apt_name = apartments[0].name if len(apartments) == 1 else "Apartments"
     
     x, y = 50, page_h - 250  # initial cursor
+    
+    # Set the font for the entire document
+    pdf.setFont(font_name, 12)
     
     for apt in apartments:
         payload = f"apt_{apt.id}"
@@ -260,8 +298,10 @@ async def apartments_qr_pdf(
         img_buf.seek(0)
         
         pdf.drawImage(ImageReader(img_buf), x, y, width=200, height=200)
+        
+        # Use the registered font for text that might contain Cyrillic characters
+        pdf.setFont(font_name, 12)
         label = f"Apartment #{apt.id}" + (f" – {apt.name}" if apt.name else "")
-        pdf.setFont("Helvetica", 12)
         pdf.drawString(x, y - 15, label)
         
         # advance cursor – 2 QR codes per row, 3 rows per page
@@ -277,7 +317,22 @@ async def apartments_qr_pdf(
     pdf.save()
     buf.seek(0)
     
-    headers = {"Content-Disposition": f"attachment; filename={apt_name}.pdf"}
+    # Properly handle filename encoding for Content-Disposition header
+    # RFC 5987 encoding for non-ASCII characters in HTTP headers
+    filename = apt_name + ".pdf"
+    
+    # For browsers that support RFC 5987
+    filename_ascii = filename.encode('ascii', 'ignore').decode()
+    filename_encoded = quote(filename.encode('utf-8'))
+    
+    if filename_ascii == filename:
+        # ASCII-only filename, use simple format
+        content_disposition = f'attachment; filename="{filename}"'
+    else:
+        # Non-ASCII filename, use both formats for compatibility
+        content_disposition = f'attachment; filename="{filename_ascii}"; filename*=UTF-8\'\'{filename_encoded}'
+    
+    headers = {"Content-Disposition": content_disposition}
     return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
 
 
