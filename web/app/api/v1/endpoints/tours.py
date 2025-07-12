@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, status, Query
 
-from app.api.v1.schemas import TourIn, TourOut, ImagesOut, TicketCategoryIn, TicketCategoryOut
+from app.api.v1.schemas import TourIn, TourOut, TourUpdate, ImagesOut, TicketCategoryIn, TicketCategoryOut
 from app.api.v1.endpoints.utils import get_agency_id
 from app.deps import SessionDep
 from app.security import current_user, role_required
@@ -66,7 +66,7 @@ async def create_tour(
 @router.patch("/{tour_id}", response_model=TourOut)
 async def update_tour(
     tour_id: int,
-    payload: TourIn,
+    payload: TourUpdate,
     sess: SessionDep,
     user=Depends(current_user)
 ):

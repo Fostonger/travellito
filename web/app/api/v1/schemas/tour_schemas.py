@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class TourIn(BaseModel):
-    """Schema for creating/updating tours"""
+    """Schema for creating tours"""
     title: str
     description: Optional[str] = None
     duration_minutes: Optional[int] = Field(None, gt=0)
@@ -16,6 +16,19 @@ class TourIn(BaseModel):
     repeat_weekdays: Optional[List[int]] = None  # 0=Mon .. 6=Sun
     repeat_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
 
+
+class TourUpdate(BaseModel):
+    """Schema for updating tours"""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    duration_minutes: Optional[int] = Field(None, gt=0)
+    city_id: Optional[int] = None
+    category_id: Optional[int] = None
+    latitude: Optional[float] = Field(None, ge=-90, le=90)
+    longitude: Optional[float] = Field(None, ge=-180, le=180)
+    repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
+    repeat_weekdays: Optional[List[int]] = None  # 0=Mon .. 6=Sun
+    repeat_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
 
 class TourOut(BaseModel):
     """Schema for tour responses"""

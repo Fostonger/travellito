@@ -1,4 +1,4 @@
-from .tour_schemas import TourIn, TourOut, ImagesOut, TicketCategoryIn, TicketCategoryOut
+from .tour_schemas import TourIn, TourOut, TourUpdate, ImagesOut, TicketCategoryIn, TicketCategoryOut
 from .departure_schemas import DepartureIn, DepartureOut, DepartureUpdate, CapacityUpdate
 from .booking_schemas import BookingStatusUpdate, BookingOut, BookingExportOut, BookingMetrics, CategoryBreakdown
 from .auth_schemas import (
@@ -9,7 +9,8 @@ from .auth_schemas import (
 __all__ = [
     # Tour schemas
     "TourIn",
-    "TourOut", 
+    "TourOut",
+    "TourUpdate",
     "ImagesOut",
     "TicketCategoryIn",
     "TicketCategoryOut",
