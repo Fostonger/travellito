@@ -53,8 +53,15 @@
           <select id="tourCity" class="w-full px-3 py-2 border rounded"></select>
         </div>
         <div class="flex-1">
-          <label class="block text-sm font-medium mb-1" for="tourCat">Категория</label>
-          <select id="tourCat" class="w-full px-3 py-2 border rounded"></select>
+          <label class="block text-sm font-medium mb-1">Категории</label>
+          <div class="relative">
+            <select id="tourCatDropdown" class="w-full px-3 py-2 border rounded">
+              <option value="">Выберите категорию</option>
+            </select>
+            <div id="selectedCategories" class="flex flex-wrap gap-1 mt-2"></div>
+            <input type="hidden" id="tourCats" name="tourCats" value="">
+          </div>
+          <div class="text-xs text-gray-500 mt-1">Выберите до 10 категорий</div>
         </div>
       </div>
       
@@ -199,13 +206,23 @@
   const cancelBtn = document.getElementById('cancelModal');
 
   const openModal = () => { modal.classList.remove('hidden'); };
-  const closeModal = () => { modal.classList.add('hidden'); };
+  const closeModal = () => { 
+    modal.classList.add('hidden'); 
+    resetCategorySelection();
+  };
 
   newBtn.addEventListener('click', async () => {
     await preloadSelects();
     openModal();
   });
   cancelBtn.addEventListener('click', closeModal);
+  
+  function resetCategorySelection() {
+    selectedCategories.innerHTML = '';
+    selectedCategoryIds.clear();
+    updateHiddenInput();
+    updateCategoryDropdown();
+  }
 
   const loadTours = async () => {
     const res = await fetch('/api/v1/agency/tours/list');
@@ -302,14 +319,12 @@
     const cities = await fetch('/api/v1/public/cities').then(r=>r.json()).catch(()=>[]);
     const citySel = document.getElementById('tourCity');
     citySel.innerHTML = '<option value="">—</option>' + cities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-    // tour categories
-    const tCats = await fetch('/api/v1/public/tour_categories').then(r=>r.json()).catch(()=>[]);
-    const catSel = document.getElementById('tourCat');
-    catSel.innerHTML = '<option value="">—</option>' + tCats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    
     // ticket classes
     const tClass = await fetch('/api/v1/public/ticket_classes').then(r=>r.json()).catch(()=>[]);
     const clsSel = document.getElementById('ticketClassSel');
     clsSel.innerHTML = '<option value="">Тип</option>' + tClass.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    
     // repetition types
     await loadRepetitionTypes();
   }
@@ -506,7 +521,8 @@
     const title = document.getElementById('tourTitle').value.trim();
     const description = document.getElementById('tourDesc').value.trim();
     const city_id = document.getElementById('tourCity').value || null;
-    const category_id = document.getElementById('tourCat').value || null;
+    const category_ids = document.getElementById('tourCats').value ? 
+                       document.getElementById('tourCats').value.split(',').map(id => parseInt(id)) : [];
     const address = document.getElementById('tourAddress').value.trim();
     const latitude = document.getElementById('latValue').textContent !== '—' ? 
                      parseFloat(document.getElementById('latValue').textContent) : null;
@@ -533,7 +549,7 @@
         title, 
         description, 
         city_id, 
-        category_id,
+        category_ids,
         address,
         latitude,
         longitude
@@ -910,6 +926,131 @@
       alert('Error: ' + err.message);
     }
   });
+
+  // Handle category selection
+  const categoryDropdown = document.getElementById('tourCatDropdown');
+  const selectedCategories = document.getElementById('selectedCategories');
+  const hiddenCategoriesInput = document.getElementById('tourCats');
+  const selectedCategoryIds = new Set();
+  
+  // Store all categories for reference
+  let allCategories = [];
+  
+  async function loadCategories() {
+    try {
+      allCategories = await fetch('/api/v1/public/tour_categories').then(r => r.json());
+      updateCategoryDropdown();
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+      allCategories = [];
+    }
+  }
+  
+  function updateCategoryDropdown() {
+    const dropdown = document.getElementById('tourCatDropdown');
+    dropdown.innerHTML = '<option value="">Выберите категорию</option>';
+    
+    // Only show categories that haven't been selected yet
+    allCategories.forEach(cat => {
+      if (!selectedCategoryIds.has(cat.id.toString())) {
+        dropdown.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
+      }
+    });
+  }
+  
+  function addCategoryBadge(id, name) {
+    if (selectedCategoryIds.size >= 10) {
+      alert('Максимальное количество категорий: 10');
+      return false;
+    }
+    
+    const badge = document.createElement('div');
+    badge.className = 'bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center';
+    badge.dataset.id = id;
+    badge.innerHTML = `
+      ${name}
+      <button type="button" class="ml-1 text-blue-500 hover:text-blue-700 font-bold remove-category">×</button>
+    `;
+    
+    badge.querySelector('.remove-category').addEventListener('click', () => {
+      removeCategory(id);
+    });
+    
+    selectedCategories.appendChild(badge);
+    selectedCategoryIds.add(id.toString());
+    updateHiddenInput();
+    updateCategoryDropdown();
+    return true;
+  }
+  
+  function removeCategory(id) {
+    const badge = selectedCategories.querySelector(`[data-id="${id}"]`);
+    if (badge) {
+      badge.remove();
+      selectedCategoryIds.delete(id.toString());
+      updateHiddenInput();
+      updateCategoryDropdown();
+    }
+  }
+  
+  function updateHiddenInput() {
+    hiddenCategoriesInput.value = Array.from(selectedCategoryIds).join(',');
+  }
+  
+  categoryDropdown.addEventListener('change', (e) => {
+    const selectedId = e.target.value;
+    if (!selectedId) return;
+    
+    const selectedOption = e.target.options[e.target.selectedIndex];
+    const categoryName = selectedOption.textContent;
+    
+    if (addCategoryBadge(selectedId, categoryName)) {
+      // Reset dropdown
+      e.target.value = '';
+    }
+  });
+  
+  // Initialize categories
+  loadCategories();
+
+  // Function to load categories for a specific tour
+  async function loadTourCategories(tourId) {
+    try {
+      // Clear existing categories
+      resetCategorySelection();
+      
+      // Get tour details
+      const tourRes = await fetch(`/api/v1/agency/tours/${tourId}`);
+      if (!tourRes.ok) throw new Error('Failed to load tour');
+      
+      const tour = await tourRes.json();
+      
+      // Add categories if available
+      if (tour.category_ids && tour.category_ids.length > 0) {
+        // Make sure allCategories is loaded
+        if (allCategories.length === 0) {
+          await loadCategories();
+        }
+        
+        // Add each category
+        for (let i = 0; i < tour.category_ids.length; i++) {
+          const catId = tour.category_ids[i];
+          const category = allCategories.find(c => c.id === catId);
+          if (category) {
+            addCategoryBadge(catId.toString(), category.name);
+          }
+        }
+      } else if (tour.category_id) {
+        // Legacy: add single category if available
+        const category = allCategories.find(c => c.id === tour.category_id);
+        if (category) {
+          addCategoryBadge(tour.category_id.toString(), category.name);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading tour categories:', err);
+    }
+  }
 })();
 </script>
 {% endblock %} 

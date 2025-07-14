@@ -1,6 +1,6 @@
 from typing import Optional, List
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TourIn(BaseModel):
@@ -9,13 +9,20 @@ class TourIn(BaseModel):
     description: Optional[str] = None
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
-    category_id: Optional[int] = None
+    category_id: Optional[int] = None  # Legacy field for backward compatibility
+    category_ids: Optional[List[int]] = None  # New field for multiple categories
     address: Optional[str] = None
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
     repeat_weekdays: Optional[List[int]] = None  # 0=Mon .. 6=Sun
     repeat_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    
+    @field_validator('category_ids')
+    def validate_category_ids(cls, v):
+        if v is not None and len(v) > 10:
+            raise ValueError('Maximum 10 categories allowed')
+        return v
 
 
 class TourUpdate(BaseModel):
@@ -24,13 +31,20 @@ class TourUpdate(BaseModel):
     description: Optional[str] = None
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
-    category_id: Optional[int] = None
+    category_id: Optional[int] = None  # Legacy field for backward compatibility
+    category_ids: Optional[List[int]] = None  # New field for multiple categories
     address: Optional[str] = None
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
     repeat_weekdays: Optional[List[int]] = None  # 0=Mon .. 6=Sun
     repeat_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    
+    @field_validator('category_ids')
+    def validate_category_ids(cls, v):
+        if v is not None and len(v) > 10:
+            raise ValueError('Maximum 10 categories allowed')
+        return v
 
 class TourOut(BaseModel):
     """Schema for tour responses"""
@@ -39,7 +53,9 @@ class TourOut(BaseModel):
     description: Optional[str] = None
     duration_minutes: Optional[int] = None
     city_id: Optional[int] = None
-    category_id: Optional[int] = None
+    category_id: Optional[int] = None  # Legacy field for backward compatibility
+    category_ids: Optional[List[int]] = None  # New field for multiple categories
+    categories: Optional[List[str]] = None  # Category names for display
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -59,6 +75,12 @@ class TourOut(BaseModel):
             data = {**obj.__dict__}
             if hasattr(obj, "repeat_time") and obj.repeat_time is not None:
                 data["repeat_time"] = obj.repeat_time.strftime("%H:%M") if obj.repeat_time else None
+                
+            # Handle categories
+            if hasattr(obj, "tour_categories"):
+                data["category_ids"] = [cat.id for cat in obj.tour_categories]
+                data["categories"] = [cat.name for cat in obj.tour_categories]
+                
             return super().model_validate(data, *args, **kwargs)
         return super().model_validate(obj, *args, **kwargs)
 

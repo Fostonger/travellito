@@ -35,6 +35,18 @@ class TourRepository(ITourRepository):
     def __init__(self, session: AsyncSession):
         super().__init__(Tour, session)
     
+    async def get(self, id: Any) -> Optional[Tour]:
+        """Override get method to eagerly load tour_categories"""
+        query = (
+            select(Tour)
+            .options(
+                selectinload(Tour.tour_categories)
+            )
+            .where(Tour.id == id)
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+    
     async def get_by_agency(
         self,
         agency_id: int,
@@ -46,6 +58,10 @@ class TourRepository(ITourRepository):
         query = (
             select(Tour)
             .where(Tour.agency_id == agency_id)
+            .options(
+                selectinload(Tour.category),
+                selectinload(Tour.tour_categories)
+            )
             .order_by(Tour.id.desc())
             .offset(skip)
             .limit(limit)
@@ -57,7 +73,10 @@ class TourRepository(ITourRepository):
         """Get tour with images eagerly loaded"""
         query = (
             select(Tour)
-            .options(selectinload(Tour.images))
+            .options(
+                selectinload(Tour.images),
+                selectinload(Tour.tour_categories)
+            )
             .where(Tour.id == tour_id)
         )
         result = await self.session.execute(query)
@@ -81,7 +100,10 @@ class TourRepository(ITourRepository):
         limit: int = 100
     ) -> List[Tour]:
         """Search tours with filters"""
-        query = select(Tour)
+        query = select(Tour).options(
+            selectinload(Tour.category),
+            selectinload(Tour.tour_categories)
+        )
         
         conditions = []
         if city_id:

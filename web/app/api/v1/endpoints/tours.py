@@ -50,6 +50,7 @@ async def create_tour(
         duration_minutes=payload.duration_minutes,
         city_id=payload.city_id,
         category_id=payload.category_id,
+        category_ids=payload.category_ids,
         address=payload.address,
         latitude=payload.latitude,
         longitude=payload.longitude,
@@ -59,9 +60,11 @@ async def create_tour(
     )
     
     await sess.commit()
-    await sess.refresh(tour)
     
-    return TourOut.model_validate(tour)
+    # Get the tour with relationships eagerly loaded to avoid lazy loading issues
+    tour_with_categories = await service.get_tour(tour.id, agency_id)
+    
+    return TourOut.model_validate(tour_with_categories)
 
 
 @router.patch("/{tour_id}", response_model=TourOut)
@@ -77,6 +80,7 @@ async def update_tour(
     
     update_data = payload.model_dump(exclude_unset=True)
     
+    # Ensure category_ids is properly passed to the service
     tour = await service.update_tour(
         tour_id=tour_id,
         agency_id=agency_id,
@@ -84,9 +88,11 @@ async def update_tour(
     )
     
     await sess.commit()
-    await sess.refresh(tour)
     
-    return TourOut.model_validate(tour)
+    # Get the tour with relationships eagerly loaded to avoid lazy loading issues
+    tour_with_categories = await service.get_tour(tour_id, agency_id)
+    
+    return TourOut.model_validate(tour_with_categories)
 
 
 @router.delete("/{tour_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -212,3 +218,19 @@ async def delete_ticket_category(
     await sess.commit()
     
     return None 
+
+
+@router.get("/{tour_id}", response_model=TourOut)
+async def get_tour(
+    tour_id: int,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    """Get a specific tour by ID"""
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    
+    # Get tour and verify ownership
+    tour = await service.get_tour(tour_id, agency_id)
+    
+    return TourOut.model_validate(tour) 

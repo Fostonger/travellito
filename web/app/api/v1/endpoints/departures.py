@@ -61,7 +61,9 @@ async def create_departure(
     )
     
     await sess.commit()
-    await sess.refresh(departure)
+    
+    # Get departure with tour loaded to avoid lazy loading issues
+    departure = await service.departure_repo.get_with_tour(departure.id)
     
     return DepartureOut.model_validate(departure)
 
@@ -85,7 +87,9 @@ async def update_departure(
     )
     
     await sess.commit()
-    await sess.refresh(departure)
+    
+    # Get departure with tour loaded to avoid lazy loading issues
+    departure = await service.departure_repo.get_with_tour(departure_id)
     
     return DepartureOut.model_validate(departure)
 
@@ -108,7 +112,9 @@ async def update_capacity(
     )
     
     await sess.commit()
-    await sess.refresh(departure)
+    
+    # Get departure with tour loaded to avoid lazy loading issues
+    departure = await service.departure_repo.get_with_tour(departure_id)
     
     return DepartureOut.model_validate(departure)
 

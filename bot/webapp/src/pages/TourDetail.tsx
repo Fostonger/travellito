@@ -117,15 +117,27 @@ export default function TourDetail() {
       <div className="bg-white rounded-xl p-4 shadow-md mb-4">
         <h2 className="text-2xl font-bold mb-1">{tour.title}</h2>
         <div className="flex items-center justify-between mb-3">
-          <div>
-            {tour.category && (
+          <div className="flex flex-wrap gap-1">
+            {tour.categories && tour.categories.length > 0 ? (
+              // Show all categories in the detail page
+              tour.categories.map((category, idx) => (
+                <span
+                  key={idx}
+                  className="inline-block px-3 py-1 text-sm rounded-full font-medium"
+                  style={{ backgroundColor: pastelColor(category), color: '#333' }}
+                >
+                  {category}
+                </span>
+              ))
+            ) : tour.category ? (
+              // Fallback to legacy category
               <span
                 className="inline-block px-3 py-1 text-sm rounded-full font-medium"
                 style={{ backgroundColor: pastelColor(tour.category), color: '#333' }}
               >
                 {tour.category}
               </span>
-            )}
+            ) : null}
           </div>
           <div className="text-xl font-bold text-blue-600">
             {fmtPrice(tour.price)}

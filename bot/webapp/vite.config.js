@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['premises-forecast-receptor-did.trycloudflare.com']
+    allowedHosts: ['alpine-theology-applicable-boats.trycloudflare.com']
   },
 }); 

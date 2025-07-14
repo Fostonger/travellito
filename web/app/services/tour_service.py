@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from app.core import BaseService, NotFoundError, ValidationError, BusinessLogicError
 from app.infrastructure.repositories import TourRepository
-from app.models import Tour, TourImage, TicketCategory, TicketClass
+from app.models import Tour, TourImage, TicketCategory, TicketClass, TourCategory, TourCategoryAssociation
 from app.storage import upload_image, presigned
 from sqlalchemy import select
 
@@ -24,6 +24,7 @@ class TourService(BaseService):
         duration_minutes: Optional[int] = None,
         city_id: Optional[int] = None,
         category_id: Optional[int] = None,
+        category_ids: Optional[List[int]] = None,
         address: Optional[str] = None,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
@@ -53,6 +54,11 @@ class TourService(BaseService):
             if any(day < 0 or day > 6 for day in repeat_weekdays):
                 raise ValidationError("Invalid weekday values (0-6)", field="repeat_weekdays")
         
+        # For backward compatibility, if category_ids is provided but category_id is not,
+        # use the first category_id as the legacy category_id
+        if category_ids and not category_id and len(category_ids) > 0:
+            category_id = category_ids[0]
+        
         # Create tour
         tour_data = {
             "agency_id": agency_id,
@@ -60,7 +66,7 @@ class TourService(BaseService):
             "description": description,
             "duration_minutes": duration_minutes,
             "city_id": city_id,
-            "category_id": category_id,
+            "category_id": category_id,  # Keep for backward compatibility
             "address": address,
             "latitude": latitude,
             "longitude": longitude,
@@ -71,7 +77,42 @@ class TourService(BaseService):
         
         tour = await self.tour_repository.create(obj_in=tour_data)
         
+        # Add tour categories if provided
+        if category_ids:
+            await self._update_tour_categories(tour.id, category_ids)
+        # If no category_ids but category_id is provided, add it to tour_categories as well
+        elif category_id:
+            await self._update_tour_categories(tour.id, [category_id])
+        
         return tour
+    
+    async def _update_tour_categories(self, tour_id: int, category_ids: List[int]) -> None:
+        """Update tour categories with the provided list of category IDs"""
+        if not category_ids:
+            return
+            
+        # Validate category IDs
+        if len(category_ids) > 10:
+            raise ValidationError("Maximum 10 categories allowed", field="category_ids")
+            
+        # Check if all categories exist
+        for cat_id in category_ids:
+            category = await self.session.get(TourCategory, cat_id)
+            if not category:
+                raise ValidationError(f"Category with ID {cat_id} not found", field="category_ids")
+        
+        # Delete existing associations
+        stmt = select(TourCategoryAssociation).where(TourCategoryAssociation.tour_id == tour_id)
+        existing_assocs = await self.session.scalars(stmt)
+        for assoc in existing_assocs:
+            await self.session.delete(assoc)
+        
+        # Create new associations
+        for cat_id in category_ids:
+            assoc = TourCategoryAssociation(tour_id=tour_id, category_id=cat_id)
+            self.session.add(assoc)
+            
+        await self.session.flush()
     
     async def _create_default_ticket_category(self, tour_id: int, price: Decimal) -> TicketCategory:
         """Create default ticket category with id 0 for a tour"""
@@ -119,10 +160,19 @@ class TourService(BaseService):
             except (ValueError, AttributeError):
                 raise ValidationError("Invalid time format. Use HH:MM", field="repeat_time")
         
+        # Handle category_ids separately
+        category_ids = None
+        if "category_ids" in update_data:
+            category_ids = update_data.pop("category_ids")
+        
         # Update tour
         updated_tour = await self.tour_repository.update(id=tour_id, obj_in=update_data)
         if not updated_tour:
             raise NotFoundError("Tour", tour_id)
+            
+        # Update tour categories if provided
+        if category_ids is not None:
+            await self._update_tour_categories(tour_id, category_ids)
         
         return updated_tour
     
@@ -332,3 +382,15 @@ class TourService(BaseService):
         await self.session.flush()
         
         return category 
+
+    async def get_tour(self, tour_id: int, agency_id: int) -> Tour:
+        """Get a specific tour by ID with ownership verification"""
+        tour = await self.tour_repository.get_with_images(tour_id)
+        
+        if not tour:
+            raise NotFoundError("Tour", tour_id)
+        
+        if tour.agency_id != agency_id:
+            raise NotFoundError("Tour", tour_id)  # Hide existence from unauthorized
+        
+        return tour 

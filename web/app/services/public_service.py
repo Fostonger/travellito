@@ -149,7 +149,10 @@ class PublicService(BaseService):
             landlord_id = await self._last_referral_landlord_id(user_id)
         
         # Base query
-        stmt = select(Tour).options(selectinload(Tour.category))
+        stmt = select(Tour).options(
+            selectinload(Tour.category),
+            selectinload(Tour.tour_categories)
+        )
         
         # Price filters (raw list price)
         if price_min is not None or price_max is not None:
@@ -192,12 +195,22 @@ class PublicService(BaseService):
             # chosen_comm = await self._chosen_commission(landlord_id, t.id, t.max_commission_pct)
             price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == t.id, TicketCategory.ticket_class_id == 0))
             # price_net = self._discounted_price(price, t.max_commission_pct, chosen_comm)
+            
+            # Get categories from the many-to-many relationship
+            categories = []
+            if t.tour_categories:
+                categories = [cat.name for cat in t.tour_categories]
+            
+            # For backward compatibility
+            legacy_category = t.category.name if t.category is not None else None
+            
             out.append({
                 "id": t.id,
                 "title": t.title,
                 "price_raw": str(price),
                 "price_net": str(price),
-                "category": t.category.name if t.category is not None else None,
+                "category": legacy_category,
+                "categories": categories,
             })
         
         return out
@@ -597,13 +610,22 @@ class PublicService(BaseService):
         Raises:
             NotFoundError: If tour not found
         """
-        # Use selectinload to eagerly load the images relationship
-        stmt = select(Tour).options(selectinload(Tour.images)).where(Tour.id == tour_id)
+        # Use selectinload to eagerly load the images relationship and categories
+        stmt = select(Tour).options(
+            selectinload(Tour.images),
+            selectinload(Tour.tour_categories)
+        ).where(Tour.id == tour_id)
+        
         tour = await self.session.scalar(stmt)
         tour_standart_price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == tour_id, TicketCategory.ticket_class_id == 0))
         
         if not tour:
             raise NotFoundError("Tour not found")
+        
+        # Get categories from the many-to-many relationship
+        categories = []
+        if tour.tour_categories:
+            categories = [cat.name for cat in tour.tour_categories]
         
         return {
             "id": tour.id,
@@ -614,7 +636,8 @@ class PublicService(BaseService):
             "images": [
                 {"key": img.key, "url": presigned(img.key)}
                 for img in tour.images
-            ]
+            ],
+            "categories": categories
         }
     
     async def get_departure_availability(self, departure_id: int) -> Dict[str, Any]:

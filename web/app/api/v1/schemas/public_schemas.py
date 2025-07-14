@@ -14,7 +14,8 @@ class TourSearchOut(BaseModel):
     title: str
     price_raw: str
     price_net: str
-    category: str | None
+    category: str | None  # Legacy field for backward compatibility
+    categories: List[str] = []  # New field for multiple categories
 
 
 class TourListOut(BaseModel):
@@ -30,6 +31,7 @@ class TourDetailOut(BaseModel):
     price: str
     duration_minutes: int | None
     images: List[dict]
+    categories: List[str] = []  # Categories for display
 
 
 # Category schemas
