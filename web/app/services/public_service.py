@@ -361,30 +361,37 @@ class PublicService(BaseService):
     ) -> tuple[int, datetime]:
         """Decode virtual departure ID to extract tour_id and timestamp."""
         try:
-            encoded_id = str(abs(departure_id))
+            # The new format is just the negative tour ID
+            tour_id = abs(departure_id)
             
-            # Try to find a valid tour ID by checking different prefixes
-            tour_id = None
-            for prefix_length in range(1, 6):  # Try 1-5 digit tour IDs
-                if prefix_length >= len(encoded_id):
-                    continue
+            # Verify the tour exists
+            tour = await self.session.get(Tour, tour_id)
+            if tour is None:
+                # Fallback to the old format for backward compatibility
+                encoded_id = str(abs(departure_id))
                 
-                potential_tour_id = int(encoded_id[:prefix_length])
-                tour = await self.session.get(Tour, potential_tour_id)
-                if tour is not None:
-                    tour_id = potential_tour_id
-                    break
-            
-            if tour_id is None:
-                # Fallback: try to extract tour ID from the first digit
-                if len(encoded_id) > 0:
-                    potential_tour_id = int(encoded_id[0])
+                # Try to find a valid tour ID by checking different prefixes
+                tour_id = None
+                for prefix_length in range(1, 6):  # Try 1-5 digit tour IDs
+                    if prefix_length >= len(encoded_id):
+                        continue
+                    
+                    potential_tour_id = int(encoded_id[:prefix_length])
                     tour = await self.session.get(Tour, potential_tour_id)
                     if tour is not None:
                         tour_id = potential_tour_id
-            
-            if tour_id is None:
-                raise ValidationError("Could not determine tour from virtual departure ID")
+                        break
+                
+                if tour_id is None:
+                    # Fallback: try to extract tour ID from the first digit
+                    if len(encoded_id) > 0:
+                        potential_tour_id = int(encoded_id[0])
+                        tour = await self.session.get(Tour, potential_tour_id)
+                        if tour is not None:
+                            tour_id = potential_tour_id
+                
+                if tour_id is None:
+                    raise ValidationError("Could not determine tour from virtual departure ID")
             
             # Use provided timestamp or current time
             if virtual_timestamp:

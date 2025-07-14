@@ -202,18 +202,16 @@ export default function TourDetail() {
                       <button 
                         onClick={() => {
                           // If this is a virtual departure (no real ID yet), create a special negative ID
-                          // Format: -<tour_id>-<timestamp in milliseconds>
                           const departureData = { ...d };
                           if (d.is_virtual) {
                             const timestamp = new Date(d.starts_at).getTime();
                             
-                            // Create a special format that encodes both tour ID and exact timestamp
-                            // We'll use a negative number with a specific format: -<tour_id><timestamp_prefix>
-                            // The backend will extract the tour_id and use it to find the correct departure time
-                            const virtualId = -parseInt(`${id}${timestamp}`.substring(0, 9));
+                            // Create a simpler virtual ID format that's easier for the backend to parse
+                            // Just use a negative tour ID, and pass the timestamp separately
+                            const virtualId = -Math.abs(parseInt(id));
                             departureData.id = virtualId;
                             
-                            // Also include the full timestamp for the backend to use
+                            // Include the full timestamp for the backend to use
                             departureData.virtual_timestamp = timestamp;
                             
                             console.log('Created virtual departure ID:', departureData.id, 'with timestamp:', timestamp);
