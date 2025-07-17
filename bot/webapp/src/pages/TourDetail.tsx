@@ -204,6 +204,8 @@ export default function TourDetail() {
                           // If this is a virtual departure (no real ID yet), create a special negative ID
                           const departureData = { ...d };
                           if (d.is_virtual) {
+                            // Get the exact timestamp from the starts_at field
+                            // Make sure we're using the UTC time to avoid timezone issues
                             const timestamp = new Date(d.starts_at).getTime();
                             
                             // Create a simpler virtual ID format that's easier for the backend to parse
@@ -214,7 +216,10 @@ export default function TourDetail() {
                             // Include the full timestamp for the backend to use
                             departureData.virtual_timestamp = timestamp;
                             
-                            console.log('Created virtual departure ID:', departureData.id, 'with timestamp:', timestamp);
+                            console.log('Created virtual departure ID:', departureData.id);
+                            console.log('With timestamp:', timestamp);
+                            console.log('Original date string:', d.starts_at);
+                            console.log('Date object:', new Date(d.starts_at).toString());
                           }
                           nav('/checkout', { state: { tourId: id, departure: departureData } });
                         }}

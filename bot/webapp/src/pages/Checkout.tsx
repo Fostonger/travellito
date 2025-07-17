@@ -40,8 +40,15 @@ export default function Checkout() {
       id: departure.id,
       starts_at: departure.starts_at,
       is_virtual: departure.is_virtual,
+      virtual_timestamp: departure.virtual_timestamp,
       tourId
     });
+    
+    // Log the parsed date and time for debugging
+    const departureDate = new Date(departure.starts_at);
+    console.log('Parsed departure date:', departureDate.toString());
+    console.log('Local time:', departureDate.toLocaleTimeString());
+    console.log('UTC time:', departureDate.toUTCString());
   }, [tourId]);
 
   const recalc = async (qs: any) => {
@@ -91,8 +98,12 @@ export default function Checkout() {
       // If the server materialized a virtual departure, update our local state
       if (departure.is_virtual && data.departure_id && data.departure_id !== departure.id) {
         console.log('Virtual departure was materialized with ID:', data.departure_id);
+        // Save the original virtual timestamp before updating the ID
+        const originalTimestamp = departure.virtual_timestamp;
         departure.id = data.departure_id;
         departure.is_virtual = false;
+        // Keep the original timestamp for consistent display
+        departure.virtual_timestamp = originalTimestamp;
       }
       
       setQuote(data);
@@ -183,8 +194,9 @@ export default function Checkout() {
         contact_phone: contactInfo.phone
       };
       
-      // If this is a virtual departure, include the timestamp
-      if (departure.is_virtual && departure.virtual_timestamp) {
+      // If this was originally a virtual departure, include the timestamp
+      // even if it has been materialized
+      if (departure.virtual_timestamp) {
         bookingPayload.virtual_timestamp = departure.virtual_timestamp;
         console.log('Including virtual timestamp:', departure.virtual_timestamp);
       }
@@ -219,14 +231,24 @@ export default function Checkout() {
     }
   };
 
-  const departureDate = new Date(departure.starts_at).toLocaleDateString(undefined, {
+  // Function to ensure consistent time display
+  const getConsistentDateTime = () => {
+    // If this was a virtual departure that got materialized, use the original timestamp
+    if (departure.virtual_timestamp) {
+      return new Date(departure.virtual_timestamp);
+    }
+    // Otherwise use the starts_at field
+    return new Date(departure.starts_at);
+  };
+
+  const departureDate = getConsistentDateTime().toLocaleDateString(undefined, {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
   
-  const departureTime = new Date(departure.starts_at).toLocaleTimeString(undefined, {
+  const departureTime = getConsistentDateTime().toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit'
   });

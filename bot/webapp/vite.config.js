@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['alpine-theology-applicable-boats.trycloudflare.com']
+    allowedHosts: ['variations-confused-hack-graphic.trycloudflare.com']
   },
 }); 

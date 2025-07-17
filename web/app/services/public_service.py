@@ -93,7 +93,10 @@ class PublicService(BaseService):
             if not tour:
                 raise ValidationError(f"Tour with ID {tour_id} not found")
             
-            # Create a new departure
+            # Log the time being used for debugging
+            print(f"Creating departure for tour {tour_id} at time: {starts_at.isoformat()}")
+            
+            # Create a new departure with the exact time from the virtual departure
             departure = Departure(
                 tour_id=tour_id,
                 starts_at=starts_at,
@@ -395,7 +398,9 @@ class PublicService(BaseService):
             
             # Use provided timestamp or current time
             if virtual_timestamp:
-                starts_at = datetime.fromtimestamp(virtual_timestamp / 1000)
+                # Create datetime from timestamp (milliseconds), preserving the exact time
+                # from the client without timezone conversion
+                starts_at = datetime.utcfromtimestamp(virtual_timestamp / 1000)
             else:
                 starts_at = datetime.utcnow()
             
