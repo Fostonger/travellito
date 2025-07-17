@@ -3,8 +3,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { t, fmtPrice } from '../i18n';
-import { format, parseISO } from 'date-fns';
-import { ru, enUS } from 'date-fns/locale';
+import { formatDate, formatTime } from '../utils/dateUtils';
 
 // Shadcn UI components
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
@@ -37,13 +36,6 @@ interface Booking {
   items: BookingItem[];
 }
 
-// Get current locale
-const getCurrentLocale = () => {
-  // Get language from browser or use default
-  const language = navigator.language || 'en-US';
-  return language.startsWith('ru') ? ru : enUS;
-};
-
 // Helper function for status badges - moved outside of component
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -55,28 +47,6 @@ const getStatusBadge = (status: string) => {
       return <Badge className="bg-gray-500 text-white"><XCircle className="w-3 h-3 mr-1" /> {t('status_cancelled')}</Badge>;
     default:
       return <Badge className="bg-yellow-500 text-black"><AlertCircle className="w-3 h-3 mr-1" /> {t('status_pending')}</Badge>;
-  }
-};
-
-// Helper functions for date formatting - moved outside of component
-const formatDate = (dateString: string) => {
-  try {
-    const date = parseISO(dateString);
-    return format(date, 'PP', { locale: getCurrentLocale() });
-  } catch (e) {
-    return dateString;
-  }
-};
-
-const formatTime = (dateString: string) => {
-  try {
-    // Parse the ISO string and convert from UTC to local timezone
-    const date = parseISO(dateString);
-    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-    // Use 24-hour format (HH:mm)
-    return format(localDate, 'HH:mm', { locale: getCurrentLocale() });
-  } catch (e) {
-    return '';
   }
 };
 

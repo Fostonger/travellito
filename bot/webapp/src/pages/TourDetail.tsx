@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { t, fmtPrice } from '../i18n';
+import { formatDate, formatTime, formatFullDate, getDateString, getDepartureDate } from '../utils/dateUtils';
 
 export default function TourDetail() {
   const { id } = useParams();
@@ -27,7 +28,7 @@ export default function TourDetail() {
       
       // Set the first date as selected by default if departures exist
       if (depRes.data.length > 0) {
-        const firstDate = new Date(depRes.data[0].starts_at).toDateString();
+        const firstDate = getDateString(depRes.data[0].starts_at);
         setSelectedDate(firstDate);
       }
       
@@ -41,7 +42,7 @@ export default function TourDetail() {
   
   // Group departures by date
   const departuresByDate = departures.reduce((acc, dep) => {
-    const dateStr = new Date(dep.starts_at).toDateString();
+    const dateStr = getDateString(dep.starts_at);
     if (!acc[dateStr]) acc[dateStr] = [];
     acc[dateStr].push(dep);
     return acc;
@@ -171,7 +172,7 @@ export default function TourDetail() {
                 }`}
                 onClick={() => setSelectedDate(dateStr)}
               >
-                {new Date(dateStr).toLocaleDateString()}
+                {formatDate(new Date(dateStr).toISOString())}
               </button>
             ))}
           </div>
@@ -180,19 +181,12 @@ export default function TourDetail() {
           {selectedDate && (
             <div className="p-4">
               <h4 className="font-medium text-gray-500 mb-3">
-                {new Date(selectedDate).toLocaleDateString(undefined, { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
+                {formatFullDate(new Date(selectedDate).toISOString())}
               </h4>
               <div className="space-y-3">
                 {departuresByDate[selectedDate].map((d) => {
-                  const time = new Date(d.starts_at).toLocaleTimeString(undefined, {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  });
+                  // Use the formatTime utility for consistent time display
+                  const time = formatTime(d.starts_at);
                   return (
                     <div key={d.id} className="flex justify-between items-center border-b pb-3">
                       <div>
@@ -219,7 +213,7 @@ export default function TourDetail() {
                             console.log('Created virtual departure ID:', departureData.id);
                             console.log('With timestamp:', timestamp);
                             console.log('Original date string:', d.starts_at);
-                            console.log('Date object:', new Date(d.starts_at).toString());
+                            console.log('Date object:', getDepartureDate(departureData).toString());
                           }
                           nav('/checkout', { state: { tourId: id, departure: departureData } });
                         }}

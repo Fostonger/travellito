@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { t, fmtPrice } from '../i18n';
+import { formatTime, formatFullDate, getDepartureDate } from '../utils/dateUtils';
 
 export default function Checkout() {
   const nav = useNavigate();
@@ -45,9 +46,9 @@ export default function Checkout() {
     });
     
     // Log the parsed date and time for debugging
-    const departureDate = new Date(departure.starts_at);
+    const departureDate = getDepartureDate(departure);
     console.log('Parsed departure date:', departureDate.toString());
-    console.log('Local time:', departureDate.toLocaleTimeString());
+    console.log('Local time:', formatTime(departure.starts_at));
     console.log('UTC time:', departureDate.toUTCString());
   }, [tourId]);
 
@@ -231,27 +232,9 @@ export default function Checkout() {
     }
   };
 
-  // Function to ensure consistent time display
-  const getConsistentDateTime = () => {
-    // If this was a virtual departure that got materialized, use the original timestamp
-    if (departure.virtual_timestamp) {
-      return new Date(departure.virtual_timestamp);
-    }
-    // Otherwise use the starts_at field
-    return new Date(departure.starts_at);
-  };
-
-  const departureDate = getConsistentDateTime().toLocaleDateString(undefined, {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-  
-  const departureTime = getConsistentDateTime().toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  // Format dates using the utility function
+  const departureDate = formatFullDate(departure.starts_at);
+  const departureTime = formatTime(departure.starts_at);
 
   return (
     <div className="p-4 pb-20 bg-gray-50 min-h-screen">
