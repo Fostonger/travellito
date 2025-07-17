@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['variations-confused-hack-graphic.trycloudflare.com']
+    allowedHosts: ['death-decline-layers-ld.trycloudflare.com']
   },
 }); 
