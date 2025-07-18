@@ -51,7 +51,7 @@ class QuoteItem(BaseModel):
 class QuoteIn(BaseModel):
     departure_id: int
     items: List[QuoteItem]
-    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures
+    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures (UTC)
 
 
 class QuoteOut(BaseModel):
@@ -112,7 +112,7 @@ class BookingIn(BaseModel):
     items: List[QuoteItem]
     contact_name: str
     contact_phone: str
-    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures
+    virtual_timestamp: Optional[int] = None  # Timestamp in milliseconds for virtual departures (UTC)
 
 
 class BookingCreatedResponse(BaseModel):

@@ -109,7 +109,12 @@ export const getDateString = (dateString: string): string => {
 export const getDepartureDate = (departure: { starts_at: string; virtual_timestamp?: number }): Date => {
   // If this was a virtual departure that got materialized, use the original timestamp
   if (departure.virtual_timestamp) {
-    return new Date(departure.virtual_timestamp);
+    // The timestamp is in milliseconds since epoch and represents the UTC time
+    const date = new Date(departure.virtual_timestamp);
+    console.log('Using virtual timestamp:', departure.virtual_timestamp, 
+                'Date:', date.toString(), 
+                'UTC:', date.toUTCString());
+    return date;
   }
   // Otherwise use the starts_at field
   return utcToLocalDate(departure.starts_at);

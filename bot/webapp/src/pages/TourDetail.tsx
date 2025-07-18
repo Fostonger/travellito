@@ -198,9 +198,19 @@ export default function TourDetail() {
                           // If this is a virtual departure (no real ID yet), create a special negative ID
                           const departureData = { ...d };
                           if (d.is_virtual) {
-                            // Get the exact timestamp from the starts_at field
-                            // Make sure we're using the UTC time to avoid timezone issues
-                            const timestamp = new Date(d.starts_at).getTime();
+                            // Parse the date string properly
+                            // First, check if the date string has a timezone indicator
+                            const hasTimezoneInfo = d.starts_at.endsWith('Z') || d.starts_at.includes('+');
+                            
+                            // Create timestamp that preserves the exact UTC time without double conversion
+                            let timestamp;
+                            if (hasTimezoneInfo) {
+                              // If it has timezone info, parse directly
+                              timestamp = new Date(d.starts_at).getTime();
+                            } else {
+                              // If no timezone info, assume it's UTC and append 'Z'
+                              timestamp = new Date(d.starts_at + 'Z').getTime();
+                            }
                             
                             // Create a simpler virtual ID format that's easier for the backend to parse
                             // Just use a negative tour ID, and pass the timestamp separately
@@ -210,9 +220,11 @@ export default function TourDetail() {
                             // Include the full timestamp for the backend to use
                             departureData.virtual_timestamp = timestamp;
                             
+                            // Debug logging
                             console.log('Created virtual departure ID:', departureData.id);
                             console.log('With timestamp:', timestamp);
                             console.log('Original date string:', d.starts_at);
+                            console.log('Parsed UTC time:', new Date(timestamp).toISOString());
                             console.log('Date object:', getDepartureDate(departureData).toString());
                           }
                           nav('/checkout', { state: { tourId: id, departure: departureData } });

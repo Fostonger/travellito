@@ -277,7 +277,7 @@ class PublicService(BaseService):
             departure_id: Departure ID (negative for virtual)
             items: List of {"category_id": int, "qty": int}
             user_id: User ID for discount calculation
-            virtual_timestamp: Timestamp for virtual departures
+            virtual_timestamp: Timestamp for virtual departures in milliseconds (UTC)
             
         Returns:
             Quote with total price and availability
@@ -362,7 +362,12 @@ class PublicService(BaseService):
     async def _decode_virtual_departure(
         self, departure_id: int, virtual_timestamp: int | None
     ) -> tuple[int, datetime]:
-        """Decode virtual departure ID to extract tour_id and timestamp."""
+        """Decode virtual departure ID to extract tour_id and timestamp.
+        
+        Args:
+            departure_id: The virtual departure ID (negative)
+            virtual_timestamp: Client-side timestamp in milliseconds (UTC time)
+        """
         try:
             # The new format is just the negative tour ID
             tour_id = abs(departure_id)
@@ -398,9 +403,15 @@ class PublicService(BaseService):
             
             # Use provided timestamp or current time
             if virtual_timestamp:
-                # Create datetime from timestamp (milliseconds), preserving the exact time
-                # from the client without timezone conversion
-                starts_at = datetime.utcfromtimestamp(virtual_timestamp / 1000)
+                # JavaScript timestamps are UTC milliseconds since epoch
+                # We should use utcfromtimestamp to interpret it correctly as UTC
+                utc_time = datetime.utcfromtimestamp(virtual_timestamp / 1000)
+                
+                # No need for additional timezone adjustment since the timestamp is already in UTC
+                # The JavaScript Date.getTime() already accounts for this
+                starts_at = utc_time
+                
+                print(f"Virtual timestamp conversion: {virtual_timestamp}, UTC time: {utc_time.isoformat()}")
             else:
                 starts_at = datetime.utcnow()
             
@@ -698,7 +709,7 @@ class PublicService(BaseService):
             user_id: User ID for discount calculation
             contact_name: Customer name
             contact_phone: Customer phone
-            virtual_timestamp: Timestamp for virtual departures
+            virtual_timestamp: Timestamp for virtual departures in milliseconds (UTC)
             
         Returns:
             Dict with booking details

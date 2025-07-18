@@ -80,6 +80,9 @@ export default function Checkout() {
         items
       };
       
+      // Log the timestamp format for debugging
+      console.log('Using pure UTC timestamp format without timezone adjustment');
+      
       // If this is a virtual departure, include the timestamp
       if (departure.is_virtual && departure.virtual_timestamp) {
         quotePayload.virtual_timestamp = departure.virtual_timestamp;
@@ -194,6 +197,9 @@ export default function Checkout() {
         contact_name: contactInfo.name,
         contact_phone: contactInfo.phone
       };
+      
+      // Log the timestamp format for debugging
+      console.log('Using pure UTC timestamp format without timezone adjustment');
       
       // If this was originally a virtual departure, include the timestamp
       // even if it has been materialized
