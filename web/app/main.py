@@ -263,14 +263,16 @@ async def timezone_test(request: Request):
 
 @app.get("/token-test", response_class=HTMLResponse)
 async def token_test_page(request: Request):
-    """Token debugging page."""
+    """Token test page for debugging JWT token handling."""
     return templates.TemplateResponse("token_test.html", {"request": request})
 
+@app.get("/token-refresh-test", response_class=HTMLResponse)
+async def token_refresh_test_page(request: Request):
+    """Token refresh test page for testing token refresh functionality."""
+    return templates.TemplateResponse("token_refresh_test.html", {"request": request})
+
 async def get_landlord_data(user: dict, sess: AsyncSession):
-    """Fetch landlord data for templates.
-    
-    This helper function retrieves landlord information to display notifications.
-    """
+    """Helper to get landlord data for templates."""
     if not user or user.get("role") != "landlord":
         return None
         

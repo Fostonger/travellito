@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['executive-worried-changing-keith.trycloudflare.com']
+    allowedHosts: ['biographies-steel-windsor-locate.trycloudflare.com']
   },
 }); 

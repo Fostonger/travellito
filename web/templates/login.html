@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <title>Войти через Telegram</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Authentication handling -->
+  <script src="/static/auth.js"></script>
 </head>
 <body class="bg-indigo-50 flex items-center justify-center min-h-screen">
   <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
@@ -44,31 +46,41 @@
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
 
-    const res = await fetch('/api/v1/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
 
-    if (!res.ok) {
-      alert('Неверный email или пароль');
-      return;
-    }
+      if (!res.ok) {
+        alert('Неверный email или пароль');
+        return;
+      }
 
-    const data = await res.json();
-    switch (data.user.role) {
-      case 'admin':
-        window.location.href = '/admin';
-        break;
-      case 'agency':
-        window.location.href = '/agency';
-        break;
-      case 'landlord':
-        window.location.href = '/api/v1/landlord';
-        break;
-      default:
-        // Fallback
-        window.location.href = '/';
+      const data = await res.json();
+      
+      // Store both access and refresh tokens
+      window.AuthManager.storeTokens(data);
+      
+      // Redirect based on user role
+      switch (data.user.role) {
+        case 'admin':
+          window.location.href = '/admin';
+          break;
+        case 'agency':
+          window.location.href = '/agency';
+          break;
+        case 'landlord':
+          window.location.href = '/api/v1/landlord';
+          break;
+        default:
+          // Fallback
+          window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Произошла ошибка при входе. Пожалуйста, попробуйте еще раз.');
     }
   });
   </script>

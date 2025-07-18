@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Token Refresh Test</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/auth.js"></script>
+</head>
+<body class="bg-indigo-50 p-8">
+  <div class="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-lg">
+    <h1 class="text-2xl font-bold text-indigo-700 mb-6">Token Refresh Test</h1>
+    
+    <div class="space-y-6">
+      <!-- Token Status -->
+      <div class="border p-4 rounded-lg">
+        <h2 class="text-lg font-medium text-gray-800 mb-2">Token Status</h2>
+        <div id="token-status" class="space-y-2 text-sm">
+          <p><span class="font-medium">Authentication Status:</span> <span id="auth-status">Checking...</span></p>
+          <p><span class="font-medium">Access Token:</span> <span id="access-token" class="break-all">None</span></p>
+          <p><span class="font-medium">Refresh Token:</span> <span id="refresh-token" class="break-all">None</span></p>
+          <p><span class="font-medium">Token Expires:</span> <span id="token-expiry">Unknown</span></p>
+          <p><span class="font-medium">Is Expired:</span> <span id="is-expired">Unknown</span></p>
+        </div>
+      </div>
+      
+      <!-- Test Actions -->
+      <div class="border p-4 rounded-lg">
+        <h2 class="text-lg font-medium text-gray-800 mb-4">Test Actions</h2>
+        <div class="space-x-4">
+          <button id="refresh-btn" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+            Force Token Refresh
+          </button>
+          <button id="api-call-btn" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+            Test API Call
+          </button>
+          <button id="logout-btn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+            Logout
+          </button>
+        </div>
+      </div>
+      
+      <!-- API Response -->
+      <div class="border p-4 rounded-lg">
+        <h2 class="text-lg font-medium text-gray-800 mb-2">API Response</h2>
+        <pre id="api-response" class="bg-gray-100 p-2 rounded text-sm overflow-x-auto">No API call made yet</pre>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Truncate token display for readability
+    function truncateToken(token) {
+      if (!token) return 'None';
+      if (token.length <= 20) return token;
+      return token.substring(0, 10) + '...' + token.substring(token.length - 10);
+    }
+    
+    // Update the token status display
+    function updateTokenStatus() {
+      const accessToken = window.AuthManager.getAccessToken();
+      const refreshToken = window.AuthManager.getRefreshToken();
+      const isAuthenticated = window.AuthManager.isAuthenticated();
+      const isExpired = window.AuthManager.isTokenExpired();
+      
+      document.getElementById('auth-status').textContent = isAuthenticated ? 'Authenticated' : 'Not authenticated';
+      document.getElementById('auth-status').className = isAuthenticated ? 'text-green-600' : 'text-red-600';
+      
+      document.getElementById('access-token').textContent = truncateToken(accessToken);
+      document.getElementById('refresh-token').textContent = truncateToken(refreshToken);
+      
+      // Get token expiry
+      const expiry = localStorage.getItem('auth_token_exp');
+      if (expiry) {
+        const expiryDate = new Date(parseInt(expiry));
+        document.getElementById('token-expiry').textContent = expiryDate.toLocaleString();
+      } else {
+        document.getElementById('token-expiry').textContent = 'Unknown';
+      }
+      
+      document.getElementById('is-expired').textContent = isExpired ? 'Yes' : 'No';
+      document.getElementById('is-expired').className = isExpired ? 'text-red-600' : 'text-green-600';
+    }
+    
+    // Test API call
+    async function testApiCall() {
+      try {
+        document.getElementById('api-response').textContent = 'Loading...';
+        
+        const response = await fetch('/api/v1/auth/me');
+        const data = await response.json();
+        
+        document.getElementById('api-response').textContent = JSON.stringify(data, null, 2);
+        updateTokenStatus();
+      } catch (error) {
+        document.getElementById('api-response').textContent = `Error: ${error.message}`;
+      }
+    }
+    
+    // Force token refresh
+    async function forceTokenRefresh() {
+      document.getElementById('api-response').textContent = 'Refreshing token...';
+      
+      const success = await window.AuthManager.refreshAccessToken();
+      
+      if (success) {
+        document.getElementById('api-response').textContent = 'Token refreshed successfully!';
+      } else {
+        document.getElementById('api-response').textContent = 'Token refresh failed.';
+      }
+      
+      updateTokenStatus();
+    }
+    
+    // Setup event handlers
+    document.addEventListener('DOMContentLoaded', () => {
+      updateTokenStatus();
+      
+      // Check token status every 5 seconds
+      setInterval(updateTokenStatus, 5000);
+      
+      // Set up button handlers
+      document.getElementById('refresh-btn').addEventListener('click', forceTokenRefresh);
+      document.getElementById('api-call-btn').addEventListener('click', testApiCall);
+      document.getElementById('logout-btn').addEventListener('click', window.AuthManager.logout);
+    });
+  </script>
+</body>
+</html> 
