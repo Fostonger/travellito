@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { t, fmtPrice } from '../i18n';
 import { formatTime, formatFullDate, getDepartureDate } from '../utils/dateUtils';
+import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
 
 export default function Checkout() {
   const nav = useNavigate();
@@ -28,6 +29,7 @@ export default function Checkout() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -51,6 +53,33 @@ export default function Checkout() {
     console.log('Local time:', formatTime(departure.starts_at));
     console.log('UTC time:', departureDate.toUTCString());
   }, [tourId]);
+
+  const validatePhoneNumber = (phone: string) => {
+    try {
+      if (!phone) {
+        setPhoneError(t('phone_required'));
+        return false;
+      }
+      
+      if (!isValidPhoneNumber(phone)) {
+        setPhoneError(t('invalid_phone'));
+        return false;
+      }
+      
+      const phoneNumber = parsePhoneNumber(phone);
+      if (!phoneNumber.isValid()) {
+        setPhoneError(t('invalid_phone'));
+        return false;
+      }
+      
+      setPhoneError('');
+      return true;
+    } catch (err) {
+      console.error('Phone validation error:', err);
+      setPhoneError(t('invalid_phone'));
+      return false;
+    }
+  };
 
   const recalc = async (qs: any) => {
     const items = Object.entries(qs)
@@ -141,6 +170,11 @@ export default function Checkout() {
       ...contactInfo,
       [field]: value
     });
+    
+    // Validate phone when it changes
+    if (field === 'phone') {
+      validatePhoneNumber(value);
+    }
   };
 
   const handleConfirm = async () => {
@@ -149,8 +183,10 @@ export default function Checkout() {
       setError(t('name_required'));
       return;
     }
-    if (!contactInfo.phone.trim()) {
-      setError(t('phone_required'));
+    
+    // Validate phone number
+    if (!validatePhoneNumber(contactInfo.phone)) {
+      setError(phoneError || t('phone_required'));
       return;
     }
     
@@ -313,11 +349,17 @@ export default function Checkout() {
               <label className="block text-sm text-gray-600 mb-1">{t('phone')}</label>
               <input
                 type="tel"
-                className="w-full p-2 border rounded"
+                className={`w-full p-2 border rounded ${phoneError ? 'border-red-500' : ''}`}
                 value={contactInfo.phone}
                 onChange={(e) => handleContactChange('phone', e.target.value)}
-                placeholder={t('enter_phone')}
+                placeholder="+1234567890"
               />
+              {phoneError && (
+                <div className="text-red-500 text-sm mt-1">{phoneError}</div>
+              )}
+              <div className="text-xs text-gray-500 mt-1">
+                {t('phone_format')}
+              </div>
             </div>
           </div>
         </div>
