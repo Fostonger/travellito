@@ -6,8 +6,10 @@ import axios from 'axios';
 const ACCESS_TOKEN_KEY = 'authToken'; // Keeping original key for backward compatibility
 const REFRESH_TOKEN_KEY = 'refreshToken';
 const TOKEN_EXP_KEY = 'tokenExpiry';
+const TELEGRAM_USER_ID_KEY = 'telegramUserId';  // Store the real Telegram user ID
+const DEBUG_MODE_KEY = 'debugMode'; // For enabling debug output
 
-// For debugging - set to true to enable console logs
+// For debugging - set to true to enable debug output
 const DEBUG = true;
 
 // Declare global Telegram WebApp interface
@@ -24,15 +26,35 @@ declare global {
             username?: string;
           };
         };
+        showAlert: (message: string) => void;
       };
     };
+    debugLog: (message: string) => void;
   }
 }
 
-// Debug logger
+// Debug logger - uses both DebugPanel and optionally Telegram's showAlert
 const log = (...args: any[]) => {
-  if (DEBUG) {
-    console.log('[Auth]', ...args);
+  // Convert arguments to string
+  const message = ['[Auth]', ...args].map(arg => {
+    if (typeof arg === 'object') {
+      try {
+        return JSON.stringify(arg);
+      } catch (e) {
+        return String(arg);
+      }
+    }
+    return String(arg);
+  }).join(' ');
+  
+  // Always log to the debug panel if it exists
+  if (window.debugLog) {
+    window.debugLog(message);
+  }
+  
+  // Additionally use Telegram alert for critical errors if DEBUG is true
+  if (DEBUG && window.Telegram?.WebApp?.showAlert) {
+    window.Telegram.WebApp.showAlert(message);
   }
 };
 
@@ -49,7 +71,7 @@ const parseJwt = (token: string | null): any => {
     }).join(''));
     return JSON.parse(jsonPayload);
   } catch (error) {
-    console.error('Error parsing JWT:', error);
+    log('Error parsing JWT:', error);
     return null;
   }
 };
@@ -63,6 +85,14 @@ export const getApiBaseUrl = (): string => {
 };
 
 /**
+ * Get the stored Telegram user ID
+ */
+const getTelegramUserId = (): number | null => {
+  const userId = localStorage.getItem(TELEGRAM_USER_ID_KEY);
+  return userId ? Number(userId) : null;
+};
+
+/**
  * Store token information in localStorage
  */
 const storeTokenInfo = (token: string) => {
@@ -71,11 +101,11 @@ const storeTokenInfo = (token: string) => {
     return;
   }
   
-  // Store the access token
-  localStorage.setItem(ACCESS_TOKEN_KEY, token);
-  log('Access token stored in localStorage');
-  
   try {
+    // Store the access token
+    localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    log('Access token stored in localStorage');
+    
     // Parse token to get expiration
     const payload = parseJwt(token);
     if (payload && payload.exp) {
@@ -84,7 +114,37 @@ const storeTokenInfo = (token: string) => {
       log(`Token expiry set: ${new Date(expiryMs).toLocaleString()}`);
     }
   } catch (err) {
-    log('Error parsing token:', err);
+    log('Error storing token:', err);
+  }
+};
+
+/**
+ * Store refresh token in localStorage with verification
+ */
+const storeRefreshToken = (token: string): boolean => {
+  if (!token) {
+    log('No refresh token provided to store');
+    return false;
+  }
+  
+  try {
+    // Store the refresh token
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    
+    // Verify it was stored correctly
+    const storedToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    const success = storedToken === token;
+    
+    if (success) {
+      log('Refresh token stored successfully');
+    } else {
+      log('Failed to store refresh token - verification failed');
+    }
+    
+    return success;
+  } catch (err) {
+    log('Error storing refresh token:', err);
+    return false;
   }
 };
 
@@ -95,47 +155,44 @@ const storeTokenInfo = (token: string) => {
  */
 export const getRefreshToken = async (): Promise<boolean> => {
   try {
-    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (!accessToken) {
-      log('No access token found, cannot get refresh token');
+    // Get the Telegram user ID - this is critical to prevent duplicate users
+    const telegramUserId = getTelegramUserId();
+    if (!telegramUserId) {
+      log('No Telegram user ID found, cannot get refresh token');
       return false;
     }
     
-    // Get the user ID from the token
-    const payload = parseJwt(accessToken);
-    if (!payload || !payload.sub) {
-      log('Invalid token payload, cannot get refresh token');
-      return false;
-    }
+    log(`Using Telegram user ID: ${telegramUserId} to get refresh token`);
     
     // Directly call the bot auth endpoint which returns both tokens
-    log('Calling bot auth endpoint to get refresh token');
     const apiBase = getApiBaseUrl();
     
-    // Use the user ID from the token to authenticate
+    // Use the TELEGRAM user ID (not the internal system ID)
     const response = await axios.post(`${apiBase}/auth/telegram/bot`, {
-      id: payload.sub,
-      // Include minimal required fields
-      first_name: payload.first || 'User',
-      auth_date: Date.now()
+      id: telegramUserId,
+      first_name: 'User',  // This will be overwritten by the backend with the correct value
+      auth_date: Math.floor(Date.now() / 1000)
     });
     
-    log('Bot auth response:', response.status);
+    log('Bot auth response status:', response.status);
     
-    if (response.data && response.data.refresh_token) {
-      // Store the refresh token
-      localStorage.setItem(REFRESH_TOKEN_KEY, response.data.refresh_token);
-      log('Refresh token stored in localStorage');
-      
-      // Optionally update the access token if it was also returned
-      if (response.data.access_token) {
-        storeTokenInfo(response.data.access_token);
+    // The backend returns access_token and refresh_token directly in the response
+    if (response.data) {
+      if (response.data.refresh_token) {
+        log('Refresh token received from bot auth endpoint');
+        const stored = storeRefreshToken(response.data.refresh_token);
+        
+        // Also store access token if available
+        if (response.data.access_token) {
+          storeTokenInfo(response.data.access_token);
+        }
+        
+        return stored;
+      } else {
+        log('No refresh_token in response from bot auth endpoint');
       }
-      
-      return true;
     }
     
-    log('No refresh token in response');
     return false;
   } catch (error) {
     log('Error getting refresh token:', error);
@@ -215,6 +272,13 @@ export const setupAxiosAuth = () => {
   // First check URL parameters for token (highest priority)
   const urlParams = new URLSearchParams(window.location.search);
   const tokenFromUrl = urlParams.get('token');
+  const telegramUserId = urlParams.get('telegramUserId');
+  
+  // Store Telegram user ID if provided in URL
+  if (telegramUserId) {
+    localStorage.setItem(TELEGRAM_USER_ID_KEY, telegramUserId);
+    log(`Telegram user ID stored from URL: ${telegramUserId}`);
+  }
   
   // Then check localStorage
   const tokenFromStorage = localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -227,28 +291,39 @@ export const setupAxiosAuth = () => {
     storeTokenInfo(tokenFromUrl);
     log('Auth token saved from URL parameters');
     
-    // Clean URL by removing the token parameter (for security)
+    // Also check for refresh token in URL
+    const refreshTokenFromUrl = urlParams.get('refresh_token');
+    if (refreshTokenFromUrl) {
+      storeRefreshToken(refreshTokenFromUrl);
+      log('Refresh token saved from URL parameters');
+    }
+    
+    // Clean URL by removing the token parameters (for security)
     if (window.history && window.history.replaceState) {
       urlParams.delete('token');
+      urlParams.delete('refresh_token');
+      urlParams.delete('telegramUserId');
       const newUrl = window.location.pathname + 
         (urlParams.toString() ? '?' + urlParams.toString() : '') + 
         window.location.hash;
       window.history.replaceState({}, document.title, newUrl);
     }
-    
-    // Try to get a refresh token for this access token
-    getRefreshToken().then(success => {
-      log('Refresh token acquisition:', success ? 'successful' : 'failed');
-    });
   } else {
     log('No auth token in URL parameters, using stored token:', !!tokenFromStorage);
+  }
+  
+  // Get Telegram ID from WebApp if available
+  if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
+    const telegramId = window.Telegram.WebApp.initDataUnsafe.user.id;
+    localStorage.setItem(TELEGRAM_USER_ID_KEY, telegramId.toString());
+    log(`Telegram user ID stored from WebApp: ${telegramId}`);
   }
   
   if (authToken) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
     log('Auth token set in axios defaults');
   } else {
-    console.warn('No auth token available');
+    log('No auth token available');
   }
   
   // Add response interceptor to handle 401 errors
@@ -312,6 +387,17 @@ export const setupAxiosAuth = () => {
     },
     (error) => Promise.reject(error)
   );
+  
+  // Check if we have a token but no refresh token - get one if needed
+  setTimeout(async () => {
+    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    
+    if (accessToken && !refreshToken) {
+      log('Have access token but no refresh token, obtaining one');
+      await getRefreshToken();
+    }
+  }, 1000); // Delay slightly to ensure other initializations complete
 };
 
 // Authenticate with the backend using Telegram WebApp data
@@ -324,51 +410,102 @@ export const authenticateWithTelegram = async () => {
       const user = window.Telegram.WebApp.initDataUnsafe.user;
       log('Found Telegram user data:', user.id, user.first_name);
       
-      // Add hash from initData for verification
+      // Store the Telegram user ID for future use
+      localStorage.setItem(TELEGRAM_USER_ID_KEY, user.id.toString());
+      log(`Telegram user ID ${user.id} stored in localStorage`);
+      
+      // Prepare user data for authentication
       const userData = {
-        id: user.id,
-        first_name: user.first_name,
+        id: user.id,  // This is the critical field - using actual Telegram ID
+        first_name: user.first_name || 'User',
         last_name: user.last_name,
         username: user.username,
-        auth_date: Date.now(),
-        hash: window.Telegram.WebApp.initData,
+        auth_date: Math.floor(Date.now() / 1000),  // Using standard Unix timestamp
+        hash: window.Telegram.WebApp.initData || '',
       };
       
       const apiBase = getApiBaseUrl();
-      log('Calling auth endpoint:', `${apiBase}/auth/telegram/bot`);
+      log('Calling auth endpoint:', `${apiBase}/auth/telegram/bot`, 'with user ID:', user.id);
       
-      // Call auth endpoint
-      const response = await axios.post(`${apiBase}/auth/telegram/bot`, userData);
-      
-      log('Auth response:', response.status);
-      
-      if (response.data && response.data.access_token) {
-        // Store access token
-        storeTokenInfo(response.data.access_token);
+      try {
+        // Call auth endpoint with a longer timeout to ensure it completes
+        const response = await axios.post(`${apiBase}/auth/telegram/bot`, userData, {
+          timeout: 10000 // 10 second timeout
+        });
         
-        // Store refresh token if available
-        if (response.data.refresh_token) {
-          localStorage.setItem(REFRESH_TOKEN_KEY, response.data.refresh_token);
-          log('Refresh token stored');
+        log('Auth response status:', response.status);
+        
+        // Process auth response
+        if (response.data && typeof response.data === 'object') {
+          // Store access token if available
+          if (response.data.access_token) {
+            log('Access token received from auth endpoint');
+            storeTokenInfo(response.data.access_token);
+            
+            // Set authorization header for future requests
+            axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
+          } else {
+            log('No access_token in response!');
+          }
+          
+          // Store refresh token if available
+          if (response.data.refresh_token) {
+            log('Refresh token received from auth endpoint');
+            storeRefreshToken(response.data.refresh_token);
+          } else {
+            log('No refresh_token in response!');
+          }
+          
+          // Return success if we got at least an access token
+          if (response.data.access_token) {
+            log('Authentication successful');
+            return true;
+          }
         } else {
-          log('No refresh token in response');
+          log('Unexpected response format:', response.data);
         }
         
-        // Set authorization header for future requests
-        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
-        log('Token set in axios defaults');
-        
-        return true;
-      } else {
-        log('No access token in response');
+        return false;
+      } catch (apiError) {
+        log('Auth API call error:', apiError);
         return false;
       }
     } else {
-      console.warn('No Telegram WebApp user data available');
+      log('No Telegram WebApp user data available');
+      
+      // Try to use stored Telegram user ID as fallback
+      const telegramUserId = getTelegramUserId();
+      if (telegramUserId) {
+        log('Trying to authenticate with stored Telegram ID:', telegramUserId);
+        try {
+          const apiBase = getApiBaseUrl();
+          const response = await axios.post(`${apiBase}/auth/telegram/bot`, {
+            id: telegramUserId,
+            first_name: 'User',
+            auth_date: Math.floor(Date.now() / 1000)
+          }, {
+            timeout: 10000
+          });
+          
+          if (response.data?.access_token) {
+            storeTokenInfo(response.data.access_token);
+            
+            if (response.data.refresh_token) {
+              storeRefreshToken(response.data.refresh_token);
+            }
+            
+            axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
+            return true;
+          }
+        } catch (idError) {
+          log('Failed to authenticate with stored ID:', idError);
+        }
+      }
+      
       return false;
     }
   } catch (error) {
-    console.error('Authentication error:', error);
+    log('Authentication error:', error);
     return false;
   }
 }; 

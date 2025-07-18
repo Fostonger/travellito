@@ -23,6 +23,7 @@ function TokenStatus() {
   const [hasRefreshToken, setHasRefreshToken] = useState<boolean>(false);
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
   const [apiCallResult, setApiCallResult] = useState<string | null>(null);
+  const [telegramUserId, setTelegramUserId] = useState<string>('Unknown');
   
   // Add a log entry
   const addLog = (message: string) => {
@@ -39,9 +40,11 @@ function TokenStatus() {
       const storedExpiry = localStorage.getItem('tokenExpiry');
       const accessToken = localStorage.getItem('authToken');
       const refreshToken = localStorage.getItem('refreshToken');
+      const userIdFromStorage = localStorage.getItem('telegramUserId');
       
       setHasRefreshToken(!!refreshToken);
       setApiBaseUrl(getApiBaseUrl());
+      setTelegramUserId(userIdFromStorage || 'Unknown');
       
       if (storedExpiry) {
         const expiryDate = new Date(parseInt(storedExpiry));
@@ -159,6 +162,7 @@ function TokenStatus() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('tokenExpiry');
+    localStorage.removeItem('telegramUserId');
     addLog('All tokens cleared');
     setApiCallResult('Tokens cleared');
     getTokenInfo();
@@ -181,6 +185,7 @@ function TokenStatus() {
       
       <div className="mb-3">
         <p className="mb-1">API Base: <span className="font-mono text-xs">{apiBaseUrl}</span></p>
+        <p className="mb-1">Telegram ID: <span className="font-mono text-xs">{telegramUserId}</span></p>
         <p className="mb-1">Expires: <span className="font-mono">{tokenExpiry}</span></p>
         {timeLeft !== null && (
           <p className="mb-1">

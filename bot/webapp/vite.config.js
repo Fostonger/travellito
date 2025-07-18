@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['biographies-steel-windsor-locate.trycloudflare.com']
+    allowedHosts: ['clip-evanescence-dominican-map.trycloudflare.com']
   },
 }); 
