@@ -21,3 +21,4 @@ argon2-cffi>=23.1
 slowapi>=0.1.5
 redis==5.0.4
 pytz==2024.1  # Timezone handling for proper time conversion
+phonenumbers==8.13.33  # International phone number parsing and validation

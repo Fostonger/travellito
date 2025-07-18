@@ -10,7 +10,15 @@
     <form id="paymentForm" class="space-y-4">
       <div>
         <label for="phoneNumber" class="block text-sm font-medium text-gray-700">Номер телефона для выплат</label>
-        <input type="tel" id="phoneNumber" name="phone_number" value="{{ landlord.phone_number or '' }}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500">
+        <div class="mt-1 relative rounded-md shadow-sm">
+          <input type="tel" id="phoneNumber" name="phone_number" value="{{ landlord.phone_number or '' }}" 
+            class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            placeholder="+7 (999) 123-45-67">
+          <div id="phoneError" class="text-red-500 text-xs mt-1 hidden">
+            Введите корректный номер телефона с кодом страны (например, +7 для России)
+          </div>
+        </div>
+        <div class="text-xs text-gray-500 mt-1">Укажите номер с кодом страны, например: +7 (999) 123-45-67</div>
       </div>
       
       <div>
@@ -34,15 +42,62 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1.10.48/bundle/libphonenumber-js.min.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    // Phone number validation
+    const phoneInput = document.getElementById('phoneNumber');
+    const phoneError = document.getElementById('phoneError');
+    
+    function validatePhoneNumber(phone) {
+      if (!phone) return true; // Allow empty
+      
+      try {
+        const phoneNumber = window.libphonenumber.parsePhoneNumber(phone);
+        return phoneNumber.isValid();
+      } catch (e) {
+        return false;
+      }
+    }
+    
+    phoneInput.addEventListener('blur', function() {
+      const isValid = validatePhoneNumber(this.value);
+      if (!isValid && this.value) {
+        phoneError.classList.remove('hidden');
+        phoneInput.classList.add('border-red-500');
+      } else {
+        phoneError.classList.add('hidden');
+        phoneInput.classList.remove('border-red-500');
+      }
+    });
+    
+    // Format as user types
+    phoneInput.addEventListener('input', function() {
+      try {
+        const phone = window.libphonenumber.parsePhoneNumber(this.value);
+        if (phone.isValid()) {
+          phoneError.classList.add('hidden');
+          phoneInput.classList.remove('border-red-500');
+        }
+      } catch (e) {
+        // Ignore parsing errors during typing
+      }
+    });
+    
     // Payment form submission
     const paymentForm = document.getElementById('paymentForm');
     paymentForm.addEventListener('submit', async function(e) {
       e.preventDefault();
       
-      const phoneNumber = document.getElementById('phoneNumber').value;
+      const phoneNumber = phoneInput.value;
       const bankName = document.getElementById('bankName').value;
+      
+      // Validate phone number before submitting
+      if (!validatePhoneNumber(phoneNumber)) {
+        phoneError.classList.remove('hidden');
+        phoneInput.classList.add('border-red-500');
+        return;
+      }
       
       try {
         const response = await fetch('/api/v1/landlord/profile/payment', {

@@ -80,6 +80,7 @@ async def update_payment_info(
         uow = UnitOfWork(sess)
         service = LandlordProfileService(uow)
         
+        # The validation happens inside update_payment_info
         success = await service.update_payment_info(
             landlord_id=landlord_id,
             phone_number=payment_info.phone_number,
@@ -90,6 +91,9 @@ async def update_payment_info(
             raise HTTPException(status_code=500, detail="Failed to update payment information")
         
         return {"success": True}
+    except HTTPException as e:
+        # Re-raise HTTP exceptions to preserve status codes
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
 
