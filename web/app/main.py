@@ -1,6 +1,6 @@
 """Main application entry point using clean architecture."""
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -248,3 +248,8 @@ async def agency_bookings_page(request: Request):
 @app.get("/agency/departures", response_class=HTMLResponse, dependencies=[Depends(role_required("agency"))])
 async def agency_departures_page(request: Request):
     return templates.TemplateResponse("agency/departures.html", {"request": request})
+
+# Add this route for timezone testing
+@app.get("/timezone-test", response_class=HTMLResponse)
+async def timezone_test(request: Request):
+    return templates.TemplateResponse("timezone_test.html", {"request": request})

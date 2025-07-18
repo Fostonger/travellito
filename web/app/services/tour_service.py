@@ -1,6 +1,8 @@
+import re
+from datetime import datetime, time, timedelta
 from typing import Optional, List, Dict, Any
-from datetime import datetime, time
 from decimal import Decimal
+import pytz
 
 from app.core import BaseService, NotFoundError, ValidationError, BusinessLogicError
 from app.infrastructure.repositories import TourRepository
@@ -15,6 +17,41 @@ class TourService(BaseService):
     def __init__(self, session, tour_repository: Optional[TourRepository] = None):
         super().__init__(session)
         self.tour_repository = tour_repository or TourRepository(session)
+    
+    def _parse_timezone(self, timezone_str: str):
+        """
+        Parse a timezone string which can be either:
+        - A standard IANA timezone name (e.g., 'Europe/Moscow')
+        - An offset-based string (e.g., 'UTC+03:00')
+        
+        Returns a pytz timezone object
+        """
+        # If it's a standard timezone name, try to use it directly
+        try:
+            return pytz.timezone(timezone_str)
+        except pytz.exceptions.UnknownTimeZoneError:
+            pass
+        
+        # Try to parse as offset-based timezone (UTC±XX:XX)
+        offset_pattern = r"^UTC([+-])(\d{2}):(\d{2})$"
+        match = re.match(offset_pattern, timezone_str)
+        
+        if match:
+            sign, hours, minutes = match.groups()
+            offset_hours = int(hours)
+            offset_minutes = int(minutes)
+            
+            # Calculate total offset in minutes
+            total_offset = offset_hours * 60 + offset_minutes
+            if sign == "-":
+                total_offset = -total_offset
+            
+            # Get a fixed offset timezone
+            return pytz.FixedOffset(total_offset)
+        
+        # Default to UTC if we couldn't parse the timezone
+        print(f"Could not parse timezone '{timezone_str}', using UTC")
+        return pytz.UTC
     
     async def create_tour(
         self,
@@ -31,6 +68,7 @@ class TourService(BaseService):
         repeat_type: str = "none",
         repeat_weekdays: Optional[List[int]] = None,
         repeat_time_str: Optional[str] = None,
+        timezone: str = "UTC",
     ) -> Tour:
         """Create a new tour with validation"""
         
@@ -43,7 +81,19 @@ class TourService(BaseService):
         if repeat_time_str:
             try:
                 hour, minute = map(int, repeat_time_str.split(":"))
-                repeat_time = time(hour=hour, minute=minute)
+                
+                # Parse timezone
+                tz = self._parse_timezone(timezone)
+                
+                # Get current date (doesn't matter which date we use)
+                today = datetime.now().date()
+                # Create datetime in the local timezone
+                local_datetime = tz.localize(datetime.combine(today, time(hour=hour, minute=minute)))
+                # Convert to UTC
+                utc_datetime = local_datetime.astimezone(pytz.UTC)
+                # Extract only the time component
+                repeat_time = utc_datetime.time()
+                
             except (ValueError, AttributeError):
                 raise ValidationError("Invalid time format. Use HH:MM", field="repeat_time")
         
@@ -156,9 +206,33 @@ class TourService(BaseService):
         if "repeat_time" in update_data and update_data["repeat_time"]:
             try:
                 hour, minute = map(int, update_data["repeat_time"].split(":"))
-                update_data["repeat_time"] = time(hour=hour, minute=minute)
+                
+                # Handle timezone conversion if provided
+                timezone = update_data.get("timezone")
+                if not timezone:
+                    print("No timezone in update data, using UTC")
+                    timezone = "UTC"
+                else:
+                    print(f"Using timezone from request: {timezone}")
+                
+                # Parse timezone
+                tz = self._parse_timezone(timezone)
+                
+                # Get current date (doesn't matter which date we use)
+                today = datetime.now().date()
+                # Create datetime in the local timezone
+                local_datetime = tz.localize(datetime.combine(today, time(hour=hour, minute=minute)))
+                # Convert to UTC
+                utc_datetime = local_datetime.astimezone(pytz.UTC)
+                # Extract only the time component
+                update_data["repeat_time"] = utc_datetime.time()
+                
             except (ValueError, AttributeError):
                 raise ValidationError("Invalid time format. Use HH:MM", field="repeat_time")
+        
+        # Remove timezone from update_data after using it for conversion
+        if "timezone" in update_data:
+            del update_data["timezone"]
         
         # Handle category_ids separately
         category_ids = None

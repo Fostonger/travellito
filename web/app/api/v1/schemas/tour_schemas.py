@@ -17,6 +17,7 @@ class TourIn(BaseModel):
     repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
     repeat_weekdays: Optional[List[int]] = None  # 0=Mon .. 6=Sun
     repeat_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    timezone: Optional[str] = "UTC"  # Add timezone field with default UTC
     
     @field_validator('category_ids')
     def validate_category_ids(cls, v):
@@ -39,6 +40,7 @@ class TourUpdate(BaseModel):
     repeat_type: Optional[str] = Field(None, pattern="^(none|daily|weekly)$")
     repeat_weekdays: Optional[List[int]] = None  # 0=Mon .. 6=Sun
     repeat_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    timezone: Optional[str] = None  # Add timezone field
     
     @field_validator('category_ids')
     def validate_category_ids(cls, v):
@@ -62,6 +64,7 @@ class TourOut(BaseModel):
     repeat_type: Optional[str] = None
     repeat_weekdays: Optional[List[int]] = None
     repeat_time: Optional[str] = None
+    local_time: Optional[str] = None  # Add local time representation
 
     model_config = {
         "from_attributes": True,

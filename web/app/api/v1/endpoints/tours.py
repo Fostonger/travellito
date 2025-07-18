@@ -1,5 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, status, Query
+import pytz
+from datetime import datetime, time
 
 from app.api.v1.schemas import TourIn, TourOut, TourUpdate, ImagesOut, TicketCategoryIn, TicketCategoryOut
 from app.api.v1.endpoints.utils import get_agency_id
@@ -10,6 +12,40 @@ from app.core import BaseError
 
 
 router = APIRouter()
+
+def convert_to_local_time(tour, timezone_str="UTC"):
+    """Convert UTC time to local time for frontend display"""
+    if not tour.repeat_time:
+        return tour
+
+    try:
+        # Validate and parse the timezone
+        try:
+            tz = pytz.timezone(timezone_str)
+            print(f"Converting time using timezone: {timezone_str}")
+        except (pytz.exceptions.UnknownTimeZoneError, AttributeError):
+            print(f"Invalid timezone '{timezone_str}', falling back to UTC")
+            tz = pytz.UTC
+        
+        # Use today's date with the tour's time to create a datetime object
+        today = datetime.now().date()
+        utc_dt = datetime.combine(today, tour.repeat_time).replace(tzinfo=pytz.UTC)
+        
+        # Convert to the requested timezone
+        local_dt = utc_dt.astimezone(tz)
+        
+        # Format the time as HH:MM
+        local_time = local_dt.strftime("%H:%M")
+        
+        # Add the local time to the tour object
+        setattr(tour, 'local_time', local_time)
+    except Exception as e:
+        print(f"Error converting time: {str(e)}")
+        # Set local_time to repeat_time as fallback
+        if hasattr(tour, 'repeat_time') and tour.repeat_time:
+            setattr(tour, 'local_time', tour.repeat_time.strftime("%H:%M"))
+    
+    return tour
 
 @router.get("/list", response_model=List[TourOut])
 async def list_tours(
@@ -30,6 +66,10 @@ async def list_tours(
 
     print(tours)
     
+    # Convert UTC times to local times
+    for tour in tours:
+        convert_to_local_time(tour)
+    
     return [TourOut.model_validate(tour) for tour in tours]
 
 
@@ -42,6 +82,9 @@ async def create_tour(
     """Create a new tour"""
     agency_id = get_agency_id(user)
     service = TourService(sess)
+    
+    # Ensure timezone is never None
+    timezone = payload.timezone if payload.timezone is not None else "UTC"
     
     tour = await service.create_tour(
         agency_id=agency_id,
@@ -57,6 +100,7 @@ async def create_tour(
         repeat_type=payload.repeat_type or "none",
         repeat_weekdays=payload.repeat_weekdays,
         repeat_time_str=payload.repeat_time,
+        timezone=timezone,  # Pass the timezone parameter
     )
     
     await sess.commit()
@@ -80,6 +124,16 @@ async def update_tour(
     
     update_data = payload.model_dump(exclude_unset=True)
     
+    # Ensure timezone is properly passed to the service
+    # if repeat_time is being updated
+    if "repeat_time" in update_data:
+        # Add default timezone if not provided but time is being updated
+        if "timezone" not in update_data or not update_data["timezone"]:
+            print("No timezone provided, using UTC as fallback")
+            update_data["timezone"] = "UTC"
+        else:
+            print(f"Using timezone from request: {update_data['timezone']}")
+    
     # Ensure category_ids is properly passed to the service
     tour = await service.update_tour(
         tour_id=tour_id,
@@ -91,6 +145,10 @@ async def update_tour(
     
     # Get the tour with relationships eagerly loaded to avoid lazy loading issues
     tour_with_categories = await service.get_tour(tour_id, agency_id)
+    
+    # Convert UTC time to local time using the timezone from the request
+    timezone_str = update_data.get("timezone", "UTC") if "repeat_time" in update_data else "UTC"
+    convert_to_local_time(tour_with_categories, timezone_str)
     
     return TourOut.model_validate(tour_with_categories)
 
@@ -232,5 +290,8 @@ async def get_tour(
     
     # Get tour and verify ownership
     tour = await service.get_tour(tour_id, agency_id)
+    
+    # Convert UTC time to local time
+    convert_to_local_time(tour)
     
     return TourOut.model_validate(tour) 

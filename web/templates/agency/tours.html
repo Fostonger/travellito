@@ -120,6 +120,9 @@
       <div id="timeSection" class="hidden">
         <label class="block text-sm font-medium mb-1" for="repeatTime">Время</label>
         <input type="time" id="repeatTime" class="w-full px-3 py-2 border rounded" value="09:00">
+        <div class="text-xs text-gray-500 mt-1">
+          Время указано в вашем часовом поясе: <span id="userTimezoneDisplay">определение...</span>
+        </div>
       </div>
       
       <div id="weekdaysSection" class="hidden">
@@ -153,6 +156,9 @@
         <button type="button" id="cancelScheduleModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
         <button type="submit" class="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700">Сохранить</button>
       </div>
+      
+      <!-- Hidden input for timezone -->
+      <input type="hidden" id="userTimezone" name="userTimezone">
     </form>
   </div>
 </div>
@@ -200,144 +206,240 @@
 
 <script src="https://api-maps.yandex.ru/2.1/?apikey=538e9cdd-117d-4fae-824a-767930c27f1e&lang=ru_RU" type="text/javascript"></script>
 <script>
-(function(){
-  const modal = document.getElementById('tourModal');
-  const newBtn = document.getElementById('newTourBtn');
-  const cancelBtn = document.getElementById('cancelModal');
-
-  const openModal = () => { modal.classList.remove('hidden'); };
-  const closeModal = () => { 
-    modal.classList.add('hidden'); 
-    resetCategorySelection();
-  };
-
-  newBtn.addEventListener('click', async () => {
-    await preloadSelects();
-    openModal();
-  });
-  cancelBtn.addEventListener('click', closeModal);
+document.addEventListener('DOMContentLoaded', function() {
+  // Tour array to store data in memory
+  let tourRows = [];
+  let ticketRows = [];
+  let selectedFiles = [];
   
-  function resetCategorySelection() {
-    selectedCategories.innerHTML = '';
-    selectedCategoryIds.clear();
-    updateHiddenInput();
-    updateCategoryDropdown();
+  // Define weekdaysRU early before it's used
+  const weekdaysRU = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  
+  // Format time for display
+  function fmtTime(t){return t?.slice(0,5);} // HH:MM
+  
+  function formatScheduleBadge(t){
+    // Use local_time if available, otherwise fall back to repeat_time
+    const timeToShow = t.local_time || fmtTime(t.repeat_time);
+    
+    if(t.repeat_type==='daily') return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow}</span>`;
+    if(t.repeat_type==='weekly'){
+      const days=t.repeat_weekdays.map(i=>weekdaysRU[i]).join(' ');
+      return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${timeToShow} — ${days}</span>`;
+    }
+    return '<span class="inline-block px-2 bg-gray-100 rounded">+</span>';
   }
-
-  const loadTours = async () => {
-    const res = await fetch('/api/v1/agency/tours/list');
-    if (!res.ok) return;
-    const tours = await res.json();
-    const body = document.getElementById('toursBody');
-    body.innerHTML = '';
-    tours.forEach(t => {
-      const tr = document.createElement('tr');
-      const badge = formatScheduleBadge(t);
-      tr.innerHTML = `
-        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${t.id}</td>
-        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
-          ${t.title}
-          ${t.address ? `<div class="text-xs text-gray-500 mt-1">📍 ${t.address}</div>` : ''}
-        </td>
-        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
-          <button data-id="${t.id}" class="viewTickets px-2 rounded bg-blue-200 hover:bg-blue-300">Билеты</button>
-        </td>
-        <td class='px-6 py-4 whitespace-nowrap text-sm space-x-1'>
-          ${t.repeat_type ? 
-            `<button data-id="${t.id}" class="editSched w-full text-left px-0">${badge}</button>` : 
-            `${badge} <button data-id="${t.id}" class="addSched px-2 rounded bg-gray-200 hover:bg-gray-300">＋</button>`
-          }
-        </td>
-        <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'>
-          <button data-id="${t.id}" data-lat="${t.latitude || ''}" data-lng="${t.longitude || ''}" 
-                  data-address="${t.address || ''}" class="viewLocation px-2 rounded bg-cyan-200 hover:bg-cyan-300">
-            🗺️
-          </button>
-        </td>`;
-      body.appendChild(tr);
-    });
-    body.querySelectorAll('.addSched').forEach(btn=>btn.addEventListener('click', (e)=>{
-      const tid = e.target.getAttribute('data-id');
-      openRecModal(tours.find(x=>x.id==tid));
-    }));
-    
-    body.querySelectorAll('.editSched').forEach(btn=>btn.addEventListener('click', (e)=>{
-      const tid = e.currentTarget.getAttribute('data-id');
-      openRecModal(tours.find(x=>x.id==tid));
-    }));
-    
-    body.querySelectorAll('.viewTickets').forEach(btn=>btn.addEventListener('click', (e)=>{
-      const tid = e.target.getAttribute('data-id');
-      openTicketsModal(tid);
-    }));
-    
-    body.querySelectorAll('.viewLocation').forEach(btn=>btn.addEventListener('click', (e)=>{
-      const lat = e.target.getAttribute('data-lat');
-      const lng = e.target.getAttribute('data-lng');
-      const address = e.target.getAttribute('data-address');
-      openLocationModal(lat, lng, address);
-    }));
-  };
-
-  const ticketRows = [];
-
-  // Initial fetch
-  loadTours();
-
-  document.getElementById('addTicketBtn').addEventListener('click', () => {
-    const clsSel = document.getElementById('ticketClassSel');
-    const priceInput = document.getElementById('ticketPriceInput');
-    const clsId = clsSel.value;
-    const clsName = clsSel.options[clsSel.selectedIndex].text;
-    const price = priceInput.value;
-    if (!clsId || !price) return;
-    ticketRows.push({ ticket_class_id: parseInt(clsId), name: clsName, price });
-    renderTicketRows();
-    priceInput.value = '';
-  });
-
-  const renderTicketRows = () => {
-    const container = document.getElementById('ticketRows');
-    container.innerHTML = ticketRows.map((r,i)=>`
-      <div class="flex justify-between items-center bg-gray-50 px-3 py-1 rounded">
-        <span>${r.name}</span>
-        <span>${r.price}</span>
-        <button data-idx="${i}" class="delTicket text-red-600">×</button>
-      </div>
-    `).join('');
-    container.querySelectorAll('.delTicket').forEach(btn => {
-      btn.addEventListener('click', (e)=>{
-        const idx = e.target.getAttribute('data-idx');
-        ticketRows.splice(idx,1);
-        renderTicketRows();
-      });
-    });
-  };
-
-  async function preloadSelects(){
-    // cities
-    const cities = await fetch('/api/v1/public/cities').then(r=>r.json()).catch(()=>[]);
-    const citySel = document.getElementById('tourCity');
-    citySel.innerHTML = '<option value="">—</option>' + cities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-    
-    // ticket classes
-    const tClass = await fetch('/api/v1/public/ticket_classes').then(r=>r.json()).catch(()=>[]);
-    const clsSel = document.getElementById('ticketClassSel');
-    clsSel.innerHTML = '<option value="">Тип</option>' + tClass.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-    
-    // repetition types
-    await loadRepetitionTypes();
-  }
-
-  // Handle drag and drop image functionality
+  
+  // Various DOM elements
+  const toursTable = document.getElementById('toursTable');
+  const toursBody = document.getElementById('toursBody');
+  const tourModal = document.getElementById('tourModal');
+  const tourForm = document.getElementById('tourForm');
+  const tourTitleInput = document.getElementById('tourTitle');
+  const tourDescInput = document.getElementById('tourDesc');
+  const tourCitySelect = document.getElementById('tourCity');
+  const tourImages = document.getElementById('tourImages');
   const dropArea = document.getElementById('dropArea');
-  const imageInput = document.getElementById('tourImages');
-  const selectImagesBtn = document.getElementById('selectImagesBtn');
   const imagePreviewCarousel = document.getElementById('imagePreviewCarousel');
   const previewContainer = document.getElementById('previewContainer');
-  const selectedFiles = [];
+  const ticketClassSelect = document.getElementById('ticketClassSel');
+  const ticketPriceInput = document.getElementById('ticketPriceInput');
+  const ticketRowsContainer = document.getElementById('ticketRows');
+  const cancelBtn = document.getElementById('cancelModal');
+  const newTourBtn = document.getElementById('newTourBtn');
+  
+  // Helper function to get browser timezone with fallback to offset format
+  function getBrowserTimezone() {
+    try {
+      // Try to get the IANA timezone name (e.g., "Europe/Moscow")
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timezone;
+      
+      // If timezone is "UTC" but we actually have a non-zero offset, use offset-based format instead
+      if (timezone === "UTC") {
+        const date = new Date();
+        const offset = -date.getTimezoneOffset();
+        
+        // If offset is 0, it really is UTC
+        if (offset === 0) {
+          return "UTC";
+        }
+        
+        // Otherwise, create a timezone string with the offset
+        const offsetHours = Math.abs(Math.floor(offset / 60));
+        const offsetMinutes = Math.abs(offset % 60);
+        const offsetSign = offset >= 0 ? "+" : "-";
+        return `UTC${offsetSign}${offsetHours.toString().padStart(2, '0')}:${offsetMinutes.toString().padStart(2, '0')}`;
+      }
+      
+      return timezone || getTimezoneOffset(); // Fall back to offset format if null
+    } catch (e) {
+      console.error("Error detecting browser timezone:", e);
+      return getTimezoneOffset(); // Fall back to offset format
+    }
+  }
+
+  // Get timezone as offset format (UTC+XX:XX)
+  function getTimezoneOffset() {
+    try {
+      const date = new Date();
+      const offset = -date.getTimezoneOffset();
+      const offsetHours = Math.abs(Math.floor(offset / 60));
+      const offsetMinutes = Math.abs(offset % 60);
+      const offsetSign = offset >= 0 ? "+" : "-";
+      return `UTC${offsetSign}${offsetHours.toString().padStart(2, '0')}:${offsetMinutes.toString().padStart(2, '0')}`;
+    } catch (e) {
+      console.error("Error calculating timezone offset:", e);
+      return "UTC";
+    }
+  }
+
+  // Helper function to format timezone for display
+  function formatTimezoneForDisplay(timezone) {
+    try {
+      // If it's already an offset-based timezone (like UTC+03:00), just return it
+      if (timezone.startsWith('UTC+') || timezone.startsWith('UTC-')) {
+        return timezone;
+      }
+      
+      // If it's a named timezone (like Europe/Moscow), append the offset
+      const date = new Date();
+      const offset = -date.getTimezoneOffset();
+      const offsetHours = Math.abs(Math.floor(offset / 60));
+      const offsetMinutes = Math.abs(offset % 60);
+      const offsetSign = offset >= 0 ? "+" : "-";
+      const formattedOffset = `${offsetSign}${offsetHours.toString().padStart(2, '0')}:${offsetMinutes.toString().padStart(2, '0')}`;
+      
+      return `${timezone} (UTC${formattedOffset})`;
+    } catch (e) {
+      console.error("Error formatting timezone:", e);
+      return timezone;
+    }
+  }
+
+  // Function to load cities
+  async function loadCities() {
+    try {
+      const cities = await fetch('/api/v1/public/cities').then(r => r.json()).catch(() => []);
+      const citySel = document.getElementById('tourCity');
+      citySel.innerHTML = '<option value="">—</option>' + 
+        cities.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    } catch (err) {
+      console.error('Error loading cities:', err);
+    }
+  }
+
+  // Function to load ticket classes
+  async function loadTicketClasses() {
+    try {
+      const tClass = await fetch('/api/v1/public/ticket_classes').then(r => r.json()).catch(() => []);
+      const clsSel = document.getElementById('ticketClassSel');
+      clsSel.innerHTML = '<option value="">Тип</option>' + 
+        tClass.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    } catch (err) {
+      console.error('Error loading ticket classes:', err);
+    }
+  }
+  
+  // Function to load tours from API
+  async function loadTours() {
+    try {
+      const res = await fetch('/api/v1/agency/tours/list');
+      if (!res.ok) throw new Error('Failed to load tours');
+      
+      tourRows = await res.json();
+      renderTours();
+    } catch (err) {
+      console.error('Error loading tours:', err);
+      toursBody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Ошибка загрузки экскурсий</td></tr>`;
+    }
+  }
+  
+  // Function to render tours in the table
+  function renderTours() {
+    if (!tourRows || tourRows.length === 0) {
+      toursBody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Экскурсий пока нет</td></tr>`;
+      return;
+    }
+    
+    toursBody.innerHTML = tourRows.map(tour => `
+      <tr>
+        <td class="px-6 py-4 whitespace-nowrap">${tour.id}</td>
+        <td class="px-6 py-4">${tour.title}</td>
+        <td class="px-6 py-4">
+          <button data-id="${tour.id}" class="ticketsBtn px-2 py-1 text-xs rounded bg-blue-100 hover:bg-blue-200">Управление</button>
+        </td>
+        <td class="px-6 py-4">
+          <button data-id="${tour.id}" class="scheduleBtn">${formatScheduleBadge(tour)}</button>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <div class="flex justify-end space-x-2">
+            <button data-id="${tour.id}" class="editTourBtn p-1 text-amber-600 hover:text-amber-800">✎</button>
+            <button data-id="${tour.id}" class="deleteTourBtn p-1 text-red-600 hover:text-red-800">×</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+    
+    // Add event listeners to buttons
+    toursBody.querySelectorAll('.scheduleBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tour = tourRows.find(t => t.id === parseInt(btn.getAttribute('data-id')));
+        openRecModal(tour);
+      });
+    });
+    
+    toursBody.querySelectorAll('.ticketsBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openTicketsModal(parseInt(btn.getAttribute('data-id')));
+      });
+    });
+    
+    // Edit and delete buttons
+    toursBody.querySelectorAll('.editTourBtn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        // Load tour details and open edit modal
+        const tourId = parseInt(btn.getAttribute('data-id'));
+        // ... (edit implementation)
+      });
+    });
+    
+    toursBody.querySelectorAll('.deleteTourBtn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Вы уверены, что хотите удалить эту экскурсию?')) return;
+        
+        const tourId = parseInt(btn.getAttribute('data-id'));
+        try {
+          const res = await fetch(`/api/v1/agency/tours/${tourId}`, {method: 'DELETE'});
+          if (!res.ok) throw new Error('Failed to delete tour');
+          
+          // Reload tours
+          loadTours();
+        } catch (err) {
+          console.error('Error deleting tour:', err);
+          alert('Ошибка при удалении экскурсии');
+        }
+      });
+    });
+  }
+  
+  // Now that all functions are defined, load the data
+  loadTours();
+  loadCities();
+  loadTicketClasses();
+  
+  // Handle drag and drop image functionality
+  // Use the already declared variables instead of redeclaring them
+  // const dropArea = document.getElementById('dropArea');
+  // const imageInput = document.getElementById('tourImages');
+  // const selectImagesBtn = document.getElementById('selectImagesBtn');
+  // const imagePreviewCarousel = document.getElementById('imagePreviewCarousel');
+  // const previewContainer = document.getElementById('previewContainer');
+  // const selectedFiles = [];
 
   // Open file dialog when button is clicked
+  const selectImagesBtn = document.getElementById('selectImagesBtn');
+  const imageInput = document.getElementById('tourImages');
+
   selectImagesBtn.addEventListener('click', () => {
     imageInput.click();
   });
@@ -512,84 +614,10 @@
   }
   
   // Initialize map when modal is opened
-  document.getElementById('newTourBtn').addEventListener('click', function() {
+  newTourBtn.addEventListener('click', function() {
     setTimeout(initMap, 100); // Small delay to ensure DOM is ready
   });
   
-  document.getElementById('tourForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const title = document.getElementById('tourTitle').value.trim();
-    const description = document.getElementById('tourDesc').value.trim();
-    const city_id = document.getElementById('tourCity').value || null;
-    const category_ids = document.getElementById('tourCats').value ? 
-                       document.getElementById('tourCats').value.split(',').map(id => parseInt(id)) : [];
-    const address = document.getElementById('tourAddress').value.trim();
-    const latitude = document.getElementById('latValue').textContent !== '—' ? 
-                     parseFloat(document.getElementById('latValue').textContent) : null;
-    const longitude = document.getElementById('lngValue').textContent !== '—' ? 
-                      parseFloat(document.getElementById('lngValue').textContent) : null;
-    
-    // Validate that at least one ticket category is added
-    if (!title || ticketRows.length === 0) {
-      alert('Пожалуйста, добавьте хотя бы один тип билета');
-      return;
-    }
-    
-    // Check if standard ticket (id=0) is included
-    const hasStandardTicket = ticketRows.some(t => t.ticket_class_id === 0);
-    if (!hasStandardTicket) {
-      alert('Необходимо добавить стандартный тип билета (id=0)');
-      return;
-    }
-    
-    const res = await fetch('/api/v1/agency/tours/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        title, 
-        description, 
-        city_id, 
-        category_ids,
-        address,
-        latitude,
-        longitude
-      })
-    });
-    if (!res.ok) { alert('Ошибка при создании экскурсии'); return; }
-    closeModal();
-    document.getElementById('tourForm').reset();
-    const { id } = await res.json();
-
-    // Upload images if any
-    if (selectedFiles.length > 0){
-      const fd = new FormData();
-      for (const f of selectedFiles) fd.append('files', f);
-      await fetch(`/api/v1/agency/tours/${id}/images`, {method:'POST', body:fd});
-    }
-
-    // Add ticket categories
-    for (const tc of ticketRows){
-      await fetch(`/api/v1/agency/tours/${id}/categories`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(tc)
-      });
-    }
-
-    ticketRows.length = 0;
-    loadTours();
-  });
-
-  function fmtTime(t){return t?.slice(0,5);} // HH:MM
-  const weekdaysRU=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-  function formatScheduleBadge(t){
-    if(t.repeat_type==='daily') return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${fmtTime(t.repeat_time)}</span>`;
-    if(t.repeat_type==='weekly'){
-      const days=t.repeat_weekdays.map(i=>weekdaysRU[i]).join(' ');
-      return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${fmtTime(t.repeat_time)} — ${days}</span>`;
-    }
-    return '<span class="inline-block px-2 bg-gray-100 rounded">+</span>';
-  }
-
   // Schedule modal
   const scheduleModal = document.getElementById('scheduleModal');
   const scheduleForm = document.getElementById('scheduleForm');
@@ -638,6 +666,21 @@
     }
   }
 
+  // Get the timezone offset string in standard format (UTC±XX:XX)
+  function getTimezoneString() {
+    const offset = -new Date().getTimezoneOffset(); // minutes (note: getTimezoneOffset returns opposite sign)
+    const sign = offset >= 0 ? '+' : '-';
+    const absOffset = Math.abs(offset);
+    const hours = Math.floor(absOffset / 60).toString().padStart(2, '0');
+    const minutes = (absOffset % 60).toString().padStart(2, '0');
+    return `UTC${sign}${hours}:${minutes}`;
+  }
+
+  // Helper function for timezone handling - always returns the offset format
+  function getTimezone() {
+    return getTimezoneString();
+  }
+
   // Open schedule modal
   async function openRecModal(tour) {
     // Load repetition types if not already loaded
@@ -652,7 +695,9 @@
     
     // Set time if exists
     if (tour.repeat_time) {
-      repeatTimeInput.value = tour.repeat_time.slice(0, 5); // HH:MM
+      // Use local_time if available, otherwise use repeat_time
+      const timeToDisplay = tour.local_time || tour.repeat_time.slice(0, 5);
+      repeatTimeInput.value = timeToDisplay;
     } else {
       repeatTimeInput.value = '09:00';
     }
@@ -669,6 +714,11 @@
     // Show/hide sections based on type
     timeSection.classList.toggle('hidden', repeatTypeSelect.value === 'none');
     weekdaysSection.classList.toggle('hidden', repeatTypeSelect.value !== 'weekly');
+    
+    // Display the timezone info
+    const timezone = getTimezone();
+    document.getElementById('userTimezoneDisplay').textContent = timezone;
+    document.getElementById('userTimezone').value = timezone;
     
     // Show modal
     scheduleModal.classList.remove('hidden');
@@ -905,24 +955,36 @@
         .map(cb => parseInt(cb.value));
     }
     
+    // Use timezone offset directly
+    const timezone = getTimezone();
+    console.log("Using timezone:", timezone);
+    
     try {
+      // Create the payload
+      const payload = {
+        repeat_type: type,
+        repeat_weekdays: weekdays,
+        repeat_time: time,
+        timezone: timezone
+      };
+      
+      console.log("Sending payload:", payload);
+      
       const res = await fetch(`/api/v1/agency/tours/${tourId}`, {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          repeat_type: type,
-          repeat_weekdays: weekdays,
-          repeat_time: time
-        })
+        body: JSON.stringify(payload)
       });
       
       if (!res.ok) {
-        throw new Error('Failed to update schedule');
+        const errorText = await res.text();
+        throw new Error(`Failed to update schedule: ${errorText}`);
       }
       
       scheduleModal.classList.add('hidden');
       loadTours();
     } catch (err) {
+      console.error("Schedule update error:", err);
       alert('Error: ' + err.message);
     }
   });
@@ -1051,6 +1113,6 @@
       console.error('Error loading tour categories:', err);
     }
   }
-})();
+});
 </script>
 {% endblock %} 

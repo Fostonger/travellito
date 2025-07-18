@@ -20,3 +20,4 @@ reportlab==4.0.4  # PDF generation for landlord QR bundles
 argon2-cffi>=23.1
 slowapi>=0.1.5
 redis==5.0.4
+pytz==2024.1  # Timezone handling for proper time conversion
