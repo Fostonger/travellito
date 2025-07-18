@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from app.security import role_required
 from app.api.v1.endpoints import (
     tours, departures, bookings, auth, admin, landlord, public, managers,
-    external, broadcast, referrals
+    external, broadcast, referrals, landlord_profile
 )
 
 
@@ -51,7 +51,15 @@ api_v1_router.include_router(
 api_v1_router.include_router(
     landlord.router,
     prefix="/landlord",
-    tags=["landlord"]
+    tags=["landlord"],
+    dependencies=[Depends(role_required("landlord"))]
+)
+
+# Include landlord profile endpoints
+api_v1_router.include_router(
+    landlord_profile.router,
+    prefix="/landlord",
+    tags=["landlord-profile"]
 )
 
 # Include public endpoints (public access)

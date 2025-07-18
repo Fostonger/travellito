@@ -35,6 +35,8 @@ class Landlord(Base):
     user_id   = mapped_column(ForeignKey("users.id"), nullable=True)
     referral_code = mapped_column(String(64), unique=True, default=_gen_referral_code)
     qr_sent   = mapped_column(DateTime)
+    phone_number = mapped_column(String(32), nullable=True)
+    bank_name = mapped_column(String(120), nullable=True)
 
     apartments = relationship("Apartment", back_populates="landlord")
 

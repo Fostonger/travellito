@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Token Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Token Debugging</h1>
+
+    <div>
+        <p>Current token in localStorage:</p>
+        <pre id="currentToken">Not found</pre>
+    </div>
+
+    <div>
+        <h3>Test Endpoints</h3>
+        <button id="testDebugToken">Test Debug Token</button>
+        <button id="testProfilePayment">Test Profile Payment API</button>
+        <button id="testLogout">Test Logout API</button>
+    </div>
+
+    <div class="result">
+        <h3>Result:</h3>
+        <pre id="result">No request sent yet.</pre>
+    </div>
+
+    <script>
+        // Display current token
+        const tokenEl = document.getElementById('currentToken');
+        const resultEl = document.getElementById('result');
+        const token = localStorage.getItem('token');
+        
+        if (token) {
+            tokenEl.textContent = `${token.substring(0, 10)}...`;
+        }
+        
+        // Test debug token endpoint
+        document.getElementById('testDebugToken').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/v1/landlord/debug-token', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                resultEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // Test payment endpoint
+        document.getElementById('testProfilePayment').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/v1/landlord/profile/payment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        phone_number: "123456789",
+                        bank_name: "Test Bank"
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultEl.textContent = `Success: ${JSON.stringify(data)}`;
+                } else {
+                    const errorText = await response.text();
+                    resultEl.textContent = `Error (${response.status}): ${errorText}`;
+                }
+            } catch (error) {
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        // Test logout endpoint
+        document.getElementById('testLogout').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/v1/landlord/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultEl.textContent = `Success: ${JSON.stringify(data)}`;
+                } else {
+                    const errorText = await response.text();
+                    resultEl.textContent = `Error (${response.status}): ${errorText}`;
+                }
+            } catch (error) {
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html> 

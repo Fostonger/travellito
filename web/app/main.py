@@ -253,3 +253,8 @@ async def agency_departures_page(request: Request):
 @app.get("/timezone-test", response_class=HTMLResponse)
 async def timezone_test(request: Request):
     return templates.TemplateResponse("timezone_test.html", {"request": request})
+
+@app.get("/token-test", response_class=HTMLResponse)
+async def token_test_page(request: Request):
+    """Token debugging page."""
+    return templates.TemplateResponse("token_test.html", {"request": request})
