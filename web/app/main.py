@@ -207,8 +207,15 @@ async def landlord_dashboard(request: Request, sess: SessionDep, user=Depends(cu
         })
 
 @app.get("/api/v1/landlord/apartments/new", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
-async def new_apartment_form(request: Request):
-    return templates.TemplateResponse("apartment_form.html", {"request": request})
+async def new_apartment_form(request: Request, sess: SessionDep, user=Depends(current_user)):
+    """Add new apartment page."""
+    # Get landlord data for notification banner
+    landlord = await get_landlord_data(user, sess)
+    
+    return templates.TemplateResponse("apartment_form.html", {
+        "request": request,
+        "landlord": landlord
+    })
 
 @app.get("/signup/landlord", response_class=HTMLResponse)
 def landlord_signup_page(request: Request):
@@ -258,3 +265,22 @@ async def timezone_test(request: Request):
 async def token_test_page(request: Request):
     """Token debugging page."""
     return templates.TemplateResponse("token_test.html", {"request": request})
+
+async def get_landlord_data(user: dict, sess: AsyncSession):
+    """Fetch landlord data for templates.
+    
+    This helper function retrieves landlord information to display notifications.
+    """
+    if not user or user.get("role") != "landlord":
+        return None
+        
+    try:
+        from app.services.landlord_service import LandlordService
+        
+        user_id = int(user["sub"])
+        service = LandlordService(sess)
+        landlord = await service.get_landlord_by_user_id(user_id)
+        return landlord
+    except Exception:
+        # If there's any error, return None to avoid breaking templates
+        return None

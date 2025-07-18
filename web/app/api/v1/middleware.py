@@ -30,15 +30,25 @@ async def exception_handler(request: Request, call_next):
         )
 
 
-async def custom_exception_handler(request: Request, exc: BaseError):
-    """Handler for custom exceptions"""
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": exc.message,
-            "details": exc.details
-        }
-    )
+async def get_landlord_for_templates(request: Request, sess, user):
+    """Get landlord data for templates.
+    
+    This function is used to retrieve landlord data to pass to templates for notification display.
+    """
+    # Only proceed if user is a landlord
+    if not user or user.get("role") != "landlord":
+        return None
+        
+    try:
+        # Import here to avoid circular imports
+        from app.services.landlord_service import LandlordService
+        
+        service = LandlordService(sess)
+        landlord = await service.get_landlord_by_user_id(int(user["sub"]))
+        return landlord
+    except Exception:
+        # If there's any error, return None to avoid breaking templates
+        return None
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
