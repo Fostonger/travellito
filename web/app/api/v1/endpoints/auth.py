@@ -210,6 +210,68 @@ async def telegram_bot_auth(
     return token
 
 
+@router.post("/telegram/webapp")
+async def telegram_webapp_auth(
+    user_data: Dict,
+    sess: SessionDep
+):
+    """Authenticate a user from Telegram WebApp
+    
+    This endpoint is called by the Telegram webapp to authenticate users based on their Telegram data.
+    It creates or updates a user record and returns JWT tokens.
+    """
+    from app.models import User
+    from app.roles import Role
+    
+    if not user_data.get("id"):
+        raise HTTPException(status_code=400, detail="Invalid user data")
+    
+    # Log incoming data for debugging (remove in production)
+    logging.info(f"Telegram WebApp auth attempt with user ID: {user_data.get('id')}")
+    
+    try:
+        # Verify hash from initData (optional but recommended for production)
+        # TODO: Implement proper verification of Telegram WebApp data using the hash
+        
+        # Get or create user
+        user = await User.get_or_create(
+            sess, 
+            user_data,
+            role=Role.bot_user
+        )
+        
+        # Flush the session to ensure the user has an ID before authentication
+        await sess.flush()
+        
+        # Generate tokens
+        service = AuthService(sess)
+        _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
+        
+        await sess.commit()
+        
+        # Return both tokens
+        response = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": {
+                "id": user.id,
+                "role": user.role,
+                "first": user.first,
+                "last": user.last
+            }
+        }
+        
+        logging.info(f"Telegram WebApp auth successful for user {user.id}")
+        return response
+        
+    except Exception as e:
+        logging.error(f"Telegram WebApp auth error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Authentication error: {str(e)}"
+        )
+
+
 @router.post("/introspect")
 async def introspect_token(
     token: str,

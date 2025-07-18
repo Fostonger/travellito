@@ -6,6 +6,7 @@ import App from './pages/App';
 import TourDetail from './pages/TourDetail';
 import Checkout from './pages/Checkout';
 import MyBookings from './pages/MyBookings';
+import TokenRefreshTest from './pages/TokenRefreshTest';
 import { setupAxiosAuth, authenticateWithTelegram } from './auth';
 
 // Setup axios with authentication
@@ -30,6 +31,7 @@ root.render(
         <Route path="/tour/:id" element={<TourDetail />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/bookings" element={<MyBookings />} />
+        <Route path="/token-test" element={<TokenRefreshTest />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
