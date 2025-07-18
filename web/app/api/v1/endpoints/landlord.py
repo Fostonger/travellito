@@ -301,7 +301,7 @@ async def apartments_qr_pdf(
         
         # Use the registered font for text that might contain Cyrillic characters
         pdf.setFont(font_name, 12)
-        label = f"Apartment #{apt.id}" + (f" – {apt.name}" if apt.name else "")
+        label = f"Apartment" + (f" – {apt.name}" if apt.name else "")
         pdf.drawString(x, y - 15, label)
         
         # advance cursor – 2 QR codes per row, 3 rows per page

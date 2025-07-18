@@ -12,7 +12,6 @@
     <table class="min-w-full divide-y divide-gray-200" id="toursTable">
       <thead class="bg-gray-50">
         <tr>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Билеты</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Расписание</th>
@@ -388,7 +387,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     toursBody.innerHTML = tourRows.map(tour => `
       <tr>
-        <td class="px-6 py-4 whitespace-nowrap">${tour.id}</td>
         <td class="px-6 py-4">${tour.title}</td>
         <td class="px-6 py-4">
           <button data-id="${tour.id}" class="ticketsBtn px-2 py-1 text-xs rounded bg-blue-100 hover:bg-blue-200">Управление</button>

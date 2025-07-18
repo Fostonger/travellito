@@ -12,48 +12,22 @@
     </div>
   </div>
 
-  <!-- Debug section -->
-  <div id="debugInfo" class="mb-6 p-4 bg-gray-100 rounded-lg text-xs font-mono overflow-auto max-h-40 hidden">
-    <div><strong>Current URL:</strong> <span id="currentUrl"></span></div>
-    <div><strong>API URL:</strong> <span id="apiUrl"></span></div>
-    <div><strong>Response:</strong> <pre id="apiResponse"></pre></div>
-  </div>
-  <div class="mb-4">
-    <button id="toggleDebug" class="text-sm text-gray-500 underline">Show Debug Info</button>
-  </div>
-
   <!-- Bookings list -->
   <div id="bookingsContainer"></div>
 </div>
 
 <script>
 (function(){
-  // Debug helpers
-  document.getElementById('currentUrl').textContent = window.location.href;
-  document.getElementById('toggleDebug').addEventListener('click', function() {
-    const debugSection = document.getElementById('debugInfo');
-    if (debugSection.classList.contains('hidden')) {
-      debugSection.classList.remove('hidden');
-      this.textContent = 'Hide Debug Info';
-    } else {
-      debugSection.classList.add('hidden');
-      this.textContent = 'Show Debug Info';
-    }
-  });
 
   const fetchBookings = async () => {
     try {
       const url = '/api/v1/agency/bookings/';
-      document.getElementById('apiUrl').textContent = url;
-      
       const res = await fetch(url);
-      
       const data = await res.json();
-      document.getElementById('apiResponse').innerHTML = JSON.stringify(data, null, 2).substring(0, 500) + '...';
       
       return data || [];
     } catch (err) {
-      document.getElementById('apiResponse').innerHTML = `Error: ${err.message}`;
+      console.error('Error fetching bookings:', err);
     }
   };
 
@@ -92,7 +66,6 @@
           <table class="min-w-full divide-y divide-gray-200 text-sm">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">ID</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Дата</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Турист</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Телефон</th>
@@ -105,7 +78,6 @@
             <tbody class="divide-y divide-gray-200">
               ${rows.map(r => `
                 <tr class="${r.viewed ? '' : 'bg-amber-50'}">
-                  <td class="px-4 py-2">${r.booking_id}</td>
                   <td class="px-4 py-2">${new Date(r.booking_date).toLocaleString()}</td>
                   <td class="px-4 py-2">${r.customer_name}</td>
                   <td class="px-4 py-2">${r.customer_phone}</td>
