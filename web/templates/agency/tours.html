@@ -215,16 +215,41 @@ document.addEventListener('DOMContentLoaded', function() {
   // Define weekdaysRU early before it's used
   const weekdaysRU = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   
-  // Format time for display
-  function fmtTime(t){return t?.slice(0,5);} // HH:MM
-  
-  function formatScheduleBadge(t){
-    // Use local_time if available, otherwise fall back to repeat_time
-    const timeToShow = t.local_time || fmtTime(t.repeat_time);
+  // Format time for display with proper timezone conversion
+  function fmtTime(utcTimeStr) {
+    if (!utcTimeStr) return '';
     
-    if(t.repeat_type==='daily') return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow}</span>`;
-    if(t.repeat_type==='weekly'){
-      const days=t.repeat_weekdays.map(i=>weekdaysRU[i]).join(' ');
+    // Parse the UTC time (format is typically "HH:MM:SS" from API)
+    const [hours, minutes] = utcTimeStr.slice(0, 5).split(':').map(Number);
+    
+    // Get today's date in UTC
+    const now = new Date();
+    const utcDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      hours,
+      minutes
+    ));
+    
+    // Convert to local time (browser's timezone)
+    const localHours = utcDate.getHours();
+    const localMinutes = utcDate.getMinutes();
+    
+    // Format as HH:MM
+    return `${localHours.toString().padStart(2, '0')}:${localMinutes.toString().padStart(2, '0')}`;
+  }
+
+  function formatScheduleBadge(t) {
+    // t.repeat_time comes from the server in UTC
+    // Convert it to local time for display
+    const timeToShow = fmtTime(t.repeat_time);
+    
+    if (t.repeat_type === 'daily') {
+      return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow}</span>`;
+    }
+    if (t.repeat_type === 'weekly') {
+      const days = t.repeat_weekdays.map(i => weekdaysRU[i]).join(' ');
       return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${timeToShow} — ${days}</span>`;
     }
     return '<span class="inline-block px-2 bg-gray-100 rounded">+</span>';
@@ -693,11 +718,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set initial values
     repeatTypeSelect.value = tour.repeat_type || 'none';
     
-    // Set time if exists
+    // Set time if exists - convert from UTC to local time for editing
     if (tour.repeat_time) {
-      // Use local_time if available, otherwise use repeat_time
-      const timeToDisplay = tour.local_time || tour.repeat_time.slice(0, 5);
-      repeatTimeInput.value = timeToDisplay;
+      const localTime = fmtTime(tour.repeat_time);
+      repeatTimeInput.value = localTime;
     } else {
       repeatTimeInput.value = '09:00';
     }
