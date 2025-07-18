@@ -66,17 +66,7 @@
       
       <div>
         <label class="block text-sm font-medium mb-1">Место отправления</label>
-        <div class="mb-2 text-sm text-gray-600">Выберите точку на карте или воспользуйтесь поиском</div>
-        <div id="map" class="h-64 w-full rounded border mb-2"></div>
-        <div class="flex flex-col gap-2 bg-gray-50 p-3 rounded">
-          <div class="text-sm font-medium">Адрес места сбора:</div>
-          <div id="addressDisplay" class="text-gray-700">—</div>
-          <input id="tourAddress" type="hidden" />
-          <div class="flex gap-4 text-sm text-gray-500 mt-1">
-            <div>Широта: <span id="latValue">—</span></div>
-            <div>Долгота: <span id="lngValue">—</span></div>
-          </div>
-        </div>
+        <input id="tourAddress" type="text" class="w-full px-3 py-2 border rounded" placeholder="Введите адрес места сбора" />
       </div>
 
       <div>
@@ -167,7 +157,6 @@
   <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6 my-auto max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-semibold mb-4">Место отправления</h2>
     <div id="addressDisplay" class="mb-4 text-gray-700"></div>
-    <div id="viewMap" class="h-80 w-full rounded border mb-4"></div>
     <div class="flex justify-end gap-3">
       <button type="button" id="closeLocationModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Закрыть</button>
     </div>
@@ -203,7 +192,6 @@
   </div>
 </div>
 
-<script src="https://api-maps.yandex.ru/2.1/?apikey=538e9cdd-117d-4fae-824a-767930c27f1e&lang=ru_RU" type="text/javascript"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Tour array to store data in memory
@@ -450,6 +438,61 @@ document.addEventListener('DOMContentLoaded', function() {
   loadCities();
   loadTicketClasses();
   
+  // Add event listener for the "Add Ticket" button
+  const addTicketBtn = document.getElementById('addTicketBtn');
+  addTicketBtn.addEventListener('click', () => {
+    const ticketClassId = ticketClassSelect.value;
+    const ticketPrice = ticketPriceInput.value;
+    
+    if (!ticketClassId) {
+      alert('Пожалуйста, выберите тип билета');
+      return;
+    }
+    
+    if (!ticketPrice || isNaN(ticketPrice) || parseFloat(ticketPrice) <= 0) {
+      alert('Пожалуйста, введите корректную цену');
+      return;
+    }
+    
+    const ticketClassName = ticketClassSelect.options[ticketClassSelect.selectedIndex].text;
+    
+    // Add to ticket rows array
+    ticketRows.push({
+      ticket_class_id: parseInt(ticketClassId),
+      name: ticketClassName,
+      price: parseFloat(ticketPrice)
+    });
+    
+    // Render ticket rows
+    renderTicketRows();
+    
+    // Reset inputs
+    ticketClassSelect.value = '';
+    ticketPriceInput.value = '';
+  });
+  
+  // Function to render ticket rows
+  function renderTicketRows() {
+    ticketRowsContainer.innerHTML = ticketRows.map((ticket, idx) => `
+      <div class="flex justify-between items-center bg-gray-50 px-3 py-2 rounded">
+        <span>${ticket.name}</span>
+        <div class="flex items-center gap-2">
+          <span class="font-medium">${ticket.price}</span>
+          <button type="button" data-idx="${idx}" class="removeTicketBtn px-2 rounded bg-red-200 hover:bg-red-300">×</button>
+        </div>
+      </div>
+    `).join('');
+    
+    // Add event listeners to remove buttons
+    ticketRowsContainer.querySelectorAll('.removeTicketBtn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.getAttribute('data-idx'));
+        ticketRows.splice(idx, 1);
+        renderTicketRows();
+      });
+    });
+  }
+  
   // Handle drag and drop image functionality
   // Use the already declared variables instead of redeclaring them
   // const dropArea = document.getElementById('dropArea');
@@ -553,94 +596,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Initialize Yandex Map
-  let myMap, myPlacemark;
-  let mapInitialized = false;
-  
-  function initMap() {
-    if (mapInitialized) return;
-    
-    ymaps.ready(() => {
-      // Default center (Moscow)
-      const defaultCenter = [55.76, 37.64];
-      
-      myMap = new ymaps.Map('map', {
-        center: defaultCenter,
-        zoom: 12,
-        controls: ['zoomControl', 'searchControl']
-      });
-      
-      // Create a placemark
-      myPlacemark = new ymaps.Placemark(defaultCenter, {
-        hintContent: 'Место отправления'
-      }, {
-        draggable: true
-      });
-      
-      // Add placemark to map
-      myMap.geoObjects.add(myPlacemark);
-      
-      // Update coordinates when placemark is dragged
-      myPlacemark.events.add('dragend', function() {
-        const coords = myPlacemark.geometry.getCoordinates();
-        updateCoordinates(coords[0], coords[1]);
-        reverseGeocode(coords);
-      });
-      
-      // Click on map to move placemark
-      myMap.events.add('click', function(e) {
-        const coords = e.get('coords');
-        myPlacemark.geometry.setCoordinates(coords);
-        updateCoordinates(coords[0], coords[1]);
-        reverseGeocode(coords);
-      });
-      
-      // Search control events
-      const searchControl = myMap.controls.get('searchControl');
-      searchControl.events.add('resultselect', function(e) {
-        const results = searchControl.getResultsArray();
-        const selected = results[e.get('index')];
-        const coords = selected.geometry.getCoordinates();
-        
-        myPlacemark.geometry.setCoordinates(coords);
-        updateCoordinates(coords[0], coords[1]);
-        
-        // Get full address from search result
-        const address = selected.properties.get('text');
-        document.getElementById('tourAddress').value = address;
-        document.getElementById('addressDisplay').textContent = address;
-      });
-      
-      mapInitialized = true;
-    });
-  }
-  
-  // Update coordinate display
-  function updateCoordinates(lat, lng) {
-    document.getElementById('latValue').textContent = lat.toFixed(6);
-    document.getElementById('lngValue').textContent = lng.toFixed(6);
-  }
-  
-  // Reverse geocode to get address from coordinates
-  function reverseGeocode(coords) {
-    ymaps.geocode(coords).then(function(res) {
-      const firstGeoObject = res.geoObjects.get(0);
-      if (firstGeoObject) {
-        // Get full address
-        const address = firstGeoObject.getAddressLine();
-        
-        // Update hidden input and display
-        document.getElementById('tourAddress').value = address;
-        document.getElementById('addressDisplay').textContent = address;
-      }
-    });
-  }
-  
-  // Initialize map when modal is opened
-  newTourBtn.addEventListener('click', function() {
-    setTimeout(initMap, 100); // Small delay to ensure DOM is ready
-  });
-  
   // Schedule modal
   const scheduleModal = document.getElementById('scheduleModal');
   const scheduleForm = document.getElementById('scheduleForm');
@@ -882,47 +837,18 @@ document.addEventListener('DOMContentLoaded', function() {
   // Location modal
   const locationModal = document.getElementById('locationModal');
   const closeLocationModal = document.getElementById('closeLocationModal');
-  let viewMap;
   
-  function openLocationModal(lat, lng, address) {
+  function openLocationModal(address) {
     // Display address
     document.getElementById('addressDisplay').textContent = address || 'Адрес не указан';
     
     // Show modal
     locationModal.classList.remove('hidden');
-    
-    // Initialize map
-    setTimeout(() => {
-      ymaps.ready(() => {
-        // Default center if no coordinates
-        const center = (lat && lng) ? [parseFloat(lat), parseFloat(lng)] : [55.76, 37.64];
-        
-        viewMap = new ymaps.Map('viewMap', {
-          center: center,
-          zoom: 15,
-          controls: ['zoomControl']
-        });
-        
-        if (lat && lng) {
-          // Add placemark
-          const placemark = new ymaps.Placemark([parseFloat(lat), parseFloat(lng)], {
-            hintContent: address || 'Место отправления'
-          });
-          
-          viewMap.geoObjects.add(placemark);
-        }
-      });
-    }, 100);
   }
   
   // Close location modal
   closeLocationModal.addEventListener('click', () => {
     locationModal.classList.add('hidden');
-    // Destroy map to prevent memory leaks
-    if (viewMap) {
-      viewMap.destroy();
-      viewMap = null;
-    }
   });
   
   // Add ticket category from modal
@@ -1081,6 +1007,13 @@ document.addEventListener('DOMContentLoaded', function() {
     hiddenCategoriesInput.value = Array.from(selectedCategoryIds).join(',');
   }
   
+  function resetCategorySelection() {
+    selectedCategoryIds.clear();
+    selectedCategories.innerHTML = '';
+    updateHiddenInput();
+    updateCategoryDropdown();
+  }
+  
   categoryDropdown.addEventListener('change', (e) => {
     const selectedId = e.target.value;
     if (!selectedId) return;
@@ -1096,6 +1029,138 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Initialize categories
   loadCategories();
+
+  // Add event listener for the "New Tour" button
+  newTourBtn.addEventListener('click', () => {
+    // Reset form fields
+    tourForm.reset();
+    selectedFiles = [];
+    previewContainer.innerHTML = '';
+    imagePreviewCarousel.classList.add('hidden');
+    selectedCategoryIds.clear();
+    updateHiddenInput();
+    selectedCategories.innerHTML = '';
+    
+    // Reset ticket rows
+    ticketRows = [];
+    renderTicketRows();
+    
+    // Show the modal
+    tourModal.classList.remove('hidden');
+  });
+
+  // Add event listener for the cancel button
+  cancelBtn.addEventListener('click', () => {
+    tourModal.classList.add('hidden');
+  });
+
+  // Add form submission handler
+  tourForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    // Validate form
+    if (!tourTitleInput.value) {
+      alert('Пожалуйста, введите название экскурсии');
+      return;
+    }
+
+    if (!tourCitySelect.value) {
+      alert('Пожалуйста, выберите город');
+      return;
+    }
+    
+    if (ticketRows.length === 0) {
+      alert('Пожалуйста, добавьте хотя бы один тип билета');
+      return;
+    }
+
+    try {
+      // Step 1: Create the tour with JSON data
+      const tourData = {
+        title: tourTitleInput.value,
+        description: tourDescInput.value,
+        city_id: parseInt(tourCitySelect.value),
+        address: document.getElementById('tourAddress').value
+      };
+      
+      // Add category_ids if present
+      if (hiddenCategoriesInput.value) {
+        tourData.category_ids = hiddenCategoriesInput.value.split(',').map(id => parseInt(id));
+      }
+      
+      console.log('Creating tour with data:', tourData);
+      
+      const res = await fetch('/api/v1/agency/tours/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(tourData)
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Failed to create tour: ${errorText}`);
+      }
+      
+      // Get the created tour data
+      const createdTour = await res.json();
+      const tourId = createdTour.id;
+      
+      // Step 2: Upload images if any
+      if (selectedFiles.length > 0) {
+        const formData = new FormData();
+        selectedFiles.forEach(file => {
+          formData.append('files', file);
+        });
+        
+        const imageRes = await fetch(`/api/v1/agency/tours/${tourId}/images`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!imageRes.ok) {
+          console.error('Failed to upload images:', await imageRes.text());
+        }
+      }
+      
+      // Step 3: Add ticket categories one by one
+      for (const ticket of ticketRows) {
+        const categoryRes = await fetch(`/api/v1/agency/tours/${tourId}/categories`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ticket_class_id: ticket.ticket_class_id,
+            price: ticket.price
+          })
+        });
+        
+        if (!categoryRes.ok) {
+          console.error('Failed to add ticket category:', await categoryRes.text());
+        }
+      }
+      
+      // Close modal and reload tours
+      tourModal.classList.add('hidden');
+      loadTours();
+      
+      // Reset form
+      tourForm.reset();
+      selectedFiles = [];
+      previewContainer.innerHTML = '';
+      imagePreviewCarousel.classList.add('hidden');
+      selectedCategoryIds.clear();
+      selectedCategories.innerHTML = '';
+      ticketRows = []; // Clear ticket rows on successful creation
+      renderTicketRows(); // Re-render ticket rows
+      
+    } catch (err) {
+      console.error('Error creating tour:', err);
+      alert('Ошибка при создании экскурсии: ' + err.message);
+    }
+  });
 
   // Function to load categories for a specific tour
   async function loadTourCategories(tourId) {
