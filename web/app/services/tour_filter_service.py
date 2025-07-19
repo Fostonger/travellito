@@ -87,6 +87,9 @@ class TourFilterService(BaseService):
             for tour_id, title, repeat_type, repeat_time in result:
                 logger.debug(f"  ID: {tour_id}, Title: {title}, Type: {repeat_type}, Time: {repeat_time}")
         
+        # Log the categories parameter for debugging
+        logger.debug(f"Categories filter: {categories}")
+        
         # ------- QUERY PART 1: Tours with actual departures matching filters -------
         stmt1 = self._build_actual_departures_query(
             date_from, date_to, time_filter_start_minutes, time_filter_end_minutes
@@ -489,21 +492,36 @@ class TourFilterService(BaseService):
             if price_max is not None:
                 stmt1 = stmt1.where(price_subq.c.price <= price_max)
                 stmt2 = stmt2.where(price_subq.c.price <= price_max)
+                
+            logger.debug(f"Applied price filter: min={price_min}, max={price_max}")
         
         # Category filter
         if categories and len(categories) > 0:
+            logger.debug(f"Filtering by categories: {categories}")
+            
+            # Check how categories were provided (could be a single string or list)
+            category_list = categories
+            if isinstance(categories, str):
+                category_list = [categories]
+                
+            logger.debug(f"Using category list: {category_list}")
+            
             # Create a subquery to find tours with matching categories
             # Use the association table TourCategoryAssociation to link tours and categories
             category_subq = (
                 select(TourCategoryAssociation.tour_id)
                 .join(TourCategory, TourCategoryAssociation.category_id == TourCategory.id)
-                .where(TourCategory.name.in_(categories))
+                .where(TourCategory.name.in_(category_list))
                 .subquery()
             )
             
             # Apply category filter to both statements
             stmt1 = stmt1.join(category_subq, Tour.id == category_subq.c.tour_id)
             stmt2 = stmt2.join(category_subq, Tour.id == category_subq.c.tour_id)
+            
+            logger.debug("Applied category filter")
+        else:
+            logger.debug("No category filter applied")
         
         # Duration filters
         if duration_min is not None:
@@ -520,5 +538,7 @@ class TourFilterService(BaseService):
             
             stmt2 = stmt2.join(City, City.id == Tour.city_id)
             stmt2 = stmt2.where(func.lower(City.name) == city.lower())
+            
+            logger.debug(f"Applied city filter: {city}")
         
         return stmt1, stmt2 
