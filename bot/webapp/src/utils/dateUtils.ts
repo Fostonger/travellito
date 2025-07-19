@@ -23,9 +23,6 @@ export const utcToLocalDate = (isoString: string): Date => {
     const hasTimezoneInfo = isoString.endsWith('Z') || 
                            isoString.includes('+');
     
-    console.log('hasTimezoneInfo', hasTimezoneInfo);
-    console.log('isoString', isoString);
-    
     if (!hasTimezoneInfo) {
       // Append 'Z' to indicate this is UTC time
       const utcString = `${isoString}Z`;

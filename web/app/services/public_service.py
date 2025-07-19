@@ -194,7 +194,8 @@ class PublicService(BaseService):
                 "price_raw": str(price) if price else "0",
                 "price_net": str(price) if price else "0",
                 "categories": categories,
-                "images": images  # Add images to the response
+                "images": images,  # Add images to the response
+                "address": t.address  # Add address for departure info
             })
         
         return out
@@ -641,7 +642,8 @@ class PublicService(BaseService):
                 {"key": img.key, "url": presigned(img.key)}
                 for img in tour.images
             ],
-            "categories": categories
+            "categories": categories,
+            "address": tour.address  # Add address for departure info
         }
     
     async def get_departure_availability(self, departure_id: int) -> Dict[str, Any]:

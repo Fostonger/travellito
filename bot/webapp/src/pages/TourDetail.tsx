@@ -147,6 +147,13 @@ export default function TourDetail() {
           </div>
         )}
         
+        {tour.address && (
+          <div className="mb-3 flex items-center text-gray-600">
+            <span className="mr-1">📍</span>
+            <span>{tour.address}</span>
+          </div>
+        )}
+        
         <p className="mb-4 text-gray-700 whitespace-pre-line leading-relaxed">{tour.description}</p>
       </div>
 

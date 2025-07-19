@@ -16,6 +16,7 @@ class TourSearchOut(BaseModel):
     price_net: str
     categories: List[str] = []  # New field for multiple categories
     images: List[dict] = []  # Add images field to search results
+    address: Optional[str] = None  # Add address field for departure info
 
 
 class TourListOut(BaseModel):
@@ -32,6 +33,7 @@ class TourDetailOut(BaseModel):
     duration_minutes: int | None
     images: List[dict]
     categories: List[str] = []  # Categories for display
+    address: Optional[str] = None  # Add address field for departure info
 
 
 # Category schemas

@@ -396,6 +396,13 @@ function TourCard({ tour }) {
           
           <h3 className="font-bold mb-1 line-clamp-2">{tour.title}</h3>
           
+          {tour.address && (
+            <div className="text-xs text-gray-500 mb-2 flex items-center">
+              <span className="mr-1">📍</span>
+              <span className="line-clamp-1">{tour.address}</span>
+            </div>
+          )}
+          
           <div className="mt-2">
             <span className="text-blue-600 font-bold">
               {fmtPrice(tour.price_net)}

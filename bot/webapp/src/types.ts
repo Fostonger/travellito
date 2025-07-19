@@ -12,6 +12,7 @@ export interface Tour {
   category?: string;
   categories?: string[];
   images?: TourImage[];
+  address?: string;  // Add address field for departure info
 }
 
 export interface TourImage {
