@@ -288,7 +288,7 @@ export default function Checkout() {
       
       <div className="bg-white rounded-xl shadow-md overflow-hidden mb-4">
         <div className="p-4 bg-blue-600 text-white">
-          <h2 className="text-xl font-bold">{t('checkout', { date: departureTime })}</h2>
+          <h2 className="text-xl font-bold">{t('checkout').replace('{date}', departureTime)}</h2>
           <p className="opacity-90">{departureDate}</p>
         </div>
         
