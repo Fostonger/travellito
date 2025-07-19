@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['manufacturer-colour-shirt-unified.trycloudflare.com']
+    allowedHosts: ['bulgaria-pk-descending-varied.trycloudflare.com']
   },
 }); 

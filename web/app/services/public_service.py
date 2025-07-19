@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from typing import List, Dict, Any, Sequence, Optional
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_, Time
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -152,14 +152,100 @@ class PublicService(BaseService):
         Returns:
             List of tours with discounted prices
         """
+        # Parse time filters if provided
+        time_filter_start_minutes = None
+        time_filter_end_minutes = None
+        
+        if time_from:
+            try:
+                # Parse time in format HH:MM+TZ
+                # We'll convert to minutes since midnight for simpler comparison
+                parts = time_from.split('+')
+                if len(parts) == 1:
+                    parts = time_from.split('-')
+                    if len(parts) > 1:
+                        # Handle negative offset
+                        tz_sign = -1
+                        time_part = parts[0]
+                        tz_part = parts[1]
+                    else:
+                        # No timezone specified, assume UTC
+                        tz_sign = 1
+                        time_part = time_from
+                        tz_part = '00:00'
+                else:
+                    # Handle positive offset
+                    tz_sign = 1
+                    time_part = parts[0]
+                    tz_part = parts[1]
+                
+                # Parse time component (HH:MM)
+                hour, minute = map(int, time_part.split(':'))
+                time_minutes = hour * 60 + minute
+                
+                # Parse timezone offset if present
+                tz_hour, tz_minute = 0, 0
+                if tz_part:
+                    if ':' in tz_part:
+                        tz_hour, tz_minute = map(int, tz_part.split(':'))
+                    else:
+                        tz_hour = int(tz_part)
+                
+                # Apply timezone offset to convert to UTC
+                # Note: If client sends +03:00, we subtract 3 hours to get UTC time
+                tz_offset_minutes = tz_sign * (tz_hour * 60 + tz_minute)
+                time_filter_start_minutes = (time_minutes - tz_offset_minutes) % (24 * 60)
+            except (ValueError, IndexError):
+                # If parsing fails, ignore this filter
+                pass
+
+        if time_to:
+            try:
+                # Similar parsing for end time
+                parts = time_to.split('+')
+                if len(parts) == 1:
+                    parts = time_to.split('-')
+                    if len(parts) > 1:
+                        tz_sign = -1
+                        time_part = parts[0]
+                        tz_part = parts[1]
+                    else:
+                        tz_sign = 1
+                        time_part = time_to
+                        tz_part = '00:00'
+                else:
+                    tz_sign = 1
+                    time_part = parts[0]
+                    tz_part = parts[1]
+                
+                hour, minute = map(int, time_part.split(':'))
+                time_minutes = hour * 60 + minute
+                
+                tz_hour, tz_minute = 0, 0
+                if tz_part:
+                    if ':' in tz_part:
+                        tz_hour, tz_minute = map(int, tz_part.split(':'))
+                    else:
+                        tz_hour = int(tz_part)
+                
+                tz_offset_minutes = tz_sign * (tz_hour * 60 + tz_minute)
+                time_filter_end_minutes = (time_minutes - tz_offset_minutes) % (24 * 60)
+            except (ValueError, IndexError):
+                # If parsing fails, ignore this filter
+                pass
+        
         # Determine landlord for discount calculation
         landlord_id = None
         if user_id is not None:
             landlord_id = await self._last_referral_landlord_id(user_id)
         
-        # Base query - We'll use Tour.id for distinct to avoid issues with JSON columns
+        # We'll combine results from two sources:
+        # 1. Tours with actual departures matching the time criteria
+        # 2. Repeating tours that would have virtual departures at the requested time
+        
+        # ---- QUERY 1: Tours with actual departures ----
         # Don't use loader options here since we're only selecting IDs
-        stmt = select(Tour.id)
+        stmt1 = select(Tour.id)
         
         # Price filters (raw list price)
         if price_min is not None or price_max is not None:
@@ -167,58 +253,103 @@ class PublicService(BaseService):
             price_subq = select(TicketCategory.tour_id, TicketCategory.price)\
                 .where(TicketCategory.ticket_class_id == 0)\
                 .subquery()
-            stmt = stmt.join(price_subq, Tour.id == price_subq.c.tour_id)
+            stmt1 = stmt1.join(price_subq, Tour.id == price_subq.c.tour_id)
             
             if price_min is not None:
-                stmt = stmt.where(price_subq.c.price >= price_min)
+                stmt1 = stmt1.where(price_subq.c.price >= price_min)
             if price_max is not None:
-                stmt = stmt.where(price_subq.c.price <= price_max)
+                stmt1 = stmt1.where(price_subq.c.price <= price_max)
         
         # Date/time range - need to join departures
-        if date_from or date_to or time_from or time_to:
-            stmt = stmt.join(Departure, Departure.tour_id == Tour.id)
+        if date_from or date_to or (time_filter_start_minutes is not None or time_filter_end_minutes is not None):
+            stmt1 = stmt1.join(Departure, Departure.tour_id == Tour.id)
             
             # Date filtering
             if date_from:
-                stmt = stmt.where(Departure.starts_at >= date_from)
+                stmt1 = stmt1.where(Departure.starts_at >= date_from)
             if date_to:
                 # Add one day to include the entire end date
                 next_day = date_to + timedelta(days=1)
-                stmt = stmt.where(Departure.starts_at < next_day)
+                stmt1 = stmt1.where(Departure.starts_at < next_day)
             
             # Time filtering with timezone awareness
-            if time_from or time_to:
-                # Extract hour and minute for time comparison
-                # We can use PostgreSQL's EXTRACT function for this
-                if time_from:
-                    # Format is like "14:30+03:00", extract hours and minutes
-                    try:
-                        hour, rest = time_from.split(':', 1)
-                        minute = rest[:2]
-                        hour, minute = int(hour), int(minute)
-                        # Use extract to compare with the local time considering timezone
-                        stmt = stmt.where(
-                            func.extract('hour', Departure.starts_at) * 60 + 
-                            func.extract('minute', Departure.starts_at) >= 
-                            hour * 60 + minute
-                        )
-                    except (ValueError, IndexError):
-                        # If time format is invalid, ignore this filter
-                        pass
+            if time_filter_start_minutes is not None or time_filter_end_minutes is not None:
+                # Extract minutes since midnight in UTC
+                minutes_expr = func.extract('hour', Departure.starts_at) * 60 + func.extract('minute', Departure.starts_at)
                 
-                if time_to:
-                    try:
-                        hour, rest = time_to.split(':', 1)
-                        minute = rest[:2]
-                        hour, minute = int(hour), int(minute)
-                        stmt = stmt.where(
-                            func.extract('hour', Departure.starts_at) * 60 + 
-                            func.extract('minute', Departure.starts_at) <= 
-                            hour * 60 + minute
+                if time_filter_start_minutes is not None and time_filter_end_minutes is not None:
+                    if time_filter_start_minutes <= time_filter_end_minutes:
+                        # Normal case: e.g., 10:00 to 14:00
+                        stmt1 = stmt1.where(
+                            minutes_expr.between(time_filter_start_minutes, time_filter_end_minutes)
                         )
-                    except (ValueError, IndexError):
-                        # If time format is invalid, ignore this filter
-                        pass
+                    else:
+                        # Wraparound case: e.g., 22:00 to 02:00
+                        stmt1 = stmt1.where(
+                            or_(
+                                minutes_expr >= time_filter_start_minutes,
+                                minutes_expr <= time_filter_end_minutes
+                            )
+                        )
+                elif time_filter_start_minutes is not None:
+                    stmt1 = stmt1.where(minutes_expr >= time_filter_start_minutes)
+                elif time_filter_end_minutes is not None:
+                    stmt1 = stmt1.where(minutes_expr <= time_filter_end_minutes)
+        
+        # ---- QUERY 2: Repeating tours with virtual departures ----
+        stmt2 = select(Tour.id)
+        
+        # Apply same non-time filters
+        if price_min is not None or price_max is not None:
+            price_subq = select(TicketCategory.tour_id, TicketCategory.price)\
+                .where(TicketCategory.ticket_class_id == 0)\
+                .subquery()
+            stmt2 = stmt2.join(price_subq, Tour.id == price_subq.c.tour_id)
+            
+            if price_min is not None:
+                stmt2 = stmt2.where(price_subq.c.price >= price_min)
+            if price_max is not None:
+                stmt2 = stmt2.where(price_subq.c.price <= price_max)
+        
+        # Add repeating tour conditions
+        # Only include repeating tours
+        stmt2 = stmt2.where(Tour.repeat_type.isnot(None))
+        
+        # Time filtering for repeating tours
+        if time_filter_start_minutes is not None or time_filter_end_minutes is not None:
+            # Parse time from repeat_time column into minutes
+            # Assuming repeat_time is stored as HH:MM
+            repeat_time_minutes = func.extract('hour', func.cast(Tour.repeat_time, Time)) * 60 + \
+                                 func.extract('minute', func.cast(Tour.repeat_time, Time))
+            
+            if time_filter_start_minutes is not None and time_filter_end_minutes is not None:
+                if time_filter_start_minutes <= time_filter_end_minutes:
+                    # Normal case: e.g., 10:00 to 14:00
+                    stmt2 = stmt2.where(
+                        repeat_time_minutes.between(time_filter_start_minutes, time_filter_end_minutes)
+                    )
+                else:
+                    # Wraparound case: e.g., 22:00 to 02:00
+                    stmt2 = stmt2.where(
+                        or_(
+                            repeat_time_minutes >= time_filter_start_minutes,
+                            repeat_time_minutes <= time_filter_end_minutes
+                        )
+                    )
+            elif time_filter_start_minutes is not None:
+                stmt2 = stmt2.where(repeat_time_minutes >= time_filter_start_minutes)
+            elif time_filter_end_minutes is not None:
+                stmt2 = stmt2.where(repeat_time_minutes <= time_filter_end_minutes)
+                
+        # For weekly repeating tours, filter by day of week if we have date filters
+        # This ensures we only get tours that repeat on the days included in our date range
+        if date_from or date_to:
+            # If we have a date filter, we need to make sure the repeating days match
+            # For simplicity, we'll just include all weekly repeating tours for now
+            # A more precise implementation would check the weekdays
+            pass
+        
+        # Apply common filters to both queries
         
         # Category filter
         if categories and len(categories) > 0:
@@ -233,22 +364,35 @@ class PublicService(BaseService):
                 )
             ).correlate(Tour)
             
-            stmt = stmt.where(category_exists)
+            stmt1 = stmt1.where(category_exists)
+            stmt2 = stmt2.where(category_exists)
         
         # Duration filters (minutes)
         if duration_min is not None:
-            stmt = stmt.where(Tour.duration_minutes >= duration_min)
+            stmt1 = stmt1.where(Tour.duration_minutes >= duration_min)
+            stmt2 = stmt2.where(Tour.duration_minutes >= duration_min)
         if duration_max is not None:
-            stmt = stmt.where(Tour.duration_minutes <= duration_max)
+            stmt1 = stmt1.where(Tour.duration_minutes <= duration_max)
+            stmt2 = stmt2.where(Tour.duration_minutes <= duration_max)
         
         # City filter via City table if provided
         if city is not None:
-            stmt = stmt.join(City, City.id == Tour.city_id)
-            stmt = stmt.where(func.lower(City.name) == city.lower())
+            stmt1 = stmt1.join(City, City.id == Tour.city_id)
+            stmt1 = stmt1.where(func.lower(City.name) == city.lower())
+            
+            stmt2 = stmt2.join(City, City.id == Tour.city_id)
+            stmt2 = stmt2.where(func.lower(City.name) == city.lower())
         
-        # Get distinct tour IDs first to avoid issues with JSON columns
-        stmt = stmt.distinct().order_by(Tour.id.desc()).limit(limit).offset(offset)
-        tour_ids = [id for id, in await self.session.execute(stmt)]
+        # Combine the two queries with UNION
+        from sqlalchemy import union
+        combined_stmt = union(stmt1, stmt2).alias()
+        
+        # Query to get unique tour IDs with limit and offset
+        final_stmt = select(combined_stmt.c.id).distinct().order_by(combined_stmt.c.id.desc())
+        final_stmt = final_stmt.limit(limit).offset(offset)
+        
+        # Get the tour IDs
+        tour_ids = [id for id, in await self.session.execute(final_stmt)]
         
         # Then fetch full tour data
         if tour_ids:
