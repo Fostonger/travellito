@@ -23,6 +23,7 @@ interface Booking {
   departure_id: number;
   is_cancellable: boolean;
   items: BookingItem[];
+  tour_address?: string;
 }
 
 export default function MyBookings() {
@@ -223,6 +224,12 @@ function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
           <span className="mr-1">🕒</span>
           {formatTime(booking.departure_date)}
         </div>
+        {booking.tour_address && (
+          <div className="flex text-sm text-gray-600 mt-1.5">
+            <span className="mr-1 flex-shrink-0">📍</span>
+            <span className="line-clamp-2">{booking.tour_address}</span>
+          </div>
+        )}
       </div>
       
       <div className="px-4 py-3">

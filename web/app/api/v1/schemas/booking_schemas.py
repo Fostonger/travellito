@@ -74,3 +74,4 @@ class TouristBookingOut(BaseModel):
     departure_id: int
     is_cancellable: bool = False
     items: List[Dict[str, Any]] = [] 
+    tour_address: Optional[str] = None 

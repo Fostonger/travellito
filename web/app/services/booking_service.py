@@ -183,7 +183,8 @@ class BookingService:
                 "tour_id": booking.departure.tour.id,
                 "departure_id": booking.departure.id,
                 "is_cancellable": is_cancellable,
-                "items": items_data
+                "items": items_data,
+                "tour_address": booking.departure.tour.address
             })
         
         # Sort by departure date, with upcoming tours first
