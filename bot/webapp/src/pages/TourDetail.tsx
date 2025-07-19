@@ -1,41 +1,32 @@
 // @ts-nocheck
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { t, fmtPrice } from '../i18n';
 import { formatDate, formatTime, formatFullDate, getDateString, getDepartureDate } from '../utils/dateUtils';
+import { useTour, useTourDepartures } from '../api/client';
+import { Skeleton } from '../components/ui/skeleton';
 
 export default function TourDetail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1';
-  const [tour, setTour] = useState(null);
-  const [departures, setDepartures] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Use React Query for data fetching with caching
+  const { data: tour, isLoading: tourLoading } = useTour(id);
+  const { data: departures = [], isLoading: departuresLoading } = useTourDepartures(id);
+  
   const [imgIdx, setImgIdx] = useState(0);
   const [fullscreenImg, setFullscreenImg] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
 
-  useEffect(() => {
-    const load = async () => {
-      if (!id) return;
-      const [tourRes, depRes] = await Promise.all([
-        axios.get(`${apiBase}/public/tours/${id}`),
-        axios.get(`${apiBase}/public/tours/${id}/departures`, { params: { limit: 30 } }),
-      ]);
-      setTour(tourRes.data);
-      setDepartures(depRes.data);
-      
-      // Set the first date as selected by default if departures exist
-      if (depRes.data.length > 0) {
-        const firstDate = getDateString(depRes.data[0].starts_at);
-        setSelectedDate(firstDate);
-      }
-      
-      setLoading(false);
-    };
-    load();
-  }, [id]);
+  const loading = tourLoading || departuresLoading;
+
+  // Set the first date as selected by default when departures load
+  React.useEffect(() => {
+    if (departures && departures.length > 0 && !selectedDate) {
+      const firstDate = getDateString(departures[0].starts_at);
+      setSelectedDate(firstDate);
+    }
+  }, [departures, selectedDate]);
 
   const nextImg = () => setImgIdx((imgIdx + 1) % (tour.images?.length || 1));
   const prevImg = () => setImgIdx((imgIdx - 1 + (tour.images?.length || 1)) % (tour.images?.length || 1));
@@ -51,7 +42,10 @@ export default function TourDetail() {
   // Get unique dates
   const uniqueDates = Object.keys(departuresByDate);
 
-  if (loading) return <p className="flex justify-center items-center h-screen text-lg">{t('loading')}</p>;
+  if (loading) {
+    return <TourDetailSkeleton />;
+  }
+
   if (!tour) return <p className="flex justify-center items-center h-screen text-lg">{t('not_found')}</p>;
 
   return (
@@ -70,6 +64,7 @@ export default function TourDetail() {
             src={tour.images[imgIdx].url}
             className="w-full h-72 object-cover cursor-pointer"
             onClick={() => setFullscreenImg(tour.images[imgIdx].url)}
+            loading="lazy" // Add lazy loading
           />
           {tour.images.length > 1 && (
             <>
@@ -219,13 +214,6 @@ export default function TourDetail() {
                             
                             // Include the full timestamp for the backend to use
                             departureData.virtual_timestamp = timestamp;
-                            
-                            // Debug logging
-                            console.log('Created virtual departure ID:', departureData.id);
-                            console.log('With timestamp:', timestamp);
-                            console.log('Original date string:', d.starts_at);
-                            console.log('Parsed UTC time:', new Date(timestamp).toISOString());
-                            console.log('Date object:', getDepartureDate(departureData).toString());
                           }
                           nav('/checkout', { state: { tourId: id, departure: departureData } });
                         }}
@@ -250,9 +238,67 @@ export default function TourDetail() {
   );
 }
 
+// Loading skeleton
+function TourDetailSkeleton() {
+  return (
+    <div className="p-4 pb-20 bg-gray-50 min-h-screen">
+      {/* Back link skeleton */}
+      <div className="mb-2">
+        <Skeleton className="h-6 w-20" />
+      </div>
+
+      {/* Image skeleton */}
+      <Skeleton className="w-full h-72 rounded-xl mb-4" />
+
+      {/* Details skeleton */}
+      <div className="bg-white rounded-xl p-4 shadow-md mb-4">
+        <Skeleton className="h-8 w-3/4 mb-2" />
+        <div className="flex flex-wrap gap-1 mb-3">
+          <Skeleton className="h-6 w-20" />
+          <Skeleton className="h-6 w-20" />
+        </div>
+        <Skeleton className="h-4 w-full mb-2" />
+        <Skeleton className="h-4 w-full mb-2" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+
+      {/* Departures skeleton */}
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <Skeleton className="h-10 w-full" />
+        <div className="flex gap-2 p-2 bg-gray-50">
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-24" />
+        </div>
+        <div className="p-4">
+          <Skeleton className="h-6 w-40 mb-4" />
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <Skeleton className="h-6 w-20 mb-1" />
+                <Skeleton className="h-4 w-28" />
+              </div>
+              <Skeleton className="h-10 w-24" />
+            </div>
+            <div className="flex justify-between items-center">
+              <div>
+                <Skeleton className="h-6 w-20 mb-1" />
+                <Skeleton className="h-4 w-28" />
+              </div>
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function pastelColor(str: string): string {
+  // Generate a consistent pastel color based on the string
   let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  const h = hash % 360;
-  return `hsl(${h}, 70%, 85%)`;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 70%, 90%)`;
 } 

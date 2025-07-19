@@ -1,8 +1,7 @@
 // @ts-nocheck
 // src/pages/App.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import { t, fmtPrice } from '../i18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -10,88 +9,24 @@ import { Skeleton } from '../components/ui/skeleton';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
-
-interface Tour {
-  id: number;
-  title: string;
-  price_net: string;
-  category?: string;
-  categories?: string[];
-}
-
-interface FilterState {
-  categories: string[];
-  priceMin: string;
-  priceMax: string;
-  dateFrom: string;
-  dateTo: string;
-  timeFrom: string;
-  timeTo: string;
-}
-
-const initialFilterState: FilterState = {
-  categories: [],
-  priceMin: '',
-  priceMax: '',
-  dateFrom: '',
-  dateTo: '',
-  timeFrom: '',
-  timeTo: ''
-};
+import { usePersistedFilters, initialFilterState } from '../utils/store';
+import { useTours } from '../api/client';
+import { Tour } from '../types';
 
 export default function App() {
-  const [tours, setTours] = useState<Tour[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<FilterState>(initialFilterState);
+  // Load filters from localStorage and manage state persistence
+  const [filters, setFilters] = usePersistedFilters();
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   
-  const apiBase =
-    import.meta.env.VITE_API_BASE || 'https://api.trycloudflare.com/api/v1';
+  // Use React Query to fetch tours with caching
+  const { data: tours, isLoading, refetch } = useTours(filters);
 
   useEffect(() => {
-    fetchTours();
-  }, []);
-
-  const fetchTours = async (appliedFilters = {}) => {
-    setLoading(true);
-    try {
-      // Fix for handling array parameters
-      const params: Record<string, any> = {
-        limit: 50,
-        ...appliedFilters
-      };
-      
-      // Use axios.getUri to create a custom URL with properly formatted parameters
-      // This ensures arrays are sent correctly as separate parameters with the same name
-      let url = `${apiBase}/public/tours/search`;
-      const queryParams = new URLSearchParams();
-      
-      // Add each parameter to the URL, handling arrays specially
-      Object.entries(params).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          // For arrays like categories, add multiple parameters with the same name
-          value.forEach(item => {
-            queryParams.append(key, item);
-          });
-        } else if (value !== undefined && value !== null && value !== '') {
-          queryParams.append(key, value);
-        }
-      });
-      
-      // Append the query string to the URL
-      const queryString = queryParams.toString();
-      if (queryString) {
-        url += `?${queryString}`;
-      }
-      
-      // Make the request with the custom URL
-      const { data } = await axios.get(url, { withCredentials: true });
-      setTours(data);
-      
-      // Extract all unique categories for filters
+    // Extract available categories from tour data for filtering
+    if (tours) {
       const uniqueCategories = new Set<string>();
-      data.forEach(tour => {
+      tours.forEach(tour => {
         if (tour.categories && tour.categories.length > 0) {
           tour.categories.forEach(cat => uniqueCategories.add(cat));
         } else if (tour.category) {
@@ -99,92 +34,40 @@ export default function App() {
         }
       });
       setAvailableCategories(Array.from(uniqueCategories));
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [tours]);
 
-  const handleFilterChange = (key: keyof FilterState, value: any) => {
-    setFilters(prev => ({
-      ...prev,
+  const handleFilterChange = (key: keyof typeof filters, value: any) => {
+    setFilters({
+      ...filters,
       [key]: value
-    }));
-  };
-
-  const toggleCategory = (category: string) => {
-    setFilters(prev => {
-      const updatedCategories = prev.categories.includes(category)
-        ? prev.categories.filter(cat => cat !== category)
-        : [...prev.categories, category];
-        
-      return {
-        ...prev,
-        categories: updatedCategories
-      };
     });
   };
 
-  // Time filter handling to fix timezone format
-  const applyFilters = () => {
-    const appliedFilters: Record<string, any> = {};
-    
-    // Apply price range
-    if (filters.priceMin) appliedFilters.price_min = filters.priceMin;
-    if (filters.priceMax) appliedFilters.price_max = filters.priceMax;
-    
-    // Apply date range
-    if (filters.dateFrom) appliedFilters.date_from = filters.dateFrom;
-    if (filters.dateTo) appliedFilters.date_to = filters.dateTo;
-    
-    // Apply time range with timezone offset
-    if (filters.timeFrom) {
-      // Get timezone offset in format +HH:MM or -HH:MM
-      const date = new Date();
-      const offsetMinutes = date.getTimezoneOffset();
-      const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
-      const offsetMins = Math.abs(offsetMinutes) % 60;
-      
-      // Format as +HH:MM or -HH:MM (note: getTimezoneOffset returns inverse sign)
-      const offsetSign = offsetMinutes > 0 ? '-' : '+';
-      const offsetFormatted = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-      
-      // Combine time with timezone offset
-      appliedFilters.time_from = `${filters.timeFrom}${offsetFormatted}`;
-    }
-    
-    if (filters.timeTo) {
-      // Get timezone offset in format +HH:MM or -HH:MM
-      const date = new Date();
-      const offsetMinutes = date.getTimezoneOffset();
-      const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
-      const offsetMins = Math.abs(offsetMinutes) % 60;
-      
-      // Format as +HH:MM or -HH:MM (note: getTimezoneOffset returns inverse sign)
-      const offsetSign = offsetMinutes > 0 ? '-' : '+';
-      const offsetFormatted = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-      
-      // Combine time with timezone offset
-      appliedFilters.time_to = `${filters.timeTo}${offsetFormatted}`;
-    }
-    
-    // Apply category filtering (handled by backend now)
-    if (filters.categories.length > 0) {
-      appliedFilters.categories = filters.categories;
-    }
-    
-    fetchTours(appliedFilters);
+  const toggleCategory = (category: string) => {
+    setFilters({
+      ...filters,
+      categories: filters.categories.includes(category)
+        ? filters.categories.filter(cat => cat !== category)
+        : [...filters.categories, category]
+    });
+  };
+
+  // Apply filters and fetch data
+  const applyFilters = useCallback(() => {
+    refetch();
     
     // Close filter drawer on mobile after applying
     if (window.innerWidth < 768) {
       setIsFilterOpen(false);
     }
-  };
+  }, [refetch]);
 
   const resetFilters = () => {
     setFilters(initialFilterState);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="container mx-auto px-4 py-6">
@@ -257,268 +140,273 @@ export default function App() {
                     {t('from')}: {filters.dateFrom}
                   </Badge>
                 )}
-                {(filters.priceMin || filters.priceMax || filters.dateFrom || filters.dateTo || 
-                  filters.timeFrom || filters.timeTo || filters.categories.length > 0) && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 px-2 text-xs"
-                    onClick={resetFilters}
-                  >
-                    {t('clear')}
-                  </Button>
+                {filters.dateTo && (
+                  <Badge variant="outline" className="whitespace-nowrap">
+                    {t('to')}: {filters.dateTo}
+                  </Badge>
+                )}
+                {filters.timeFrom && (
+                  <Badge variant="outline" className="whitespace-nowrap">
+                    {t('time_from')}: {filters.timeFrom}
+                  </Badge>
+                )}
+                {filters.timeTo && (
+                  <Badge variant="outline" className="whitespace-nowrap">
+                    {t('time_to')}: {filters.timeTo}
+                  </Badge>
                 )}
               </div>
             </div>
-            <div className="text-sm text-gray-500">
-              {tours.length} {t('tours')}
-            </div>
+            
+            {/* Reset filters button */}
+            {(filters.categories.length > 0 || filters.priceMin || filters.priceMax ||
+             filters.dateFrom || filters.dateTo || filters.timeFrom || filters.timeTo) && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="text-gray-500 hover:text-gray-700"
+                onClick={resetFilters}
+              >
+                {t('reset')}
+              </Button>
+            )}
           </div>
         </div>
         
-        {/* Mobile Filter Drawer */}
-        <div className={`
-          fixed inset-0 bg-black/50 z-20 transition-opacity 
-          ${isFilterOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-        `} onClick={() => setIsFilterOpen(false)}>
-          <div 
+        {/* Filters and results layout */}
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* Filter panel (sidebar on desktop, drawer on mobile) */}
+          <div
             className={`
-              fixed bottom-0 left-0 right-0 max-h-[85vh] bg-white rounded-t-xl 
-              transition-transform duration-300 p-4 overflow-auto
-              ${isFilterOpen ? 'translate-y-0' : 'translate-y-full'}
+              w-full md:w-64 md:flex-shrink-0 
+              ${isFilterOpen ? 'block' : 'hidden md:block'}
+              bg-white rounded-xl shadow-md p-4 
+              max-h-screen md:sticky md:top-4
             `}
-            onClick={e => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="font-semibold text-lg">{t('filter_tours')}</h2>
+            <div className="flex justify-between items-center mb-4 md:hidden">
+              <h2 className="font-bold">{t('filters')}</h2>
               <button 
-                className="p-1 rounded-full hover:bg-gray-100"
+                className="text-gray-500"
                 onClick={() => setIsFilterOpen(false)}
               >
                 <CloseIcon className="h-5 w-5" />
               </button>
             </div>
             
+            {/* Filter content */}
             <div className="space-y-4">
-              {/* Categories filter */}
+              {/* Price range */}
               <div>
-                <h3 className="font-medium mb-2 text-sm text-gray-700">
-                  {t('categories')}
-                </h3>
-                <ScrollArea className="h-24">
-                  <div className="flex flex-wrap gap-2">
-                    {availableCategories.map((category) => (
-                      <button
-                        key={category}
-                        onClick={() => toggleCategory(category)}
-                        className={`inline-block px-3 py-1 text-xs rounded-full transition ${
-                          filters.categories.includes(category)
-                            ? 'bg-cyan-600 text-white'
-                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                        }`}
-                      >
-                        {category}
-                      </button>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-              
-              <Separator />
-              
-              {/* Price range filter */}
-              <div>
-                <h3 className="font-medium mb-2 text-sm text-gray-700">
-                  {t('price_range')}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    placeholder={t('min')}
-                    className="p-2 border rounded flex-1 text-sm"
+                <h3 className="font-medium mb-2">{t('price_range')}</h3>
+                <div className="flex gap-2">
+                  <input 
+                    type="number" 
+                    placeholder={t('min')} 
+                    className="w-full p-2 border rounded-md"
                     value={filters.priceMin}
                     onChange={(e) => handleFilterChange('priceMin', e.target.value)}
                   />
-                  <span>-</span>
-                  <input
-                    type="number"
-                    placeholder={t('max')}
-                    className="p-2 border rounded flex-1 text-sm"
+                  <input 
+                    type="number" 
+                    placeholder={t('max')} 
+                    className="w-full p-2 border rounded-md"
                     value={filters.priceMax}
                     onChange={(e) => handleFilterChange('priceMax', e.target.value)}
                   />
                 </div>
               </div>
               
-              <Separator />
-              
-              {/* Date range filter */}
+              {/* Date range */}
               <div>
-                <h3 className="font-medium mb-2 text-sm text-gray-700">
-                  {t('date_range')}
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs mb-1 text-gray-500">{t('from')}</label>
-                    <input
-                      type="date"
-                      className="p-2 border rounded w-full text-sm"
-                      value={filters.dateFrom}
-                      onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-1 text-gray-500">{t('to')}</label>
-                    <input
-                      type="date"
-                      className="p-2 border rounded w-full text-sm"
-                      value={filters.dateTo}
-                      onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-                    />
-                  </div>
+                <h3 className="font-medium mb-2">{t('date_range')}</h3>
+                <div className="flex gap-2">
+                  <input 
+                    type="date" 
+                    className="w-full p-2 border rounded-md"
+                    value={filters.dateFrom}
+                    onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+                  />
+                  <input 
+                    type="date" 
+                    className="w-full p-2 border rounded-md"
+                    value={filters.dateTo}
+                    onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+                  />
                 </div>
               </div>
               
-              <Separator />
-              
-              {/* Time range filter */}
+              {/* Time range */}
               <div>
-                <h3 className="font-medium mb-2 text-sm text-gray-700">
-                  {t('time_range')}
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs mb-1 text-gray-500">{t('from')}</label>
-                    <input
-                      type="time"
-                      className="p-2 border rounded w-full text-sm"
-                      value={filters.timeFrom}
-                      onChange={(e) => handleFilterChange('timeFrom', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-1 text-gray-500">{t('to')}</label>
-                    <input
-                      type="time"
-                      className="p-2 border rounded w-full text-sm"
-                      value={filters.timeTo}
-                      onChange={(e) => handleFilterChange('timeTo', e.target.value)}
-                    />
-                  </div>
+                <h3 className="font-medium mb-2">{t('time_range')}</h3>
+                <div className="flex gap-2">
+                  <input 
+                    type="time" 
+                    className="w-full p-2 border rounded-md"
+                    value={filters.timeFrom}
+                    onChange={(e) => handleFilterChange('timeFrom', e.target.value)}
+                  />
+                  <input 
+                    type="time" 
+                    className="w-full p-2 border rounded-md"
+                    value={filters.timeTo}
+                    onChange={(e) => handleFilterChange('timeTo', e.target.value)}
+                  />
                 </div>
               </div>
               
-              {/* Action buttons */}
-              <div className="pt-4 flex gap-3">
-                <Button 
-                  variant="outline" 
-                  className="flex-1" 
-                  onClick={resetFilters}
-                >
-                  {t('reset')}
-                </Button>
-                <Button 
-                  className="flex-1 bg-cyan-700 hover:bg-cyan-800"
-                  onClick={applyFilters}
-                >
-                  {t('apply')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Tour Results */}
-        {tours.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <p className="text-gray-500 mb-4">{t('no_tours')}</p>
-            <Button variant="outline" onClick={resetFilters}>
-              {t('clear_filters')}
-            </Button>
-          </div>
-        )}
-
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {tours.map((tour) => (
-            <Link
-              key={tour.id}
-              to={`/tour/${tour.id}`}
-              className="block rounded-xl shadow-sm hover:shadow-md transition bg-white overflow-hidden"
-            >
-              <div className="p-4">
-                <h2 className="font-semibold text-lg mb-2 line-clamp-2">{tour.title}</h2>
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {tour.categories && tour.categories.length > 0 ? (
-                    // Show up to 3 categories with the new design
-                    tour.categories.slice(0, 3).map((category, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-block px-2 py-0.5 text-xs rounded-full"
-                        style={{ backgroundColor: pastelColor(category), color: '#333' }}
+              {/* Categories filter */}
+              <div>
+                <h3 className="font-medium mb-2">{t('categories')}</h3>
+                <ScrollArea className="h-48">
+                  {availableCategories.map((category, i) => (
+                    <div key={i} className="flex items-center gap-2 py-1">
+                      <input 
+                        type="checkbox" 
+                        id={`cat-${i}`} 
+                        checked={filters.categories.includes(category)}
+                        onChange={() => toggleCategory(category)}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                      <label 
+                        htmlFor={`cat-${i}`}
+                        className="flex-1 text-sm cursor-pointer"
                       >
                         {category}
-                      </span>
-                    ))
-                  ) : tour.category ? (
-                    // Fallback to legacy category
-                    <span
-                      className="inline-block px-2 py-0.5 text-xs rounded-full"
-                      style={{ backgroundColor: pastelColor(tour.category), color: '#333' }}
-                    >
-                      {tour.category}
-                    </span>
-                  ) : null}
-                  {tour.categories && tour.categories.length > 3 && (
-                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-500">
-                      +{tour.categories.length - 3}
-                    </span>
+                      </label>
+                    </div>
+                  ))}
+                  {availableCategories.length === 0 && (
+                    <p className="text-gray-500 text-sm">{t('no_categories')}</p>
                   )}
-                </div>
-                <p className="text-cyan-700 font-bold">
-                  {fmtPrice(tour.price_net)}
+                </ScrollArea>
+              </div>
+              
+              <Button 
+                className="w-full bg-blue-600 hover:bg-blue-700 mt-2"
+                onClick={applyFilters}
+              >
+                {t('apply_filters')}
+              </Button>
+            </div>
+          </div>
+          
+          {/* Results grid */}
+          <div className="flex-1">
+            {tours && tours.length > 0 ? (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                {tours.map((tour) => (
+                  <TourCard key={tour.id} tour={tour} />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl p-8 shadow-md text-center">
+                <p className="text-xl font-medium text-gray-500 mb-2">
+                  {t('no_tours_found')}
+                </p>
+                <p className="text-gray-500">
+                  {t('try_different_filters')}
                 </p>
               </div>
-            </Link>
-          ))}
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// Simple deterministic pastel color generator from string
-function pastelColor(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  const h = hash % 360;
-  return `hsl(${h}, 70%, 85%)`;
+// Tour card component
+function TourCard({ tour }) {
+  return (
+    <Link to={`/tour/${tour.id}`} className="block">
+      <Card className="overflow-hidden hover:shadow-xl transition-shadow">
+        <div className="h-48 bg-gray-200 relative">
+          {/* If tour has images, show the first one */}
+          {tour.images && tour.images[0] ? (
+            <img 
+              src={tour.images[0].url} 
+              className="w-full h-full object-cover"
+              loading="lazy" // Add lazy loading for images
+              alt={tour.title}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              {t('no_image')}
+            </div>
+          )}
+        </div>
+        
+        <div className="p-4">
+          <div className="flex flex-wrap gap-1 mb-2">
+            {tour.categories && tour.categories.length > 0 ? (
+              // Show up to 2 categories on the card
+              tour.categories.slice(0, 2).map((category, idx) => (
+                <span
+                  key={idx}
+                  className="inline-block px-2 py-1 text-xs rounded-full font-medium"
+                  style={{ backgroundColor: pastelColor(category), color: '#333' }}
+                >
+                  {category}
+                </span>
+              ))
+            ) : tour.category ? (
+              // Fallback to legacy category
+              <span
+                className="inline-block px-2 py-1 text-xs rounded-full font-medium"
+                style={{ backgroundColor: pastelColor(tour.category), color: '#333' }}
+              >
+                {tour.category}
+              </span>
+            ) : null}
+            
+            {/* Show +N more if there are additional categories */}
+            {tour.categories && tour.categories.length > 2 && (
+              <span className="inline-block px-2 py-1 text-xs bg-gray-100 rounded-full">
+                +{tour.categories.length - 2}
+              </span>
+            )}
+          </div>
+          
+          <h3 className="font-bold mb-1 line-clamp-2">{tour.title}</h3>
+          
+          <div className="mt-2 flex justify-between items-end">
+            <span className="text-blue-600 font-bold">
+              {fmtPrice(tour.price_net)}
+            </span>
+            <Button size="sm" className="bg-cyan-700 hover:bg-cyan-800">
+              {t('view')}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  );
 }
 
-// SVG Icons
+function pastelColor(str: string): string {
+  // Generate a consistent pastel color based on the string
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 70%, 90%)`;
+}
+
 function FilterIcon({ className }: { className?: string }) {
   return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      className={className} 
-      fill="none" 
-      viewBox="0 0 24 24" 
-      stroke="currentColor"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
     </svg>
   );
 }
 
 function CloseIcon({ className }: { className?: string }) {
   return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      className={className} 
-      fill="none" 
-      viewBox="0 0 24 24" 
-      stroke="currentColor"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
   );
 }
