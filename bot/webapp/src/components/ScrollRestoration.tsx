@@ -1,71 +1,64 @@
-import { useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-// Page scroll positions stored by path
-const scrollPositions = new Map<string, number>();
+// We only need to store the scroll position for the main tours list
+// This simplifies the logic and ensures we don't have conflicting positions
+let toursListScrollPosition = 0;
 
 /**
- * Component that handles scroll restoration when navigating between pages
+ * Simple component to store and restore scroll position ONLY for the main tours list
  */
 export default function ScrollRestoration() {
-  const { pathname } = useLocation();
-  const prevPathRef = useRef<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   
-  // On mount, disable browser's scroll restoration
+  // Only handle scroll restoration for specific route transitions
   useEffect(() => {
-    if (window.history && 'scrollRestoration' in window.history) {
-      // Disable browser's automatic scroll restoration
-      window.history.scrollRestoration = 'manual';
+    // Main tours list route
+    if (location.pathname === '/') {
+      console.log('Tours list page: Restoring scroll to', toursListScrollPosition);
+      
+      // Restore scroll position with a small delay to ensure content is rendered
+      const timerId = setTimeout(() => {
+        window.scrollTo({
+          top: toursListScrollPosition,
+          behavior: 'instant' // Use instant to avoid animation
+        });
+      }, 50);
+      
+      return () => {
+        // When leaving the tours list, save the current scroll position
+        toursListScrollPosition = window.scrollY;
+        console.log('Leaving tours list: Saved scroll position', toursListScrollPosition);
+        clearTimeout(timerId);
+      };
+    } 
+    else if (location.pathname.startsWith('/tour/')) {
+      // When viewing a tour, we want to start at the top
+      window.scrollTo(0, 0);
+      
+      // No cleanup needed for tour detail pages
+      return;
     }
-    
-    return () => {
-      // Restore browser's default behavior on unmount
-      if (window.history && 'scrollRestoration' in window.history) {
-        window.history.scrollRestoration = 'auto';
-      }
-    };
-  }, []);
-  
-  // Handle scroll position on pathname change
-  useEffect(() => {
-    // On first mount or component initialization
-    if (!prevPathRef.current) {
-      prevPathRef.current = pathname;
+    else if (location.pathname === '/bookings') {
+      // When viewing bookings, we want to start at the top
+      window.scrollTo(0, 0);
+      
+      // No cleanup needed for bookings page
       return;
     }
     
-    // When navigating to a new page:
-    // 1. Save scroll position of the current page before leaving
-    const currentPosition = window.scrollY;
-    if (currentPosition > 0) {
-      scrollPositions.set(prevPathRef.current, currentPosition);
-    }
-    
-    // 2. Update prevPath for next navigation
-    prevPathRef.current = pathname;
-    
-    // 3. Restore scroll position if coming back to a page, or scroll to top
-    window.requestAnimationFrame(() => {
-      // Give the page some time to render content before scrolling
-      setTimeout(() => {
-        const savedPosition = scrollPositions.get(pathname);
-        if (savedPosition) {
-          window.scrollTo(0, savedPosition);
-        } else {
-          window.scrollTo(0, 0);
-        }
-      }, 100);
-    });
-  }, [pathname]);
+  }, [location.pathname]);
   
-  // Clean up on unmount - save final scroll position
+  // Reset scroll position when explicitly clicking the "Tours" link
+  // or going back to home from another page
   useEffect(() => {
+    // Create cleanup function to handle the case when component unmounts
     return () => {
-      if (prevPathRef.current) {
-        const finalPosition = window.scrollY;
-        if (finalPosition > 0) {
-          scrollPositions.set(prevPathRef.current, finalPosition);
-        }
+      // Don't reset scroll when navigating between tours and tour details
+      const isNavigatingToTourDetail = location.pathname.startsWith('/tour/');
+      if (!isNavigatingToTourDetail && location.pathname !== '/') {
+        toursListScrollPosition = 0;
       }
     };
   }, []);
