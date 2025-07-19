@@ -19,6 +19,11 @@ from ..models import (
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Constants for repetition types
+REPETITION_NONE = "none"
+REPETITION_DAILY = "daily"
+REPETITION_WEEKLY = "weekly"
+
 class TourFilterService(BaseService):
     """Service for filtering tours with various criteria."""
     
@@ -67,6 +72,21 @@ class TourFilterService(BaseService):
         # Parse time filters
         time_filter_start_minutes, time_filter_end_minutes = self._parse_time_filters(time_from, time_to)
         
+        # First, get all tours with recurring patterns for debugging
+        if date_from is not None or date_to is not None:
+            debug_stmt = select(Tour.id, Tour.title, Tour.repeat_type, Tour.repeat_time)
+            debug_stmt = debug_stmt.where(
+                and_(
+                    Tour.repeat_type.isnot(None),
+                    Tour.repeat_type != REPETITION_NONE,
+                    Tour.repeat_time.isnot(None)
+                )
+            )
+            result = await self.session.execute(debug_stmt)
+            logger.debug("Available repeating tours:")
+            for tour_id, title, repeat_type, repeat_time in result:
+                logger.debug(f"  ID: {tour_id}, Title: {title}, Type: {repeat_type}, Time: {repeat_time}")
+        
         # ------- QUERY PART 1: Tours with actual departures matching filters -------
         stmt1 = self._build_actual_departures_query(
             date_from, date_to, time_filter_start_minutes, time_filter_end_minutes
@@ -83,6 +103,21 @@ class TourFilterService(BaseService):
             categories, duration_min, duration_max
         )
         
+        # For debugging, check what virtual departures we have after filtering
+        if date_from is not None or date_to is not None:
+            # Execute the query for virtual departures only to see what we get
+            virtual_tour_ids = [id for id, in await self.session.execute(stmt2)]
+            logger.debug(f"Virtual departures after filtering: {virtual_tour_ids}")
+            
+            # If we have IDs, fetch their details
+            if virtual_tour_ids:
+                debug_tours = await self.session.execute(
+                    select(Tour.id, Tour.title, Tour.repeat_type)
+                    .where(Tour.id.in_(virtual_tour_ids))
+                )
+                for tour_id, title, repeat_type in debug_tours:
+                    logger.debug(f"  Matched virtual tour: ID: {tour_id}, Title: {title}, Type: {repeat_type}")
+        
         # ------- Combine results and apply limit/offset -------
         from sqlalchemy import union
         combined_stmt = union(stmt1, stmt2).alias()
@@ -91,8 +126,14 @@ class TourFilterService(BaseService):
         final_stmt = select(combined_stmt.c.id).distinct().order_by(combined_stmt.c.id.desc())
         final_stmt = final_stmt.limit(limit).offset(offset)
         
+        # Debug logging
+        logger.debug(f"Searching tours with filters: city={city}, dates={date_from}-{date_to}, "
+                    f"time={time_from}-{time_to}, categories={categories}")
+        
         # Execute and return tour IDs
-        return [id for id, in await self.session.execute(final_stmt)]
+        tour_ids = [id for id, in await self.session.execute(final_stmt)]
+        logger.debug(f"Found {len(tour_ids)} tours matching filters")
+        return tour_ids
     
     def _parse_time_filters(
         self, time_from: str | None, time_to: str | None
@@ -233,9 +274,18 @@ class TourFilterService(BaseService):
         Returns:
             SQLAlchemy query for tour IDs with virtual departures
         """
-        # Start with a clean query for repeating tours
+        # Start with a clean query for repeating tours - only include tours with repetition
         stmt = select(Tour.id)
-        stmt = stmt.where(Tour.repeat_type.isnot(None))
+        stmt = stmt.where(
+            and_(
+                Tour.repeat_type.isnot(None),
+                Tour.repeat_type != REPETITION_NONE,  # Make sure we exclude tours with no repetition
+                Tour.repeat_time.isnot(None)  # Make sure we have a repeat time
+            )
+        )
+        
+        # Add a debug log for the base query before any filters
+        logger.debug(f"Base virtual departures query: tours with repetition != none and with repeat_time")
 
         # Time filtering for repeating tours
         if time_filter_start_minutes is not None or time_filter_end_minutes is not None:
@@ -250,6 +300,8 @@ class TourFilterService(BaseService):
         if date_from or date_to:
             logger.debug(f"Filtering repeating tours with date_from={date_from}, date_to={date_to}")
             stmt = self._apply_weekday_filter_for_repeating_tours(stmt, date_from, date_to)
+        else:
+            logger.debug("No date filters applied to virtual departures")
         
         return stmt
     
@@ -303,6 +355,11 @@ class TourFilterService(BaseService):
         Returns:
             Modified SQLAlchemy query
         """
+        # If no date filters provided, return all repeating tours
+        if not date_from and not date_to:
+            logger.debug("No date filters, returning all repeating tours")
+            return stmt
+            
         try:
             # Create arrays for the days we want to match
             matching_weekdays = []
@@ -325,7 +382,7 @@ class TourFilterService(BaseService):
                 days_diff = (date_to - date_from).days
                 logger.debug(f"Date range spans {days_diff} days")
                 
-                if days_diff > 1:
+                if days_diff > 0:
                     # Add all weekdays in between
                     current_date = date_from + timedelta(days=1)
                     while current_date < date_to:
@@ -334,7 +391,15 @@ class TourFilterService(BaseService):
                             matching_weekdays.append(current_dow)
                         current_date += timedelta(days=1)
             
-            logger.debug(f"Matching weekdays: {matching_weekdays}")
+            logger.debug(f"Matching weekdays for filter: {matching_weekdays}")
+            
+            # For daily repeating tours, we don't need to check weekdays,
+            # they should always be included regardless of date.
+            # IMPORTANT: Return tours with either daily repetition or weekly with matching weekdays
+            
+            # Daily repetition condition - these tours run every day, always include
+            daily_condition = Tour.repeat_type == REPETITION_DAILY
+            logger.debug(f"Looking for daily repetitions with: {REPETITION_DAILY}")
             
             # Build a condition for weekly repeating tours
             weekday_conditions = []
@@ -360,18 +425,16 @@ class TourFilterService(BaseService):
                     for pattern in patterns
                 ])
             
-            # Final condition for repeating tours:
-            repeating_tours_condition = or_(
-                # Daily repeating tours (all days)
-                Tour.repeat_type == '0',
-                
-                # Weekly repeating tours that match our weekday patterns
-                and_(
-                    Tour.repeat_type == '1',
-                    Tour.repeat_weekdays.isnot(None),
-                    or_(*weekday_conditions) if weekday_conditions else True
-                )
+            # For weekly repetitions, must check that the weekday matches
+            weekly_condition = and_(
+                Tour.repeat_type == REPETITION_WEEKLY,
+                Tour.repeat_weekdays.isnot(None),
+                or_(*weekday_conditions) if weekday_conditions else False
             )
+            logger.debug(f"Looking for weekly repetitions with: {REPETITION_WEEKLY}")
+            
+            # Final condition for repeating tours: either daily OR weekly with matching day
+            repeating_tours_condition = or_(daily_condition, weekly_condition)
             
             # Apply this condition to our statement for repeating tours
             stmt = stmt.where(repeating_tours_condition)
