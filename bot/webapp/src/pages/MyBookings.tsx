@@ -5,17 +5,6 @@ import { Link } from 'react-router-dom';
 import { t, fmtPrice } from '../i18n';
 import { formatDate, formatTime } from '../utils/dateUtils';
 
-// Shadcn UI components
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { Separator } from "../components/ui/separator";
-import { ScrollArea } from "../components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Skeleton } from "../components/ui/skeleton";
-import { AlertCircle, Calendar, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
-
 // Types
 interface BookingItem {
   category_name: string;
@@ -35,20 +24,6 @@ interface Booking {
   is_cancellable: boolean;
   items: BookingItem[];
 }
-
-// Helper function for status badges - moved outside of component
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case 'confirmed':
-      return <Badge className="bg-green-500 text-white"><CheckCircle className="w-3 h-3 mr-1" /> {t('status_confirmed')}</Badge>;
-    case 'rejected':
-      return <Badge className="bg-red-500 text-white"><XCircle className="w-3 h-3 mr-1" /> {t('status_rejected')}</Badge>;
-    case 'cancelled':
-      return <Badge className="bg-gray-500 text-white"><XCircle className="w-3 h-3 mr-1" /> {t('status_cancelled')}</Badge>;
-    default:
-      return <Badge className="bg-yellow-500 text-black"><AlertCircle className="w-3 h-3 mr-1" /> {t('status_pending')}</Badge>;
-  }
-};
 
 export default function MyBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -109,75 +84,74 @@ export default function MyBookings() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white text-black p-4 space-y-4">
+      <div className="min-h-screen bg-gray-50 p-4 space-y-4">
         <div className="flex items-center mb-4">
           <Link to="/" className="text-blue-600 hover:underline">
             {t('back')}
           </Link>
         </div>
-        <h2 className="text-2xl font-bold">{t('my_bookings')}</h2>
+        <h2 className="text-2xl font-bold text-cyan-700">{t('my_bookings')}</h2>
         {[1, 2, 3].map(i => (
-          <Card key={i} className="bg-gray-50 border-gray-200">
-            <CardHeader>
-              <Skeleton className="h-6 w-3/4" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-1/2" />
-                <Skeleton className="h-4 w-1/4" />
-              </div>
-            </CardContent>
-          </Card>
+          <div key={i} className="bg-white rounded-xl shadow-md p-4 mb-4 animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+          </div>
         ))}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white text-black p-4 max-w-md mx-auto">
+    <div className="min-h-screen bg-gray-50 p-4 pb-20 max-w-md mx-auto">
       <div className="flex items-center mb-4">
-        <Link to="/" className="text-blue-600 hover:underline">
-          {t('back')}
+        <Link to="/" className="text-blue-600 hover:underline flex items-center">
+          <span className="mr-1">←</span> {t('back')}
         </Link>
       </div>
       
-      <h2 className="text-2xl font-bold mb-4">{t('my_bookings')}</h2>
+      <h2 className="text-2xl font-bold mb-4 text-cyan-700">{t('my_bookings')}</h2>
       
       {error && (
-        <Alert variant="destructive" className="mb-4 bg-red-50 border-red-300 text-red-800">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>{t('error')}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg">
+          <div className="font-bold">{t('error')}</div>
+          <div>{error}</div>
+        </div>
       )}
 
       {bookings.length === 0 ? (
-        <Card className="bg-gray-50 border-gray-200">
-          <CardContent className="pt-6 text-center text-gray-600">
-            {t('no_bookings')}
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-xl shadow-md p-6 text-center text-gray-600">
+          {t('no_bookings')}
+        </div>
       ) : (
-        <Tabs defaultValue="upcoming" value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 bg-gray-100">
-            <TabsTrigger value="upcoming" className="data-[state=active]:bg-white data-[state=active]:text-black">
+        <div>
+          <div className="grid grid-cols-2 gap-1 bg-white rounded-lg shadow-sm mb-4">
+            <button 
+              className={`py-2 rounded-lg font-medium text-center ${
+                activeTab === "upcoming" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+              }`}
+              onClick={() => setActiveTab("upcoming")}
+            >
               {t('tab_upcoming')} ({upcomingBookings.length})
-            </TabsTrigger>
-            <TabsTrigger value="past" className="data-[state=active]:bg-white data-[state=active]:text-black">
+            </button>
+            <button 
+              className={`py-2 rounded-lg font-medium text-center ${
+                activeTab === "past" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+              }`}
+              onClick={() => setActiveTab("past")}
+            >
               {t('tab_past')} ({pastBookings.length})
-            </TabsTrigger>
-          </TabsList>
+            </button>
+          </div>
           
-          <TabsContent value="upcoming" className="mt-4 space-y-4">
-            {upcomingBookings.length === 0 ? (
-              <Card className="bg-gray-50 border-gray-200">
-                <CardContent className="pt-6 text-center text-gray-600">
+          {activeTab === "upcoming" && (
+            <div className="space-y-4">
+              {upcomingBookings.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-md p-6 text-center text-gray-600">
                   {t('no_upcoming_bookings')}
-                </CardContent>
-              </Card>
-            ) : (
-              <ScrollArea className="h-[calc(100vh-220px)]">
-                <div className="space-y-4">
+                </div>
+              ) : (
+                <div className="space-y-4" style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
                   {upcomingBookings.map(booking => (
                     <BookingCard 
                       key={booking.id} 
@@ -186,20 +160,18 @@ export default function MyBookings() {
                     />
                   ))}
                 </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
+              )}
+            </div>
+          )}
           
-          <TabsContent value="past" className="mt-4 space-y-4">
-            {pastBookings.length === 0 ? (
-              <Card className="bg-gray-50 border-gray-200">
-                <CardContent className="pt-6 text-center text-gray-600">
+          {activeTab === "past" && (
+            <div className="space-y-4">
+              {pastBookings.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-md p-6 text-center text-gray-600">
                   {t('no_past_bookings')}
-                </CardContent>
-              </Card>
-            ) : (
-              <ScrollArea className="h-[calc(100vh-220px)]">
-                <div className="space-y-4">
+                </div>
+              ) : (
+                <div className="space-y-4" style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
                   {pastBookings.map(booking => (
                     <BookingCard 
                       key={booking.id} 
@@ -209,10 +181,10 @@ export default function MyBookings() {
                     />
                   ))}
                 </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
-        </Tabs>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -241,76 +213,67 @@ function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
   };
   
   return (
-    <Card className="overflow-hidden bg-gray-50 border-gray-200">
-      <CardHeader className="pb-2 bg-white">
-        <div className="flex justify-between items-start">
-          <CardTitle className="text-lg text-black">{booking.tour_title}</CardTitle>
-          {getStatusBadge(booking.status)}
-        </div>
-        <CardDescription className="flex items-center gap-1 mt-1 text-gray-700">
-          <Calendar className="h-3 w-3" />
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+      <div className="p-4 bg-gradient-to-r from-blue-50 to-white">
+        <h3 className="text-lg font-semibold text-gray-800">{booking.tour_title}</h3>
+        <div className="flex items-center text-sm text-gray-600 mt-1">
+          <span className="mr-1">🗓️</span>
           {formatDate(booking.departure_date)}
-          <span className="mx-1">•</span>
-          <Clock className="h-3 w-3" />
+          <span className="mx-1.5">•</span>
+          <span className="mr-1">🕒</span>
           {formatTime(booking.departure_date)}
-        </CardDescription>
-      </CardHeader>
+        </div>
+      </div>
       
-      <CardContent className="pb-3 text-black">
+      <div className="px-4 py-3">
         {booking.items.length > 0 && (
-          <div className="text-sm space-y-1 mb-2">
+          <div className="space-y-1.5">
             {booking.items.map((item, idx) => (
-              <div key={idx} className="flex justify-between">
-                <span>{item.category_name} × {item.qty}</span>
-                <span className="font-medium">{fmtPrice(item.amount)}</span>
+              <div key={idx} className="flex justify-between text-sm">
+                <span className="text-gray-700">{item.category_name} × {item.qty}</span>
+                <span className="font-medium text-gray-900">{fmtPrice(item.amount)}</span>
               </div>
             ))}
-            <Separator className="my-2 bg-gray-300" />
-            <div className="flex justify-between font-medium">
-              <span>{t('total')}</span>
-              <span className="text-blue-700">{fmtPrice(booking.amount)}</span>
+            <div className="border-t border-gray-100 my-2"></div>
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-gray-700">{t('total')}</span>
+              <span className="text-lg font-bold text-blue-600">{fmtPrice(booking.amount)}</span>
             </div>
           </div>
         )}
         
         {showConfirm && (
-          <Alert className="mt-2 bg-yellow-50 border-yellow-300 text-yellow-800">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>{t('confirm_cancel_title')}</AlertTitle>
-            <AlertDescription>{t('confirm_cancel_description')}</AlertDescription>
-            <div className="flex gap-2 mt-2">
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="bg-red-600 hover:bg-red-700 text-white"
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
+            <div className="font-medium mb-1">❓ {t('confirm_cancel_title')}</div>
+            <div className="text-sm mb-3">{t('confirm_cancel_description')}</div>
+            <div className="flex gap-2">
+              <button 
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg flex-1"
                 onClick={confirmCancel}
               >
                 {t('yes_cancel')}
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
+              </button>
+              <button 
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-200 flex-1"
                 onClick={cancelAction}
               >
                 {t('no_keep')}
-              </Button>
+              </button>
             </div>
-          </Alert>
+          </div>
         )}
-      </CardContent>
+      </div>
       
       {booking.is_cancellable && !isPast && !showConfirm && (
-        <CardFooter className="pt-0 bg-white">
-          <Button 
-            variant="destructive" 
-            size="sm" 
-            className="w-full bg-red-600 hover:bg-red-700 text-white"
+        <div className="px-4 pb-4">
+          <button 
+            className="w-full py-2.5 bg-white border border-red-500 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
             onClick={handleCancelClick}
           >
             {t('cancel')}
-          </Button>
-        </CardFooter>
+          </button>
+        </div>
       )}
-    </Card>
+    </div>
   );
 } 
