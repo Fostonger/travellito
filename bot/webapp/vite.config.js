@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['bulgaria-pk-descending-varied.trycloudflare.com']
+    allowedHosts: ['peer-favor-student-complications.trycloudflare.com']
   },
 }); 
