@@ -159,9 +159,8 @@ class BookingService:
             # Check if booking is cancellable (based on departure time and tour's cancellation policy)
             is_cancellable = False
             # Allow cancellation for both pending and confirmed bookings
-            if booking.status in ["pending", "confirmed"]:
-                tour = booking.departure.tour
-                cutoff_time = booking.departure.starts_at - timedelta(hours=tour.free_cancellation_cutoff_h)
+            if booking.status in ["pending"]:
+                cutoff_time = booking.departure.starts_at
                 is_cancellable = now < cutoff_time
             
             # Format items
@@ -216,13 +215,13 @@ class BookingService:
             raise BaseError("Booking not found", status_code=404)
         
         # Allow cancelling both pending and confirmed bookings
-        if booking.status not in ["pending", "confirmed"]:
-            raise BaseError("Only pending or confirmed bookings can be cancelled", status_code=400)
+        if booking.status not in ["pending"]:
+            raise BaseError("Only pending bookings can be cancelled", status_code=400)
         
         # Check cancellation policy
         now = datetime.utcnow()
         tour = booking.departure.tour
-        cutoff_time = booking.departure.starts_at - timedelta(hours=tour.free_cancellation_cutoff_h)
+        cutoff_time = booking.departure.starts_at
         
         if now >= cutoff_time:
             raise BaseError(

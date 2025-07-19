@@ -42,7 +42,9 @@ export default function MyBookings() {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
       });
-      setBookings(data);
+      // Filter out cancelled bookings
+      const activeBookings = data.filter(booking => booking.status.toLowerCase() !== "cancelled");
+      setBookings(activeBookings);
       setError(null);
     } catch (err: any) {
       console.error('Error loading bookings:', err);
