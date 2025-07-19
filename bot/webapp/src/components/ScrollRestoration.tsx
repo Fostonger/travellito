@@ -6,33 +6,69 @@ const scrollPositions = new Map<string, number>();
 
 /**
  * Component that handles scroll restoration when navigating between pages
- * Saves scroll position when leaving a page and restores it when coming back
  */
 export default function ScrollRestoration() {
   const { pathname } = useLocation();
-  const initialized = useRef(false);
-
-  // Save scroll position when unmounting/changing route
+  const prevPathRef = useRef<string | null>(null);
+  
+  // On mount, disable browser's scroll restoration
   useEffect(() => {
-    if (!initialized.current) {
-      initialized.current = true;
-      
-      // Try to restore scroll position on initial mount
-      const savedPosition = scrollPositions.get(pathname);
-      if (savedPosition) {
-        setTimeout(() => {
-          window.scrollTo(0, savedPosition);
-        }, 0);
+    if (window.history && 'scrollRestoration' in window.history) {
+      // Disable browser's automatic scroll restoration
+      window.history.scrollRestoration = 'manual';
+    }
+    
+    return () => {
+      // Restore browser's default behavior on unmount
+      if (window.history && 'scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'auto';
       }
-      
+    };
+  }, []);
+  
+  // Handle scroll position on pathname change
+  useEffect(() => {
+    // On first mount or component initialization
+    if (!prevPathRef.current) {
+      prevPathRef.current = pathname;
       return;
     }
-
-    // When route changes, save the previous scroll position
-    return () => {
-      scrollPositions.set(pathname, window.scrollY);
-    };
+    
+    // When navigating to a new page:
+    // 1. Save scroll position of the current page before leaving
+    const currentPosition = window.scrollY;
+    if (currentPosition > 0) {
+      scrollPositions.set(prevPathRef.current, currentPosition);
+    }
+    
+    // 2. Update prevPath for next navigation
+    prevPathRef.current = pathname;
+    
+    // 3. Restore scroll position if coming back to a page, or scroll to top
+    window.requestAnimationFrame(() => {
+      // Give the page some time to render content before scrolling
+      setTimeout(() => {
+        const savedPosition = scrollPositions.get(pathname);
+        if (savedPosition) {
+          window.scrollTo(0, savedPosition);
+        } else {
+          window.scrollTo(0, 0);
+        }
+      }, 100);
+    });
   }, [pathname]);
-
+  
+  // Clean up on unmount - save final scroll position
+  useEffect(() => {
+    return () => {
+      if (prevPathRef.current) {
+        const finalPosition = window.scrollY;
+        if (finalPosition > 0) {
+          scrollPositions.set(prevPathRef.current, finalPosition);
+        }
+      }
+    };
+  }, []);
+  
   return null;
 } 

@@ -163,7 +163,8 @@ class PublicService(BaseService):
         # Fetch full tour data
         if tour_ids:
             tours_stmt = select(Tour).options(
-                selectinload(Tour.tour_categories)
+                selectinload(Tour.tour_categories),
+                selectinload(Tour.images)  # Also load images
             ).where(Tour.id.in_(tour_ids)).order_by(Tour.id.desc())
             tours = (await self.session.scalars(tours_stmt)).unique().all()
         else:
@@ -179,12 +180,21 @@ class PublicService(BaseService):
             if t.tour_categories:
                 categories = [cat.name for cat in t.tour_categories]
             
+            # Get images
+            images = []
+            if t.images:
+                images = [
+                    {"key": img.key, "url": presigned(img.key)}
+                    for img in t.images
+                ]
+            
             out.append({
                 "id": t.id,
                 "title": t.title,
                 "price_raw": str(price) if price else "0",
                 "price_net": str(price) if price else "0",
                 "categories": categories,
+                "images": images  # Add images to the response
             })
         
         return out

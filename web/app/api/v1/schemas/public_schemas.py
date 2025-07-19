@@ -15,6 +15,7 @@ class TourSearchOut(BaseModel):
     price_raw: str
     price_net: str
     categories: List[str] = []  # New field for multiple categories
+    images: List[dict] = []  # Add images field to search results
 
 
 class TourListOut(BaseModel):

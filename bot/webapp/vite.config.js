@@ -40,6 +40,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['milk-muslim-sweet-luxury.trycloudflare.com']
+    allowedHosts: ['ash-saying-that-boys.trycloudflare.com']
   },
 }); 

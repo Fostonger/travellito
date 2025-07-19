@@ -95,7 +95,33 @@ export async function fetchTours(filters: Partial<FilterState> = {}) {
   }
   
   const response = await apiClient.get(url);
-  return response.data;
+  
+  // Process the data to ensure images are properly structured
+  const tours = response.data.map(tour => {
+    // Handle the legacy single image field
+    if (tour.image && tour.image.url) {
+      if (!tour.images) {
+        tour.images = [{ url: tour.image.url }];
+      }
+    }
+    
+    // Ensure images are properly structured if present
+    if (tour.images) {
+      // Make sure it's always an array
+      if (!Array.isArray(tour.images)) {
+        tour.images = [];
+      }
+      
+      // Ensure each image has a url property
+      tour.images = tour.images.filter(img => img && img.url);
+    } else {
+      tour.images = [];
+    }
+    
+    return tour;
+  });
+  
+  return tours;
 }
 
 /**
@@ -103,7 +129,31 @@ export async function fetchTours(filters: Partial<FilterState> = {}) {
  */
 export async function fetchTourById(id: string) {
   const response = await apiClient.get(`/public/tours/${id}`);
-  return response.data;
+  
+  // Process image data for consistency
+  const tour = response.data;
+  
+  // Handle the legacy single image field
+  if (tour.image && tour.image.url) {
+    if (!tour.images) {
+      tour.images = [{ url: tour.image.url }];
+    }
+  }
+  
+  // Ensure images are properly structured
+  if (tour.images) {
+    // Make sure it's always an array
+    if (!Array.isArray(tour.images)) {
+      tour.images = [];
+    }
+    
+    // Ensure each image has a url property
+    tour.images = tour.images.filter(img => img && img.url);
+  } else {
+    tour.images = [];
+  }
+  
+  return tour;
 }
 
 /**

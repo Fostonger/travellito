@@ -318,17 +318,24 @@ export default function App() {
 
 // Tour card component
 function TourCard({ tour }) {
+  // Use the first image URL from the API response if available
+  const imageUrl = tour.images && tour.images.length > 0 && tour.images[0].url;
+  
   return (
     <Link to={`/tour/${tour.id}`} className="block">
       <Card className="overflow-hidden hover:shadow-xl transition-shadow">
         <div className="h-48 bg-gray-200 relative">
-          {/* If tour has images, show the first one */}
-          {tour.images && tour.images[0] ? (
+          {imageUrl ? (
             <img 
-              src={tour.images[0].url} 
+              src={imageUrl} 
               className="w-full h-full object-cover"
-              loading="lazy" // Add lazy loading for images
+              loading="lazy"
               alt={tour.title}
+              onError={(e) => {
+                console.error(`Failed to load image: ${imageUrl}`);
+                e.target.onerror = null;
+                e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+              }}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -370,13 +377,10 @@ function TourCard({ tour }) {
           
           <h3 className="font-bold mb-1 line-clamp-2">{tour.title}</h3>
           
-          <div className="mt-2 flex justify-between items-end">
+          <div className="mt-2">
             <span className="text-blue-600 font-bold">
               {fmtPrice(tour.price_net)}
             </span>
-            <Button size="sm" className="bg-cyan-700 hover:bg-cyan-800">
-              {t('view')}
-            </Button>
           </div>
         </div>
       </Card>
