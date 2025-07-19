@@ -7,6 +7,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['clip-evanescence-dominican-map.trycloudflare.com']
+    allowedHosts: ['manufacturer-colour-shirt-unified.trycloudflare.com']
   },
 }); 

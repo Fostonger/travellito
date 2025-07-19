@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from datetime import date
+from datetime import date, time, datetime, timedelta
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ....deps import SessionDep
@@ -40,6 +41,9 @@ async def search_tours(
     price_max: Decimal | None = Query(None, gt=0),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
+    time_from: str | None = Query(None, description="Time in format HH:MM with timezone offset e.g. 14:30+03:00"),
+    time_to: str | None = Query(None, description="Time in format HH:MM with timezone offset e.g. 19:30+03:00"),
+    categories: List[str] | None = Query(None, description="Filter by one or more tour categories"),
     duration_min: int | None = Query(None, gt=0),
     duration_max: int | None = Query(None, gt=0),
     limit: int = Query(50, gt=0, le=100),
@@ -57,6 +61,9 @@ async def search_tours(
         price_max=price_max,
         date_from=date_from,
         date_to=date_to,
+        time_from=time_from,
+        time_to=time_to,
+        categories=categories,
         duration_min=duration_min,
         duration_max=duration_max,
         limit=limit,

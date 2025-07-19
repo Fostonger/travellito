@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from typing import List, Dict, Any, Sequence, Optional
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,6 +124,9 @@ class PublicService(BaseService):
         price_max: Decimal | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        time_from: str | None = None,
+        time_to: str | None = None,
+        categories: List[str] | None = None,
         duration_min: int | None = None,
         duration_max: int | None = None,
         limit: int = 50,
@@ -138,6 +141,9 @@ class PublicService(BaseService):
             price_max: Maximum price filter
             date_from: Start date filter
             date_to: End date filter
+            time_from: Start time filter with timezone (format: HH:MM+TZ)
+            time_to: End time filter with timezone (format: HH:MM+TZ)
+            categories: List of category names to filter by
             duration_min: Minimum duration in minutes
             duration_max: Maximum duration in minutes
             limit: Maximum results
@@ -151,11 +157,9 @@ class PublicService(BaseService):
         if user_id is not None:
             landlord_id = await self._last_referral_landlord_id(user_id)
         
-        # Base query
-        stmt = select(Tour).options(
-            selectinload(Tour.category),
-            selectinload(Tour.tour_categories)
-        )
+        # Base query - We'll use Tour.id for distinct to avoid issues with JSON columns
+        # Don't use loader options here since we're only selecting IDs
+        stmt = select(Tour.id)
         
         # Price filters (raw list price)
         if price_min is not None or price_max is not None:
@@ -170,13 +174,66 @@ class PublicService(BaseService):
             if price_max is not None:
                 stmt = stmt.where(price_subq.c.price <= price_max)
         
-        # Date range - need to join departures
-        if date_from or date_to:
+        # Date/time range - need to join departures
+        if date_from or date_to or time_from or time_to:
             stmt = stmt.join(Departure, Departure.tour_id == Tour.id)
+            
+            # Date filtering
             if date_from:
                 stmt = stmt.where(Departure.starts_at >= date_from)
             if date_to:
-                stmt = stmt.where(Departure.starts_at <= date_to)
+                # Add one day to include the entire end date
+                next_day = date_to + timedelta(days=1)
+                stmt = stmt.where(Departure.starts_at < next_day)
+            
+            # Time filtering with timezone awareness
+            if time_from or time_to:
+                # Extract hour and minute for time comparison
+                # We can use PostgreSQL's EXTRACT function for this
+                if time_from:
+                    # Format is like "14:30+03:00", extract hours and minutes
+                    try:
+                        hour, rest = time_from.split(':', 1)
+                        minute = rest[:2]
+                        hour, minute = int(hour), int(minute)
+                        # Use extract to compare with the local time considering timezone
+                        stmt = stmt.where(
+                            func.extract('hour', Departure.starts_at) * 60 + 
+                            func.extract('minute', Departure.starts_at) >= 
+                            hour * 60 + minute
+                        )
+                    except (ValueError, IndexError):
+                        # If time format is invalid, ignore this filter
+                        pass
+                
+                if time_to:
+                    try:
+                        hour, rest = time_to.split(':', 1)
+                        minute = rest[:2]
+                        hour, minute = int(hour), int(minute)
+                        stmt = stmt.where(
+                            func.extract('hour', Departure.starts_at) * 60 + 
+                            func.extract('minute', Departure.starts_at) <= 
+                            hour * 60 + minute
+                        )
+                    except (ValueError, IndexError):
+                        # If time format is invalid, ignore this filter
+                        pass
+        
+        # Category filter
+        if categories and len(categories) > 0:
+            # Use EXISTS subquery with join to avoid issues with JSON columns and distinct
+            from sqlalchemy.sql import exists
+            
+            # Create a subquery to find tours with matching categories
+            category_exists = exists().where(
+                and_(
+                    Tour.id == TourCategory.tour_id,
+                    TourCategory.name.in_(categories)
+                )
+            ).correlate(Tour)
+            
+            stmt = stmt.where(category_exists)
         
         # Duration filters (minutes)
         if duration_min is not None:
@@ -189,9 +246,19 @@ class PublicService(BaseService):
             stmt = stmt.join(City, City.id == Tour.city_id)
             stmt = stmt.where(func.lower(City.name) == city.lower())
         
-        stmt = stmt.order_by(Tour.id.desc()).limit(limit).offset(offset)
+        # Get distinct tour IDs first to avoid issues with JSON columns
+        stmt = stmt.distinct().order_by(Tour.id.desc()).limit(limit).offset(offset)
+        tour_ids = [id for id, in await self.session.execute(stmt)]
         
-        tours: Sequence[Tour] = (await self.session.scalars(stmt)).unique().all()
+        # Then fetch full tour data
+        if tour_ids:
+            tours_stmt = select(Tour).options(
+                selectinload(Tour.category),
+                selectinload(Tour.tour_categories)
+            ).where(Tour.id.in_(tour_ids)).order_by(Tour.id.desc())
+            tours = (await self.session.scalars(tours_stmt)).unique().all()
+        else:
+            tours = []
         
         out: List[Dict[str, Any]] = []
         for t in tours:
@@ -210,8 +277,8 @@ class PublicService(BaseService):
             out.append({
                 "id": t.id,
                 "title": t.title,
-                "price_raw": str(price),
-                "price_net": str(price),
+                "price_raw": str(price) if price else "0",
+                "price_net": str(price) if price else "0",
                 "category": legacy_category,
                 "categories": categories,
             })
