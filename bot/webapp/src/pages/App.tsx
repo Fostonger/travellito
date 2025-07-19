@@ -15,12 +15,19 @@ import { Tour } from '../types';
 
 export default function App() {
   // Load filters from localStorage and manage state persistence
-  const [filters, setFilters] = usePersistedFilters();
+  const [appliedFilters, setAppliedFilters] = usePersistedFilters();
+  // Separate state for pending filters (not yet applied)
+  const [pendingFilters, setPendingFilters] = useState(appliedFilters);
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   
-  // Use React Query to fetch tours with caching
-  const { data: tours, isLoading, refetch } = useTours(filters);
+  // Use React Query to fetch tours with caching - only use applied filters
+  const { data: tours, isLoading, refetch } = useTours(appliedFilters);
+
+  // Sync pending filters when applied filters change (e.g., on reset)
+  useEffect(() => {
+    setPendingFilters(appliedFilters);
+  }, [appliedFilters]);
 
   useEffect(() => {
     // Extract available categories from tour data for filtering
@@ -37,35 +44,46 @@ export default function App() {
     }
   }, [tours]);
 
-  const handleFilterChange = (key: keyof typeof filters, value: any) => {
-    setFilters({
-      ...filters,
+  const handleFilterChange = (key: keyof typeof pendingFilters, value: any) => {
+    setPendingFilters({
+      ...pendingFilters,
       [key]: value
     });
   };
 
   const toggleCategory = (category: string) => {
-    setFilters({
-      ...filters,
-      categories: filters.categories.includes(category)
-        ? filters.categories.filter(cat => cat !== category)
-        : [...filters.categories, category]
+    setPendingFilters({
+      ...pendingFilters,
+      categories: pendingFilters.categories.includes(category)
+        ? pendingFilters.categories.filter(cat => cat !== category)
+        : [...pendingFilters.categories, category]
     });
   };
 
-  // Apply filters and fetch data
+  // Apply pending filters and fetch data
   const applyFilters = useCallback(() => {
+    setAppliedFilters(pendingFilters);
     refetch();
     
     // Close filter drawer on mobile after applying
     if (window.innerWidth < 768) {
       setIsFilterOpen(false);
     }
-  }, [refetch]);
+  }, [pendingFilters, setAppliedFilters, refetch]);
 
   const resetFilters = () => {
-    setFilters(initialFilterState);
+    setAppliedFilters(initialFilterState);
+    setPendingFilters(initialFilterState);
   };
+
+  // Check if there are any active applied filters
+  const hasActiveFilters = appliedFilters.categories.length > 0 || 
+                          appliedFilters.priceMin || 
+                          appliedFilters.priceMax ||
+                          appliedFilters.dateFrom || 
+                          appliedFilters.dateTo || 
+                          appliedFilters.timeFrom || 
+                          appliedFilters.timeTo;
 
   if (isLoading) {
     return (
@@ -117,50 +135,10 @@ export default function App() {
                 <FilterIcon className="h-4 w-4" />
                 {t('filters')}
               </Button>
-              
-              {/* Active filter indicators */}
-              <div className="flex gap-1 overflow-x-auto hide-scrollbar">
-                {filters.categories.length > 0 && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {filters.categories.length} {t('categories')}
-                  </Badge>
-                )}
-                {filters.priceMin && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {t('min')}: {filters.priceMin}
-                  </Badge>
-                )}
-                {filters.priceMax && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {t('max')}: {filters.priceMax}
-                  </Badge>
-                )}
-                {filters.dateFrom && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {t('from')}: {filters.dateFrom}
-                  </Badge>
-                )}
-                {filters.dateTo && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {t('to')}: {filters.dateTo}
-                  </Badge>
-                )}
-                {filters.timeFrom && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {t('time_from')}: {filters.timeFrom}
-                  </Badge>
-                )}
-                {filters.timeTo && (
-                  <Badge variant="outline" className="whitespace-nowrap">
-                    {t('time_to')}: {filters.timeTo}
-                  </Badge>
-                )}
-              </div>
             </div>
             
             {/* Reset filters button */}
-            {(filters.categories.length > 0 || filters.priceMin || filters.priceMax ||
-             filters.dateFrom || filters.dateTo || filters.timeFrom || filters.timeTo) && (
+            {hasActiveFilters && (
               <Button 
                 variant="ghost" 
                 size="sm"
@@ -171,6 +149,47 @@ export default function App() {
               </Button>
             )}
           </div>
+          
+          {/* Active filter indicators - now displayed on multiple lines */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {appliedFilters.categories.length > 0 && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {appliedFilters.categories.length} {t('categories')}
+                </Badge>
+              )}
+              {appliedFilters.priceMin && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {t('min')}: {appliedFilters.priceMin}
+                </Badge>
+              )}
+              {appliedFilters.priceMax && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {t('max')}: {appliedFilters.priceMax}
+                </Badge>
+              )}
+              {appliedFilters.dateFrom && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {t('from')}: {appliedFilters.dateFrom}
+                </Badge>
+              )}
+              {appliedFilters.dateTo && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {t('to')}: {appliedFilters.dateTo}
+                </Badge>
+              )}
+              {appliedFilters.timeFrom && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {t('time_from')}: {appliedFilters.timeFrom}
+                </Badge>
+              )}
+              {appliedFilters.timeTo && (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {t('time_to')}: {appliedFilters.timeTo}
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Filters and results layout */}
@@ -204,14 +223,14 @@ export default function App() {
                     type="number" 
                     placeholder={t('min')} 
                     className="w-full p-2 border rounded-md"
-                    value={filters.priceMin}
+                    value={pendingFilters.priceMin}
                     onChange={(e) => handleFilterChange('priceMin', e.target.value)}
                   />
                   <input 
                     type="number" 
                     placeholder={t('max')} 
                     className="w-full p-2 border rounded-md"
-                    value={filters.priceMax}
+                    value={pendingFilters.priceMax}
                     onChange={(e) => handleFilterChange('priceMax', e.target.value)}
                   />
                 </div>
@@ -224,13 +243,13 @@ export default function App() {
                   <input 
                     type="date" 
                     className="w-full p-2 border rounded-md"
-                    value={filters.dateFrom}
+                    value={pendingFilters.dateFrom}
                     onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
                   />
                   <input 
                     type="date" 
                     className="w-full p-2 border rounded-md"
-                    value={filters.dateTo}
+                    value={pendingFilters.dateTo}
                     onChange={(e) => handleFilterChange('dateTo', e.target.value)}
                   />
                 </div>
@@ -243,13 +262,13 @@ export default function App() {
                   <input 
                     type="time" 
                     className="w-full p-2 border rounded-md"
-                    value={filters.timeFrom}
+                    value={pendingFilters.timeFrom}
                     onChange={(e) => handleFilterChange('timeFrom', e.target.value)}
                   />
                   <input 
                     type="time" 
                     className="w-full p-2 border rounded-md"
-                    value={filters.timeTo}
+                    value={pendingFilters.timeTo}
                     onChange={(e) => handleFilterChange('timeTo', e.target.value)}
                   />
                 </div>
@@ -264,7 +283,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         id={`cat-${i}`} 
-                        checked={filters.categories.includes(category)}
+                        checked={pendingFilters.categories.includes(category)}
                         onChange={() => toggleCategory(category)}
                         className="rounded border-gray-300 text-blue-600"
                       />
