@@ -9,8 +9,7 @@ class TourIn(BaseModel):
     description: Optional[str] = None
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
-    category_id: Optional[int] = None  # Legacy field for backward compatibility
-    category_ids: Optional[List[int]] = None  # New field for multiple categories
+    category_ids: Optional[List[int]] = None  # Field for multiple categories
     address: Optional[str] = None
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
@@ -32,8 +31,7 @@ class TourUpdate(BaseModel):
     description: Optional[str] = None
     duration_minutes: Optional[int] = Field(None, gt=0)
     city_id: Optional[int] = None
-    category_id: Optional[int] = None  # Legacy field for backward compatibility
-    category_ids: Optional[List[int]] = None  # New field for multiple categories
+    category_ids: Optional[List[int]] = None  # Field for multiple categories
     address: Optional[str] = None
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
@@ -55,8 +53,7 @@ class TourOut(BaseModel):
     description: Optional[str] = None
     duration_minutes: Optional[int] = None
     city_id: Optional[int] = None
-    category_id: Optional[int] = None  # Legacy field for backward compatibility
-    category_ids: Optional[List[int]] = None  # New field for multiple categories
+    category_ids: Optional[List[int]] = None  # IDs of categories for this tour
     categories: Optional[List[str]] = None  # Category names for display
     address: Optional[str] = None
     latitude: Optional[float] = None
@@ -76,6 +73,10 @@ class TourOut(BaseModel):
         if hasattr(obj, "__dict__"):
             # If it's an ORM object, handle time conversion
             data = {**obj.__dict__}
+            # Remove category_id field as it's deprecated
+            if "category_id" in data:
+                del data["category_id"]
+                
             if hasattr(obj, "repeat_time") and obj.repeat_time is not None:
                 data["repeat_time"] = obj.repeat_time.strftime("%H:%M") if obj.repeat_time else None
                 

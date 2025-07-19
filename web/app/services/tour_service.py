@@ -60,7 +60,6 @@ class TourService(BaseService):
         description: Optional[str],
         duration_minutes: Optional[int] = None,
         city_id: Optional[int] = None,
-        category_id: Optional[int] = None,
         category_ids: Optional[List[int]] = None,
         address: Optional[str] = None,
         latitude: Optional[float] = None,
@@ -69,6 +68,8 @@ class TourService(BaseService):
         repeat_weekdays: Optional[List[int]] = None,
         repeat_time_str: Optional[str] = None,
         timezone: str = "UTC",
+        # Parameter for backward compatibility with existing API calls
+        category_id: Optional[int] = None,  
     ) -> Tour:
         """Create a new tour with validation"""
         
@@ -104,10 +105,9 @@ class TourService(BaseService):
             if any(day < 0 or day > 6 for day in repeat_weekdays):
                 raise ValidationError("Invalid weekday values (0-6)", field="repeat_weekdays")
         
-        # For backward compatibility, if category_ids is provided but category_id is not,
-        # use the first category_id as the legacy category_id
-        if category_ids and not category_id and len(category_ids) > 0:
-            category_id = category_ids[0]
+        # Handle legacy category_id for backward compatibility
+        if category_id and not category_ids:
+            category_ids = [category_id]
         
         # Create tour
         tour_data = {
@@ -116,7 +116,6 @@ class TourService(BaseService):
             "description": description,
             "duration_minutes": duration_minutes,
             "city_id": city_id,
-            "category_id": category_id,  # Keep for backward compatibility
             "address": address,
             "latitude": latitude,
             "longitude": longitude,
@@ -130,9 +129,6 @@ class TourService(BaseService):
         # Add tour categories if provided
         if category_ids:
             await self._update_tour_categories(tour.id, category_ids)
-        # If no category_ids but category_id is provided, add it to tour_categories as well
-        elif category_id:
-            await self._update_tour_categories(tour.id, [category_id])
         
         return tour
     

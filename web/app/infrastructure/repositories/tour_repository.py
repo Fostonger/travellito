@@ -59,7 +59,6 @@ class TourRepository(ITourRepository):
             select(Tour)
             .where(Tour.agency_id == agency_id)
             .options(
-                selectinload(Tour.category),
                 selectinload(Tour.tour_categories)
             )
             .order_by(Tour.id.desc())
@@ -93,7 +92,7 @@ class TourRepository(ITourRepository):
         self,
         *,
         city_id: Optional[int] = None,
-        category_id: Optional[int] = None,
+        category_id: Optional[int] = None,  # Kept for API compatibility
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
         skip: int = 0,
@@ -101,15 +100,21 @@ class TourRepository(ITourRepository):
     ) -> List[Tour]:
         """Search tours with filters"""
         query = select(Tour).options(
-            selectinload(Tour.category),
             selectinload(Tour.tour_categories)
         )
         
         conditions = []
         if city_id:
             conditions.append(Tour.city_id == city_id)
+        # If category_id is provided, we need to join with tour_category_associations
+        # and filter by category_id there
         if category_id:
-            conditions.append(Tour.category_id == category_id)
+            from app.models import TourCategoryAssociation
+            query = (
+                query.join(TourCategoryAssociation, 
+                           Tour.id == TourCategoryAssociation.tour_id)
+                .where(TourCategoryAssociation.category_id == category_id)
+            )
         if min_price is not None:
             conditions.append(Tour.price >= min_price)
         if max_price is not None:

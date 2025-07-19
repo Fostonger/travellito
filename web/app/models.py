@@ -105,7 +105,6 @@ class Tour(Base):
     duration_minutes = mapped_column(Integer, nullable=True)
     # Normalised city FK instead of free-text string
     city_id   = mapped_column(ForeignKey("cities.id"), nullable=True)
-    category_id = mapped_column(ForeignKey("tour_categories.id"), nullable=True)  # Legacy field, kept for backward compatibility
     # -------- Recurrence ---------
     repeat_type = mapped_column(String(16), ForeignKey("repetition_types.code"), default="none", nullable=False, comment="none | daily | weekly")
     # For weekly repetition store list of weekday numbers 0=Mon .. 6=Sun
@@ -120,10 +119,9 @@ class Tour(Base):
     images      = relationship("TourImage", back_populates="tour")
     categories  = relationship("TicketCategory", back_populates="tour")
     city        = relationship("City", back_populates="tours")
-    category    = relationship("TourCategory", back_populates="tours")  # Legacy relationship
     repeat_type_rel = relationship("RepetitionType")
     
-    # New many-to-many relationship with categories
+    # Many-to-many relationship with categories
     tour_categories = relationship(
         "TourCategory",
         secondary="tour_category_associations",
@@ -294,10 +292,8 @@ class TourCategory(Base):
 
     id   = mapped_column(Integer, primary_key=True)
     name = mapped_column(String(64), unique=True, nullable=False)
-
-    tours = relationship("Tour", back_populates="category")  # Legacy relationship
     
-    # New many-to-many relationship with tours
+    # Many-to-many relationship with tours
     tour_list = relationship(
         "Tour",
         secondary="tour_category_associations",

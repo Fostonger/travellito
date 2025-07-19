@@ -92,7 +92,6 @@ async def create_tour(
         description=payload.description,
         duration_minutes=payload.duration_minutes,
         city_id=payload.city_id,
-        category_id=payload.category_id,
         category_ids=payload.category_ids,
         address=payload.address,
         latitude=payload.latitude,

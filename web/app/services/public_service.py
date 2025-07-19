@@ -163,7 +163,6 @@ class PublicService(BaseService):
         # Fetch full tour data
         if tour_ids:
             tours_stmt = select(Tour).options(
-                selectinload(Tour.category),
                 selectinload(Tour.tour_categories)
             ).where(Tour.id.in_(tour_ids)).order_by(Tour.id.desc())
             tours = (await self.session.scalars(tours_stmt)).unique().all()
@@ -180,15 +179,11 @@ class PublicService(BaseService):
             if t.tour_categories:
                 categories = [cat.name for cat in t.tour_categories]
             
-            # For backward compatibility
-            legacy_category = t.category.name if t.category is not None else None
-            
             out.append({
                 "id": t.id,
                 "title": t.title,
                 "price_raw": str(price) if price else "0",
                 "price_net": str(price) if price else "0",
-                "category": legacy_category,
                 "categories": categories,
             })
         
