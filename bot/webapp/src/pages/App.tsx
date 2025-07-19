@@ -56,15 +56,37 @@ export default function App() {
   const fetchTours = async (appliedFilters = {}) => {
     setLoading(true);
     try {
+      // Fix for handling array parameters
       const params: Record<string, any> = {
         limit: 50,
         ...appliedFilters
       };
-
-      const { data } = await axios.get(`${apiBase}/public/tours/search`, {
-        params,
-        withCredentials: true,
+      
+      // Use axios.getUri to create a custom URL with properly formatted parameters
+      // This ensures arrays are sent correctly as separate parameters with the same name
+      let url = `${apiBase}/public/tours/search`;
+      const queryParams = new URLSearchParams();
+      
+      // Add each parameter to the URL, handling arrays specially
+      Object.entries(params).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          // For arrays like categories, add multiple parameters with the same name
+          value.forEach(item => {
+            queryParams.append(key, item);
+          });
+        } else if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, value);
+        }
       });
+      
+      // Append the query string to the URL
+      const queryString = queryParams.toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
+      
+      // Make the request with the custom URL
+      const { data } = await axios.get(url, { withCredentials: true });
       setTours(data);
       
       // Extract all unique categories for filters
