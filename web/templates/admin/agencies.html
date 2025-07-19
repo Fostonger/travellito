@@ -1,56 +1,297 @@
 {% extends "base.html" %}
-{% block title %}Управление агентствами{% endblock %}
+{% block title %}Управление агентствами и пользователями{% endblock %}
 {% block body %}
 <div class="max-w-7xl mx-auto px-6 py-10">
-  <h1 class="text-3xl font-extrabold text-indigo-700 mb-6">Агентства</h1>
-
-  <!-- Add Agency Form -->
-  <div class="mb-8 bg-white p-6 rounded-xl shadow">
-    <h2 class="text-xl font-semibold mb-4">Добавить агентство</h2>
-    <form id="addAgencyForm" class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-      <div>
-        <label for="agencyName" class="block text-sm font-medium text-gray-700 mb-1">Название</label>
-        <input type="text" id="agencyName" required class="w-full px-3 py-2 border rounded-lg" />
-      </div>
-      <div>
-        <label for="agencyApi" class="block text-sm font-medium text-gray-700 mb-1">API базовый URL (опц.)</label>
-        <input type="url" id="agencyApi" class="w-full px-3 py-2 border rounded-lg" />
-      </div>
-      <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Создать</button>
-    </form>
+  <!-- Tabs -->
+  <div class="mb-6">
+    <div class="border-b border-gray-200">
+      <nav class="-mb-px flex space-x-8">
+        <a href="#" id="tab-agencies" class="py-4 px-1 border-b-2 border-indigo-500 text-indigo-600 font-medium text-sm">
+          Агентства
+        </a>
+        <a href="#" id="tab-users" class="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm">
+          Пользователи
+        </a>
+      </nav>
+    </div>
   </div>
 
-  <div class="overflow-x-auto bg-white rounded-xl shadow">
-    <table class="min-w-full divide-y divide-gray-200" id="agenciesTable">
-      <thead class="bg-gray-50"><tr>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
-        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API базовый URL</th>
-        <th class="px-6 py-3"></th>
-      </tr></thead>
-      <tbody class="bg-white divide-y divide-gray-200" id="agenciesBody"></tbody>
-    </table>
+  <!-- Agencies Section -->
+  <div id="agencies-section">
+    <h1 class="text-3xl font-extrabold text-indigo-700 mb-6">Агентства</h1>
+
+    <!-- Add Agency Form -->
+    <div class="mb-8 bg-white p-6 rounded-xl shadow">
+      <h2 class="text-xl font-semibold mb-4">Добавить агентство</h2>
+      <form id="addAgencyForm" class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+        <div>
+          <label for="agencyName" class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+          <input type="text" id="agencyName" required class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label for="agencyApi" class="block text-sm font-medium text-gray-700 mb-1">API базовый URL (опц.)</label>
+          <input type="url" id="agencyApi" class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Создать</button>
+      </form>
+    </div>
+
+    <div class="overflow-x-auto bg-white rounded-xl shadow">
+      <table class="min-w-full divide-y divide-gray-200" id="agenciesTable">
+        <thead class="bg-gray-50"><tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API базовый URL</th>
+          <th class="px-6 py-3"></th>
+        </tr></thead>
+        <tbody class="bg-white divide-y divide-gray-200" id="agenciesBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Users Section -->
+  <div id="users-section" class="hidden">
+    <h1 class="text-3xl font-extrabold text-indigo-700 mb-6">Пользователи</h1>
+    
+    <!-- Add User Form -->
+    <div class="mb-8 bg-white p-6 rounded-xl shadow">
+      <h2 class="text-xl font-semibold mb-4">Добавить пользователя</h2>
+      <form id="addUserDirectForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+        <div>
+          <label for="userEmail" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <input type="email" id="userEmail" required class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label for="userPassword" class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
+          <input type="password" id="userPassword" required class="w-full px-3 py-2 border rounded-lg" />
+        </div>
+        <div>
+          <label for="userRole" class="block text-sm font-medium text-gray-700 mb-1">Роль</label>
+          <select id="userRole" required class="w-full px-3 py-2 border rounded-lg">
+            <option value="admin">Администратор</option>
+            <option value="agency">Агентство</option>
+            <option value="landlord">Арендодатель</option>
+            <option value="manager">Менеджер</option>
+          </select>
+        </div>
+        <div>
+          <label for="userAgencyId" class="block text-sm font-medium text-gray-700 mb-1">ID агентства (опц.)</label>
+          <input type="number" id="userAgencyId" min="1" class="w-full px-3 py-2 border rounded-lg" />
+          <p class="text-xs text-gray-500 mt-1 agency-note hidden">Если не указано, будет создано новое агентство автоматически.</p>
+        </div>
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Создать</button>
+      </form>
+    </div>
+
+    <!-- User Filters -->
+    <div class="flex items-center mb-4 gap-4">
+      <div>
+        <label for="roleFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по роли</label>
+        <select id="roleFilter" class="px-3 py-2 border rounded-lg">
+          <option value="">Все роли</option>
+          <option value="admin">Администратор</option>
+          <option value="agency">Агентство</option>
+          <option value="landlord">Арендодатель</option>
+          <option value="manager">Менеджер</option>
+        </select>
+      </div>
+      <div>
+        <label for="agencyFilter" class="block text-sm font-medium text-gray-700 mb-1">ID агентства</label>
+        <input type="number" id="agencyFilter" min="1" class="px-3 py-2 border rounded-lg" placeholder="Все" />
+      </div>
+      <button id="applyFilters" class="mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+        Применить
+      </button>
+    </div>
+
+    <div class="overflow-x-auto bg-white rounded-xl shadow">
+      <table class="min-w-full divide-y divide-gray-200" id="usersTable">
+        <thead class="bg-gray-50"><tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Роль</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Имя</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Фамилия</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID агентства</th>
+          <th class="px-6 py-3"></th>
+        </tr></thead>
+        <tbody class="bg-white divide-y divide-gray-200" id="usersBody"></tbody>
+      </table>
+      
+      <!-- Pagination -->
+      <div class="py-3 px-6 bg-white border-t border-gray-200 flex items-center justify-between">
+        <div class="flex-1 flex justify-between sm:hidden">
+          <button id="prevPageMobile" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+            Назад
+          </button>
+          <button id="nextPageMobile" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+            Вперед
+          </button>
+        </div>
+        <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm text-gray-700">
+              Показано <span id="startCount">1</span> - <span id="endCount">20</span> из 
+              <span id="totalCount">X</span> записей
+            </p>
+          </div>
+          <div>
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+              <button id="prevPage" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                <span class="sr-only">Предыдущая</span>
+                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+              </button>
+              <div id="paginationNumbers" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                Страница <span id="currentPage">1</span>
+              </div>
+              <button id="nextPage" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                <span class="sr-only">Следующая</span>
+                <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- Edit User Modal -->
+<div id="editUserModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Редактировать пользователя</h2>
+    <form id="editUserForm" class="space-y-4">
+      <input type="hidden" id="editUserId" />
+      <div>
+        <label class="block text-sm font-medium mb-1" for="editUserEmail">Email</label>
+        <input id="editUserEmail" type="email" class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="editUserPassword">Пароль (оставьте пустым, чтобы не менять)</label>
+        <input id="editUserPassword" type="password" class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="editUserRole">Роль</label>
+        <select id="editUserRole" class="w-full px-3 py-2 border rounded">
+          <option value="admin">Администратор</option>
+          <option value="agency">Агентство</option>
+          <option value="landlord">Арендодатель</option>
+          <option value="manager">Менеджер</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="editUserAgencyId">ID агентства</label>
+        <input id="editUserAgencyId" type="number" min="1" class="w-full px-3 py-2 border rounded" />
+        <p class="text-xs text-gray-500 mt-1 agency-note hidden">Если не указано, будет создано новое агентство автоматически.</p>
+      </div>
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancelEditUser" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
+        <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Сохранить</button>
+        <button type="button" id="deleteUser" class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">Удалить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Agency User Modal (keep existing modal) -->
+<div id="addUserModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Новый пользователь агентства</h2>
+    <form id="addUserForm" class="space-y-4">
+      <input type="hidden" id="formAgencyId" />
+      <div>
+        <label class="block text-sm font-medium mb-1" for="userEmail">Email</label>
+        <input id="userEmail" type="email" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="userFirst">Имя</label>
+        <input id="userFirst" type="text" class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="userLast">Фамилия</label>
+        <input id="userLast" type="text" class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="userPwd">Пароль</label>
+        <input id="userPwd" type="password" required class="w-full px-3 py-2 border rounded" />
+      </div>
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancelUser" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
+        <button type="submit" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Создать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 (function(){
+  // Tab switching
+  const agenciesTab = document.getElementById('tab-agencies');
+  const usersTab = document.getElementById('tab-users');
+  const agenciesSection = document.getElementById('agencies-section');
+  const usersSection = document.getElementById('users-section');
+  
+  // Initialize agency note visibility
+  const updateAgencyNoteVisibility = (roleSelect, noteSelector) => {
+    const agencyNote = document.querySelector(noteSelector);
+    if (agencyNote) {
+      if (roleSelect.value === 'agency') {
+        agencyNote.classList.remove('hidden');
+      } else {
+        agencyNote.classList.add('hidden');
+      }
+    }
+  };
+  
+  // Initialize note visibility when page loads
+  updateAgencyNoteVisibility(
+    document.getElementById('userRole'),
+    '.agency-note'
+  );
+  
+  agenciesTab.addEventListener('click', (e) => {
+    e.preventDefault();
+    agenciesTab.classList.add('border-indigo-500', 'text-indigo-600');
+    agenciesTab.classList.remove('border-transparent', 'text-gray-500');
+    usersTab.classList.remove('border-indigo-500', 'text-indigo-600');
+    usersTab.classList.add('border-transparent', 'text-gray-500');
+    agenciesSection.classList.remove('hidden');
+    usersSection.classList.add('hidden');
+  });
+  
+  usersTab.addEventListener('click', (e) => {
+    e.preventDefault();
+    usersTab.classList.add('border-indigo-500', 'text-indigo-600');
+    usersTab.classList.remove('border-transparent', 'text-gray-500');
+    agenciesTab.classList.remove('border-indigo-500', 'text-indigo-600');
+    agenciesTab.classList.add('border-transparent', 'text-gray-500');
+    usersSection.classList.remove('hidden');
+    agenciesSection.classList.add('hidden');
+    loadUsers(); // Load users when tab is activated
+  });
+
+  // ------- Agencies Management -------
   const loadAgencies = async () => {
-  const res = await fetch('/admin/api/agencies');
-  if (!res.ok) return;
-  const agencies = await res.json();
-  const body = document.getElementById('agenciesBody');
+    const res = await fetch('/admin/api/agencies');
+    if (!res.ok) return;
+    const agencies = await res.json();
+    const body = document.getElementById('agenciesBody');
     body.innerHTML = '';
-  agencies.forEach(a => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${a.id}</td>
-      <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${a.name}</td>
-      <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${a.api_base || ''}</td>
+    agencies.forEach(a => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${a.id}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${a.name}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${a.api_base || ''}</td>
         <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4'>
           <a href='#' data-id='${a.id}' class='addUserLink text-emerald-600 hover:text-emerald-900'>+ пользователь</a>
           <a href='/admin/agency/${a.id}/sync' class='text-indigo-600 hover:text-indigo-900'>Синхр.</a>
         </td>`;
-    body.appendChild(tr);
+      body.appendChild(tr);
     });
   };
 
@@ -76,44 +317,333 @@
     loadAgencies();
   });
 
-  // ---------- Add agency user modal ----------
-  const modal = document.createElement('div');
-  modal.id = 'addUserModal';
-  modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center hidden';
-  modal.innerHTML = `
-    <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
-      <h2 class="text-xl font-semibold mb-4">Новый пользователь агентства</h2>
-      <form id="addUserForm" class="space-y-4">
-        <input type="hidden" id="formAgencyId" />
-        <div>
-          <label class="block text-sm font-medium mb-1" for="userEmail">Email</label>
-          <input id="userEmail" type="email" required class="w-full px-3 py-2 border rounded" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="userFirst">Имя</label>
-          <input id="userFirst" type="text" class="w-full px-3 py-2 border rounded" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="userLast">Фамилия</label>
-          <input id="userLast" type="text" class="w-full px-3 py-2 border rounded" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="userPwd">Пароль</label>
-          <input id="userPwd" type="password" required class="w-full px-3 py-2 border rounded" />
-        </div>
-        <div class="flex justify-end gap-3 pt-4">
-          <button type="button" id="cancelUser" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Отмена</button>
-          <button type="submit" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Создать</button>
-        </div>
-      </form>
-    </div>`;
-  document.body.appendChild(modal);
+  // ------- Users Management with Admin API -------
+  let currentPage = 1;
+  const pageSize = 20;
+  let totalUsers = 0;
+  let roleFilter = '';
+  let agencyIdFilter = '';
+  
+  const loadUsers = async () => {
+    const offset = (currentPage - 1) * pageSize;
+    let url = `/api/v1/admin/users?limit=${pageSize}&offset=${offset}`;
+    
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error('Failed to fetch users');
+      }
+      
+      const users = await res.json();
+      renderUsers(users);
+      
+      // Update pagination info (placeholder since API doesn't return total count)
+      // In a production app, we'd need an endpoint that returns total count
+      document.getElementById('startCount').textContent = offset + 1;
+      document.getElementById('endCount').textContent = Math.min(offset + users.length, offset + pageSize);
+      document.getElementById('currentPage').textContent = currentPage;
+      
+      // For now, we'll disable next page button if we received fewer items than pageSize
+      if (users.length < pageSize) {
+        document.getElementById('nextPage').disabled = true;
+        document.getElementById('nextPage').classList.add('opacity-50');
+        document.getElementById('nextPageMobile').disabled = true;
+        document.getElementById('nextPageMobile').classList.add('opacity-50');
+      } else {
+        document.getElementById('nextPage').disabled = false;
+        document.getElementById('nextPage').classList.remove('opacity-50');
+        document.getElementById('nextPageMobile').disabled = false;
+        document.getElementById('nextPageMobile').classList.remove('opacity-50');
+      }
+      
+      // Disable prev button on first page
+      if (currentPage === 1) {
+        document.getElementById('prevPage').disabled = true;
+        document.getElementById('prevPage').classList.add('opacity-50');
+        document.getElementById('prevPageMobile').disabled = true;
+        document.getElementById('prevPageMobile').classList.add('opacity-50');
+      } else {
+        document.getElementById('prevPage').disabled = false;
+        document.getElementById('prevPage').classList.remove('opacity-50');
+        document.getElementById('prevPageMobile').disabled = false;
+        document.getElementById('prevPageMobile').classList.remove('opacity-50');
+      }
+    } catch (error) {
+      console.error('Error loading users:', error);
+      alert('Ошибка загрузки пользователей');
+    }
+  };
+  
+  const renderUsers = (users) => {
+    const body = document.getElementById('usersBody');
+    body.innerHTML = '';
+    
+    if (!users.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="7" class="px-6 py-4 text-center text-gray-500">Пользователи не найдены</td>`;
+      body.appendChild(tr);
+      return;
+    }
+    
+    users.forEach(user => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${user.id}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${user.email || '-'}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>
+          <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-${getRoleBadgeColor(user.role)}-100 text-${getRoleBadgeColor(user.role)}-800">
+            ${translateRole(user.role)}
+          </span>
+        </td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${user.first || '-'}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${user.last || '-'}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-sm text-gray-900'>${user.agency_id || '-'}</td>
+        <td class='px-6 py-4 whitespace-nowrap text-right text-sm font-medium'>
+          <button data-id='${user.id}' class='editUserBtn text-blue-600 hover:text-blue-900'>
+            Редактировать
+          </button>
+        </td>`;
+      body.appendChild(tr);
+    });
+  };
+  
+  const getRoleBadgeColor = (role) => {
+    switch(role) {
+      case 'admin': return 'red';
+      case 'agency': return 'blue';
+      case 'landlord': return 'green';
+      case 'manager': return 'yellow';
+      default: return 'gray';
+    }
+  };
+  
+  const translateRole = (role) => {
+    switch(role) {
+      case 'admin': return 'Администратор';
+      case 'agency': return 'Агентство';
+      case 'landlord': return 'Арендодатель';
+      case 'manager': return 'Менеджер';
+      default: return role;
+    }
+  };
+
+  // Pagination handlers
+  document.getElementById('prevPage').addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage--;
+      loadUsers();
+    }
+  });
+  
+  document.getElementById('nextPage').addEventListener('click', () => {
+    currentPage++;
+    loadUsers();
+  });
+  
+  document.getElementById('prevPageMobile').addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage--;
+      loadUsers();
+    }
+  });
+  
+  document.getElementById('nextPageMobile').addEventListener('click', () => {
+    currentPage++;
+    loadUsers();
+  });
+  
+  // Filter handlers
+  document.getElementById('applyFilters').addEventListener('click', () => {
+    roleFilter = document.getElementById('roleFilter').value;
+    agencyIdFilter = document.getElementById('agencyFilter').value;
+    currentPage = 1;
+    loadUsers();
+  });
+  
+  // Create user form handler
+  document.getElementById('addUserDirectForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('userEmail').value.trim();
+    const password = document.getElementById('userPassword').value;
+    const role = document.getElementById('userRole').value;
+    const agencyIdInput = document.getElementById('userAgencyId');
+    
+    const payload = {
+      email,
+      password,
+      role
+    };
+    
+    if (agencyIdInput.value) {
+      payload.agency_id = parseInt(agencyIdInput.value);
+    }
+    
+    try {
+      const res = await fetch('/api/v1/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to create user');
+      }
+      
+      // Clear form and reload users
+      document.getElementById('userEmail').value = '';
+      document.getElementById('userPassword').value = '';
+      document.getElementById('userRole').selectedIndex = 0;
+      document.getElementById('userAgencyId').value = '';
+      
+      loadUsers();
+      alert('Пользователь успешно создан');
+    } catch (error) {
+      console.error('Error creating user:', error);
+      alert('Ошибка создания пользователя');
+    }
+  });
+  
+  // Show/hide agency note based on selected role
+  document.getElementById('userRole').addEventListener('change', function() {
+    const agencyNote = document.querySelector('.agency-note');
+    if (this.value === 'agency') {
+      agencyNote.classList.remove('hidden');
+    } else {
+      agencyNote.classList.add('hidden');
+    }
+  });
+  
+  // Edit user modal handlers
+  const editUserModal = document.getElementById('editUserModal');
+  const editUserForm = document.getElementById('editUserForm');
+  const cancelEditBtn = document.getElementById('cancelEditUser');
+  const deleteUserBtn = document.getElementById('deleteUser');
+  
+  // Show/hide agency note in edit form based on selected role
+  document.getElementById('editUserRole').addEventListener('change', function() {
+    const agencyNote = document.querySelector('#editUserModal .agency-note');
+    if (this.value === 'agency') {
+      agencyNote.classList.remove('hidden');
+    } else {
+      agencyNote.classList.add('hidden');
+    }
+  });
+  
+  // Handle edit button clicks
+  document.body.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('editUserBtn')) {
+      const userId = parseInt(e.target.getAttribute('data-id'));
+      try {
+        // In a real app, we'd have an endpoint to get a single user
+        // For this example, we'll fake it by getting all users and finding the one we want
+        const res = await fetch(`/api/v1/admin/users`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch users');
+        }
+        
+        const users = await res.json();
+        const user = users.find(u => u.id === userId);
+        
+        if (user) {
+          document.getElementById('editUserId').value = user.id;
+          document.getElementById('editUserEmail').value = user.email || '';
+          document.getElementById('editUserPassword').value = '';
+          document.getElementById('editUserRole').value = user.role;
+          document.getElementById('editUserAgencyId').value = user.agency_id || '';
+          
+          // Initialize agency note visibility in edit modal
+          updateAgencyNoteVisibility(
+            document.getElementById('editUserRole'),
+            '#editUserModal .agency-note'
+          );
+          
+          editUserModal.classList.remove('hidden');
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        alert('Ошибка получения данных пользователя');
+      }
+    }
+  });
+  
+  // Close edit modal
+  cancelEditBtn.addEventListener('click', () => {
+    editUserModal.classList.add('hidden');
+  });
+  
+  // Handle user update
+  editUserForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const userId = document.getElementById('editUserId').value;
+    const email = document.getElementById('editUserEmail').value.trim();
+    const password = document.getElementById('editUserPassword').value;
+    const role = document.getElementById('editUserRole').value;
+    const agencyIdInput = document.getElementById('editUserAgencyId');
+    
+    const payload = {};
+    
+    if (email) payload.email = email;
+    if (password) payload.password = password;
+    if (role) payload.role = role;
+    if (agencyIdInput.value) {
+      payload.agency_id = parseInt(agencyIdInput.value);
+    }
+    
+    try {
+      const res = await fetch(`/api/v1/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to update user');
+      }
+      
+      editUserModal.classList.add('hidden');
+      loadUsers();
+      alert('Пользователь успешно обновлен');
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Ошибка обновления пользователя');
+    }
+  });
+  
+  // Handle user deletion
+  deleteUserBtn.addEventListener('click', async () => {
+    const userId = document.getElementById('editUserId').value;
+    
+    if (confirm('Вы уверены, что хотите удалить пользователя?')) {
+      try {
+        const res = await fetch(`/api/v1/admin/users/${userId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!res.ok) {
+          throw new Error('Failed to delete user');
+        }
+        
+        editUserModal.classList.add('hidden');
+        loadUsers();
+        alert('Пользователь успешно удален');
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        alert('Ошибка удаления пользователя');
+      }
+    }
+  });
+
+  // ------- Agency User Management (existing code) -------
+  const addUserModal = document.getElementById('addUserModal');
 
   const openModal = (aid) => {
     document.getElementById('formAgencyId').value = aid;
-    modal.classList.remove('hidden');
+    addUserModal.classList.remove('hidden');
   };
-  const closeModal = () => { modal.classList.add('hidden'); };
+  
+  const closeModal = () => {
+    addUserModal.classList.add('hidden');
+  };
 
   document.body.addEventListener('click', (e) => {
     if (e.target.classList.contains('addUserLink')) {
@@ -132,15 +662,27 @@
     const first = document.getElementById('userFirst').value.trim() || null;
     const last = document.getElementById('userLast').value.trim() || null;
     const password = document.getElementById('userPwd').value;
+    
     if (!email || !password) return;
+    
     const res = await fetch('/admin/api/agency-users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agency_id: parseInt(agency_id), email, password, first, last })
     });
-    if (!res.ok) { alert('Ошибка создания пользователя'); return; }
+    
+    if (!res.ok) {
+      alert('Ошибка создания пользователя');
+      return;
+    }
+    
     closeModal();
     alert('Пользователь создан');
+    
+    // If we're on the users tab, reload the users
+    if (!usersSection.classList.contains('hidden')) {
+      loadUsers();
+    }
   });
 })();
 </script>

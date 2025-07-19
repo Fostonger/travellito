@@ -172,6 +172,15 @@ class AdminService(BaseService):
         if existing:
             raise ConflictError("Email already exists")
             
+        # If role is agency and no agency_id provided, create a new agency
+        if role == 'agency' and agency_id is None:
+            # Create a new agency using email as name
+            agency_name = f"Agency {email.split('@')[0]}"  # Use part before @ as agency name
+            agency = Agency(name=agency_name)
+            self.session.add(agency)
+            await self.session.flush()  # Flush to get the ID
+            agency_id = agency.id
+            
         user = User(
             email=email,
             password_hash= self.auth_service._hash_password(password),
