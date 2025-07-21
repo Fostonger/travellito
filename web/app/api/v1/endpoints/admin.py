@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Path, status, UploadFile, File, Form, Response
 from pydantic import ValidationError
 
 from ....deps import SessionDep
@@ -214,3 +214,109 @@ async def delete_user(user_id: int, sess: SessionDep):
         await service.delete_user(user_id)
     except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e)) 
+
+
+@router.get("/test-qr-pdf", response_class=Response)
+async def test_qr_pdf(sess: SessionDep):
+    """Generate a test PDF with the current QR template settings."""
+    try:
+        from reportlab.pdfgen import canvas as _canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.utils import ImageReader
+        from PIL import Image as PILImage
+        import io, tempfile, os
+        
+        # Get QR template settings
+        service = AdminService(sess)
+        qr_template_settings = await service.get_qr_template_settings()
+        
+        if not qr_template_settings or not qr_template_settings.get('template_url'):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="No QR template configured. Please upload a template image first."
+            )
+        
+        # Get template settings
+        template_url = qr_template_settings.get('template_url')
+        qr_pos_x = int(qr_template_settings.get('position_x', 50))
+        qr_pos_y = int(qr_template_settings.get('position_y', 50))
+        qr_width = int(qr_template_settings.get('width', 200))
+        qr_height = int(qr_template_settings.get('height', 200))
+        
+        # Create a dummy QR code (just a black square)
+        from ....storage import client, BUCKET
+        
+        # Generate PDF
+        buf = io.BytesIO()
+        pdf = _canvas.Canvas(buf, pagesize=A4)
+        
+        try:
+            # Get template image directly from S3, save to temp file
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                client.fget_object(BUCKET, template_url, temp_file.name)
+                template_path = temp_file.name
+            
+            # Load the image from the temp file
+            template_pil = PILImage.open(template_path)
+            template_width, template_height = template_pil.size
+            
+            # Create a sample QR code image (black square with white border)
+            qr_img = PILImage.new('RGB', (400, 400), color='white')
+            # Draw black square in the middle (70% of the size)
+            black_size = int(400 * 0.7)
+            black_offset = (400 - black_size) // 2
+            black_square = PILImage.new('RGB', (black_size, black_size), color='black')
+            qr_img.paste(black_square, (black_offset, black_offset))
+            
+            # Convert to format ReportLab can use
+            template_io = io.BytesIO()
+            template_pil.save(template_io, format="PNG")
+            template_io.seek(0)
+            
+            qr_io = io.BytesIO()
+            qr_img.save(qr_io, format="PNG")
+            qr_io.seek(0)
+            
+            # Add QR code at specified position
+            pdf.drawImage(
+                ImageReader(qr_io),
+                qr_pos_x,
+                template_height - qr_pos_y - qr_height,  # Adjust Y coordinate
+                width=qr_width,
+                height=qr_height
+            )
+            
+            # Draw the template as background
+            pdf.drawImage(
+                ImageReader(template_io),
+                0, 0,
+                width=template_width,
+                height=template_height,
+                mask='auto'  # Preserve transparency
+            )
+            
+            # Add "TEST" text
+            pdf.setFont("Helvetica-Bold", 24)
+            pdf.setFillColorRGB(1, 0, 0)  # Red color
+            pdf.drawString(template_width / 2 - 40, template_height - 40, "TEST PDF")
+            
+            # Clean up temp file
+            os.unlink(template_path)
+            
+        except Exception as e:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error generating test PDF: {str(e)}"
+            )
+            
+        pdf.save()
+        buf.seek(0)
+        
+        headers = {"Content-Disposition": "attachment; filename=qr_test.pdf"}
+        return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
+        
+    except ImportError:
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            detail="PDF generation requires reportlab and Pillow packages"
+        ) 
