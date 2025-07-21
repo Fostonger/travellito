@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.base import BaseService
 from ..core.exceptions import NotFoundError, ConflictError
-from ..models import Agency, Landlord, Tour, Departure, Purchase, ApiKey, User
+from ..models import Agency, Landlord, Tour, Departure, Purchase, ApiKey, User, Setting
 from ..infrastructure.repositories import UserRepository, TourRepository
 from .auth_service import AuthService
 
@@ -141,6 +141,134 @@ class AdminService(BaseService):
         if result.rowcount == 0:
             raise NotFoundError("API key not found")
         await self.session.commit()
+
+    # Global settings management
+    async def get_global_settings(self) -> Dict[str, Any]:
+        """Get global settings.
+        
+        Returns:
+            Dictionary of settings
+        """
+        # Get default max commission setting
+        stmt = select(Setting).where(Setting.key == "default_max_commission")
+        result = await self.session.scalar(stmt)
+        default_max_commission = float(result.value) if result else 15.0  # Default value
+        
+        return {
+            "default_max_commission": default_max_commission
+        }
+        
+    async def update_global_settings(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Update global settings.
+        
+        Args:
+            settings: Dictionary of settings to update
+            
+        Returns:
+            Updated settings
+        """
+        result = {}
+        
+        # Update default max commission
+        if "default_max_commission" in settings:
+            await self._set_setting(
+                "default_max_commission", 
+                str(settings["default_max_commission"])
+            )
+            result["default_max_commission"] = settings["default_max_commission"]
+            
+        return result
+    
+    async def _set_setting(self, key: str, value: str) -> None:
+        """Set a setting value.
+        
+        Args:
+            key: Setting key
+            value: Setting value
+        """
+        setting = await self.session.scalar(
+            select(Setting).where(Setting.key == key)
+        )
+        
+        if setting:
+            setting.value = value
+        else:
+            setting = Setting(key=key, value=value)
+            self.session.add(setting)
+            
+        await self.session.commit()
+    
+    # QR Template settings
+    async def get_qr_template_settings(self) -> Dict[str, Any]:
+        """Get QR template settings.
+        
+        Returns:
+            Dictionary with template settings or None
+        """
+        # Get QR template settings
+        settings = {}
+        
+        # Get template URL
+        template_url = await self.session.scalar(
+            select(Setting).where(Setting.key == "qr_template_url")
+        )
+        if template_url:
+            settings["template_url"] = template_url.value
+            
+            # Get position and size settings
+            pos_x = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_pos_x")
+            )
+            pos_y = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_pos_y")
+            )
+            width = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_width")
+            )
+            height = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_height")
+            )
+            
+            settings["position_x"] = int(pos_x.value) if pos_x else 50
+            settings["position_y"] = int(pos_y.value) if pos_y else 50
+            settings["width"] = int(width.value) if width else 200
+            settings["height"] = int(height.value) if height else 200
+            
+        return settings if settings else None
+    
+    async def save_qr_template_settings(
+        self, 
+        template_url: str,
+        position_x: int,
+        position_y: int,
+        width: int,
+        height: int
+    ) -> Dict[str, Any]:
+        """Save QR template settings.
+        
+        Args:
+            template_url: S3 object key for template image
+            position_x: QR code X position in pixels
+            position_y: QR code Y position in pixels
+            width: QR code width in pixels
+            height: QR code height in pixels
+            
+        Returns:
+            Saved settings
+        """
+        await self._set_setting("qr_template_url", template_url)
+        await self._set_setting("qr_template_pos_x", str(position_x))
+        await self._set_setting("qr_template_pos_y", str(position_y))
+        await self._set_setting("qr_template_width", str(width))
+        await self._set_setting("qr_template_height", str(height))
+        
+        return {
+            "template_url": template_url,
+            "position_x": position_x,
+            "position_y": position_y,
+            "width": width,
+            "height": height
+        }
 
     # User Management
     

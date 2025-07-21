@@ -69,6 +69,22 @@ def upload_image(upload_file):
     )
     return object_name
 
+def upload_qr_template(upload_file):
+    """Upload QR template image → returns object key with fixed name"""
+    ext = pathlib.Path(upload_file.filename).suffix
+    # Use a fixed name for the QR template so we can replace it easily
+    object_name = f"qr_template{ext}"
+    upload_file.file.seek(0)
+    client.put_object(
+        bucket_name=BUCKET,
+        object_name=object_name,
+        data=upload_file.file,
+        length=-1,                      # multipart
+        part_size=10*1024*1024,
+        content_type=upload_file.content_type
+    )
+    return object_name
+
 def presigned(object_name, seconds=3600):
     # For browser access, use the public endpoint
     if PUBLIC_ENDPOINT != ENDPOINT:

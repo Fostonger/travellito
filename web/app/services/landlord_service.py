@@ -12,7 +12,7 @@ from ..core.base import BaseService
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models import (
     Apartment, Landlord, Purchase, Tour, Departure, LandlordCommission,
-    TicketCategory, Referral
+    TicketCategory, Referral, Setting
 )
 from ..infrastructure.repositories import UserRepository, TourRepository
 
@@ -248,6 +248,46 @@ class LandlordService(BaseService):
             "apartments": apartments,
             "metrics": metrics
         }
+
+    async def get_qr_template_settings(self) -> dict | None:
+        """Get QR template settings from admin settings.
+        
+        Returns:
+            Dictionary with template settings or None
+        """
+        from sqlalchemy import select
+        from ..models import Setting
+        
+        # Get QR template settings
+        settings = {}
+        
+        # Get template URL
+        template_url = await self.session.scalar(
+            select(Setting).where(Setting.key == "qr_template_url")
+        )
+        if template_url:
+            settings["template_url"] = template_url.value
+            
+            # Get position and size settings
+            pos_x = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_pos_x")
+            )
+            pos_y = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_pos_y")
+            )
+            width = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_width")
+            )
+            height = await self.session.scalar(
+                select(Setting).where(Setting.key == "qr_template_height")
+            )
+            
+            settings["position_x"] = int(pos_x.value) if pos_x else 50
+            settings["position_y"] = int(pos_y.value) if pos_y else 50
+            settings["width"] = int(width.value) if width else 200
+            settings["height"] = int(height.value) if height else 200
+            
+        return settings if settings else None
 
     # Commission Management
     

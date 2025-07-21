@@ -33,6 +33,7 @@ try:
     from reportlab.pdfgen import canvas as _canvas
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.utils import ImageReader
+    from PIL import Image as PILImage
     HAS_QR_SUPPORT = True
 except ImportError:
     HAS_QR_SUPPORT = False
@@ -243,6 +244,10 @@ async def apartments_qr_pdf(
     # Mark QR codes as sent
     await service.mark_qr_sent(landlord_id)
     
+    # Get QR template settings
+    qr_template_settings = await service.get_qr_template_settings()
+    qr_template_url = qr_template_settings.get('template_url') if qr_template_settings else None
+    
     # Generate PDF
     buf = io.BytesIO()
     pdf = _canvas.Canvas(buf, pagesize=A4)
@@ -283,7 +288,109 @@ async def apartments_qr_pdf(
     # If apartment is single, use its name; otherwise use "Apartments"
     apt_name = apartments[0].name if len(apartments) == 1 else "Apartments"
     
-    x, y = 50, page_h - 250  # initial cursor
+    # Generate PDF with template if available
+    if qr_template_settings and qr_template_url:
+        # Template-based QR codes
+        try:
+            from ....storage import presigned, client, BUCKET
+            import tempfile
+            
+            # Use template settings for QR placement
+            qr_pos_x = int(qr_template_settings.get('position_x', 50))
+            qr_pos_y = int(qr_template_settings.get('position_y', 50))
+            qr_width = int(qr_template_settings.get('width', 200))
+            qr_height = int(qr_template_settings.get('height', 200))
+            
+            # Get template image directly from S3, save to a temp file first
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                client.fget_object(BUCKET, qr_template_url, temp_file.name)
+                template_path = temp_file.name
+            
+            # Load the image from the temp file
+            template_pil = PILImage.open(template_path)
+            template_width, template_height = template_pil.size
+            
+            # Convert PIL image to a format ReportLab can use
+            template_io = io.BytesIO()
+            template_pil.save(template_io, format="PNG")
+            template_io.seek(0)
+            
+            # Generate one page per apartment with template background
+            for apt in apartments:
+                payload = f"apt_{apt.id}"
+                url = _bot_link(payload)
+                
+                # Create QR code
+                qr_img = qrcode.make(url, image_factory=PilImage)
+                qr_io = io.BytesIO()
+                qr_img.save(qr_io, format="PNG")
+                qr_io.seek(0)
+                
+                # Add QR code at specified position
+                pdf.drawImage(
+                    ImageReader(qr_io), 
+                    qr_pos_x, 
+                    template_height - qr_pos_y - qr_height,  # Adjust Y coordinate from top-left to bottom-left
+                    width=qr_width, 
+                    height=qr_height
+                )
+                
+                # Add background template
+                # Draw the template first (as background) to respect transparency
+                pdf.drawImage(
+                    ImageReader(template_io), 
+                    0, 0, 
+                    width=template_width, 
+                    height=template_height,
+                    mask='auto'  # Use mask='auto' to preserve alpha transparency
+                )
+                
+                # New page for next apartment
+                if apt != apartments[-1]:
+                    pdf.showPage()
+                    template_io.seek(0)  # Reset template IO for next page
+        
+        except Exception as e:
+            # Fall back to standard QR code generation if template fails
+            print(f"Error using QR template: {str(e)}")
+            _generate_standard_qr_pdf(pdf, apartments, font_name)
+            # Clean up temporary file if it exists
+            if 'template_path' in locals():
+                try:
+                    import os
+                    os.unlink(template_path)
+                except Exception:
+                    pass
+    else:
+        # Standard QR code generation
+        _generate_standard_qr_pdf(pdf, apartments, font_name)
+    
+    pdf.save()
+    buf.seek(0)
+    
+    # Properly handle filename encoding for Content-Disposition header
+    # RFC 5987 encoding for non-ASCII characters in HTTP headers
+    filename = apt_name + ".pdf"
+    
+    # For browsers that support RFC 5987
+    filename_ascii = filename.encode('ascii', 'ignore').decode()
+    filename_encoded = quote(filename.encode('utf-8'))
+    
+    if filename_ascii == filename:
+        # ASCII-only filename, use simple format
+        content_disposition = f'attachment; filename="{filename}"'
+    else:
+        # Non-ASCII filename, use both formats for compatibility
+        content_disposition = f'attachment; filename="{filename_ascii}"; filename*=UTF-8\'\'{filename_encoded}'
+    
+    headers = {"Content-Disposition": content_disposition}
+    return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
+
+
+# Helper function for standard QR generation
+def _generate_standard_qr_pdf(pdf, apartments, font_name):
+    """Generate standard QR codes without template"""
+    x, y = 50, A4[1] - 250  # initial cursor
     
     # Set the font for the entire document
     pdf.setFont(font_name, 12)
@@ -312,28 +419,7 @@ async def apartments_qr_pdf(
             y -= 250
             if y < 100:
                 pdf.showPage()
-                y = page_h - 250
-    
-    pdf.save()
-    buf.seek(0)
-    
-    # Properly handle filename encoding for Content-Disposition header
-    # RFC 5987 encoding for non-ASCII characters in HTTP headers
-    filename = apt_name + ".pdf"
-    
-    # For browsers that support RFC 5987
-    filename_ascii = filename.encode('ascii', 'ignore').decode()
-    filename_encoded = quote(filename.encode('utf-8'))
-    
-    if filename_ascii == filename:
-        # ASCII-only filename, use simple format
-        content_disposition = f'attachment; filename="{filename}"'
-    else:
-        # Non-ASCII filename, use both formats for compatibility
-        content_disposition = f'attachment; filename="{filename_ascii}"; filename*=UTF-8\'\'{filename_encoded}'
-    
-    headers = {"Content-Disposition": content_disposition}
-    return Response(content=buf.getvalue(), media_type="application/pdf", headers=headers)
+                y = A4[1] - 250
 
 
 @router.get("/dashboard", response_model=None)

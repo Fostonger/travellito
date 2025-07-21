@@ -35,6 +35,16 @@ class ApiKeyCreate(BaseModel):
     agency_id: int = Field(..., gt=0)
 
 
+# QR Template schema
+class QrTemplateOut(BaseModel):
+    template_url: str
+    position_x: int = Field(..., gt=0)
+    position_y: int = Field(..., gt=0)
+    width: int = Field(..., gt=0)
+    height: int = Field(..., gt=0)
+    qr_template_url: str | None = None
+
+
 # User schemas
 class UserOut(BaseModel):
     id: int

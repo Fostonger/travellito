@@ -10,13 +10,62 @@
     </div>
     <button class="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Сохранить</button>
   </form>
+  
+  <div class="mt-10 bg-white p-6 rounded-xl shadow">
+    <h2 class="text-xl font-bold text-indigo-700 mb-4">Настройка шаблона QR-кода</h2>
+    <form id="qrTemplateForm" class="space-y-4">
+      <div>
+        <label class="block mb-2 font-medium text-gray-700">Фоновое изображение</label>
+        <input type="file" name="qr_template" accept="image/png,image/jpeg" class="w-full" required>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block mb-2 font-medium text-gray-700">Позиция X (px)</label>
+          <input type="number" name="qr_position_x" min="0" class="w-full border rounded-lg px-3 py-2" required>
+        </div>
+        <div>
+          <label class="block mb-2 font-medium text-gray-700">Позиция Y (px)</label>
+          <input type="number" name="qr_position_y" min="0" class="w-full border rounded-lg px-3 py-2" required>
+        </div>
+        <div>
+          <label class="block mb-2 font-medium text-gray-700">Ширина QR (px)</label>
+          <input type="number" name="qr_width" min="50" class="w-full border rounded-lg px-3 py-2" required>
+        </div>
+        <div>
+          <label class="block mb-2 font-medium text-gray-700">Высота QR (px)</label>
+          <input type="number" name="qr_height" min="50" class="w-full border rounded-lg px-3 py-2" required>
+        </div>
+      </div>
+      
+      <div class="mt-4">
+        <label class="block mb-2 font-medium text-gray-700">Предпросмотр</label>
+        <div id="qrPreview" class="relative border border-gray-300 rounded-lg min-h-[400px] flex items-center justify-center">
+          <div class="text-gray-400">Загрузите изображение для предпросмотра</div>
+          <div id="qrPlaceholder" class="absolute bg-blue-200 opacity-70 border-2 border-blue-500 hidden"></div>
+        </div>
+      </div>
+      
+      <button type="submit" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Сохранить шаблон</button>
+    </form>
+  </div>
 </div>
 <script>
 (async () => {
-  const res = await fetch('/admin/api/settings');
+  const res = await fetch('/api/v1/admin/settings');
   if (res.ok) {
     const s = await res.json();
     document.querySelector('[name=default_max_commission]').value = s.default_max_commission;
+    
+    // Set QR template settings if available
+    if (s.qr_template) {
+      document.querySelector('[name=qr_position_x]').value = s.qr_position_x || 50;
+      document.querySelector('[name=qr_position_y]').value = s.qr_position_y || 50;
+      document.querySelector('[name=qr_width]').value = s.qr_width || 200;
+      document.querySelector('[name=qr_height]').value = s.qr_height || 200;
+      
+      // Show template preview
+      updateQrPreview(s.qr_template_url, s.qr_position_x, s.qr_position_y, s.qr_width, s.qr_height);
+    }
   }
 })();
 
@@ -26,8 +75,100 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
   const data = {
     default_max_commission: parseFloat(form.default_max_commission.value)
   };
-  const res = await fetch('/admin/api/settings', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+  const res = await fetch('/api/v1/admin/settings', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
   alert(res.ok ? 'Настройки сохранены' : 'Ошибка сохранения');
+});
+
+// QR template preview functionality
+function updateQrPreview(imageUrl, x, y, width, height) {
+  const previewEl = document.getElementById('qrPreview');
+  const placeholderEl = document.getElementById('qrPlaceholder');
+  
+  // Clear existing content
+  previewEl.innerHTML = '';
+  
+  if (imageUrl) {
+    // Create background image
+    const img = new Image();
+    img.onload = function() {
+      previewEl.style.width = `${img.width}px`;
+      previewEl.style.height = `${img.height}px`;
+      previewEl.style.backgroundImage = `url(${imageUrl})`;
+      previewEl.style.backgroundSize = 'contain';
+      previewEl.style.backgroundPosition = 'center';
+      previewEl.style.backgroundRepeat = 'no-repeat';
+      
+      // Show QR placement
+      placeholderEl.style.display = 'block';
+      placeholderEl.style.width = `${width}px`;
+      placeholderEl.style.height = `${height}px`;
+      placeholderEl.style.left = `${x}px`;
+      placeholderEl.style.top = `${y}px`;
+      previewEl.appendChild(placeholderEl);
+    };
+    img.src = imageUrl;
+  } else {
+    previewEl.innerHTML = '<div class="text-gray-400">Загрузите изображение для предпросмотра</div>';
+  }
+}
+
+// Handle template file upload and preview
+document.querySelector('[name=qr_template]').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const x = parseInt(document.querySelector('[name=qr_position_x]').value) || 50;
+      const y = parseInt(document.querySelector('[name=qr_position_y]').value) || 50;
+      const width = parseInt(document.querySelector('[name=qr_width]').value) || 200;
+      const height = parseInt(document.querySelector('[name=qr_height]').value) || 200;
+      updateQrPreview(e.target.result, x, y, width, height);
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+// Update preview when position/size changes
+['qr_position_x', 'qr_position_y', 'qr_width', 'qr_height'].forEach(field => {
+  document.querySelector(`[name=${field}]`).addEventListener('input', function() {
+    const x = parseInt(document.querySelector('[name=qr_position_x]').value) || 50;
+    const y = parseInt(document.querySelector('[name=qr_position_y]').value) || 50;
+    const width = parseInt(document.querySelector('[name=qr_width]').value) || 200;
+    const height = parseInt(document.querySelector('[name=qr_height]').value) || 200;
+    
+    const previewEl = document.getElementById('qrPreview');
+    if (previewEl.style.backgroundImage) {
+      updateQrPreview(document.querySelector('[name=qr_template]').files[0] ? 
+        URL.createObjectURL(document.querySelector('[name=qr_template]').files[0]) : 
+        previewEl.style.backgroundImage.replace(/url\(["']?([^"']*)["']?\)/i, "$1"),
+        x, y, width, height);
+    }
+  });
+});
+
+// Handle QR template form submission
+document.getElementById('qrTemplateForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const formData = new FormData();
+  
+  if (form.qr_template.files[0]) {
+    formData.append('qr_template', form.qr_template.files[0]);
+  }
+  
+  formData.append('qr_position_x', form.qr_position_x.value);
+  formData.append('qr_position_y', form.qr_position_y.value);
+  formData.append('qr_width', form.qr_width.value);
+  formData.append('qr_height', form.qr_height.value);
+  
+  const res = await fetch('/api/v1/admin/qr-template', {method: 'POST', body: formData});
+  if (res.ok) {
+    const data = await res.json();
+    updateQrPreview(data.qr_template_url, data.qr_position_x, data.qr_position_y, data.qr_width, data.qr_height);
+    alert('Шаблон QR-кода сохранен');
+  } else {
+    alert('Ошибка сохранения шаблона');
+  }
 });
 </script>
 {% endblock %} 
