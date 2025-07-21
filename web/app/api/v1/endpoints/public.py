@@ -5,7 +5,11 @@ from __future__ import annotations
 from decimal import Decimal
 from datetime import date, time, datetime, timedelta
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from urllib.parse import quote_plus
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from fastapi.responses import RedirectResponse
+import logging
+import os
 
 from ....deps import SessionDep
 from ....security import current_user, role_required
@@ -30,6 +34,8 @@ from ..schemas.public_schemas import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+BOT_ALIAS = os.getenv("BOT_ALIAS", "TravellitoBot")
 
 
 # Tour Search and Listing
@@ -95,6 +101,43 @@ async def tour_detail(tid: int, sess: SessionDep):
     except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e))
 
+
+# QR Code Redirect
+@router.get("/redirect/apartment/{apt_id}", summary="Redirect from apartment QR code to Telegram bot")
+async def redirect_apartment_qr(
+    apt_id: int, 
+    sess: SessionDep,
+    request: Request,
+    ref: str = Query(None, description="Optional referral or campaign code"),
+):
+    """
+    Redirect endpoint for apartment QR codes. 
+    This logs analytics data and then redirects to Telegram bot.
+    """
+    payload = f"apt_{apt_id}"
+    
+    # Log analytics data
+    user_agent = request.headers.get("user-agent", "Unknown")
+    
+    # Prepare analytics data
+    analytics_data = {
+        "timestamp": datetime.now().isoformat(),
+        "apartment_id": apt_id,
+        "user_agent": user_agent,
+        "referral_code": ref,
+    }
+    
+    # Log the analytics data
+    logger.info(f"QR scan: {analytics_data}")
+    
+    # TODO: Save analytics to database
+    # This is a placeholder for future implementation
+    # service = PublicService(sess)
+    # await service.log_qr_scan(analytics_data)
+    
+    # Redirect to Telegram bot
+    telegram_url = f"https://t.me/{BOT_ALIAS}?start={quote_plus(payload)}"
+    return RedirectResponse(url=telegram_url)
 
 # Tour Categories
 @router.get("/tours/{tour_id}/categories", response_model=list[CategoryOut])

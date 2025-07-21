@@ -58,8 +58,13 @@ async def _get_landlord_id(sess: SessionDep, user: dict) -> int:
 
 
 def _bot_link(payload: str) -> str:
-    """Return deep-link for Travellito Telegram bot with payload."""
-    return f"https://t.me/{BOT_ALIAS}?start={quote_plus(payload)}"
+    """Return link to our redirect endpoint that will then forward to Telegram bot."""
+    # Extract apartment ID from payload (format: "apt_123")
+    apt_id = payload.split('_')[1] if payload.startswith('apt_') else payload
+    # Get server host from environment variable or use default
+    server_host = os.getenv("SERVER_HOST", "http://localhost:8000")
+    # Create absolute URL to our redirect endpoint
+    return f"{server_host}/api/v1/public/redirect/apartment/{apt_id}"
 
 
 # Apartment Management
