@@ -79,7 +79,7 @@ class BookingService:
                 ec="booking",  # event category
                 el=str(booking_id),  # event label
                 tour_id=str(booking.departure.tour_id),
-                amount=str(booking.total_amount)
+                amount=str(booking.amount)
             )
         
         return updated_booking
@@ -222,7 +222,7 @@ class BookingService:
         
         # Check if cancellable
         now = datetime.utcnow()
-        cutoff = booking.departure.starts_at - timedelta(hours=booking.departure.tour.free_cancellation_cutoff_h)
+        cutoff = booking.departure.starts_at
         
         if now >= cutoff:
             raise BusinessLogicError(
@@ -242,7 +242,7 @@ class BookingService:
                 ec="booking",
                 el=str(booking_id),
                 tour_id=str(booking.departure.tour_id),
-                amount=str(booking.total_amount),
+                amount=str(booking.amount),
                 time_to_departure=str((booking.departure.starts_at - now).total_seconds() // 3600)  # hours
             )
         

@@ -270,9 +270,7 @@ async def create_booking(
     """
     service = PublicService(sess)
     client_id = request.headers.get("X-Client-Id")
-    print("Client ID:")
-    print(client_id)
-    print(request.headers)
+
     try:
         result = await service.create_booking(
             departure_id=payload.departure_id,

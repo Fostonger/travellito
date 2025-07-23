@@ -34,7 +34,7 @@ async def send_metrika_event(
     # Skip if httpx not available
     if httpx is None:
         return
-        
+
     # Skip if no counter ID or token is configured
     if not settings.METRIKA_COUNTER or not settings.METRIKA_MP_TOKEN:
         return
@@ -48,8 +48,7 @@ async def send_metrika_event(
         "ms": settings.METRIKA_MP_TOKEN,
         **extra,
     }
-    print("Metrika params:")
-    print(params)
+    
     # Add value if provided
     if value is not None:
         params["ev"] = value
@@ -62,9 +61,6 @@ async def send_metrika_event(
                 params=params, 
                 timeout=2.0
             )
-            print("Metrika response:")
-            print(response.status_code)
-            print(response.text)
     except Exception as e:
         # Silent fail - don't break app functionality if analytics fails
         print(f"Metrika error: {e}")

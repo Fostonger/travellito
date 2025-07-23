@@ -25,6 +25,8 @@ services:
       S3_SECRET_KEY: "minioadminsecret"
       S3_BUCKET: "tour-images"
       REDIS_DSN: "redis://redis:6379/0"
+      METRIKA_COUNTER: "${METRIKA_COUNTER}"
+      METRIKA_MP_TOKEN: "${METRIKA_MP_TOKEN}"
     depends_on: [db]
     ports: ["80:8000"]
     restart: unless-stopped
