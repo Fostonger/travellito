@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { FilterState } from '../utils/store';
 import { Tour } from '../types';
+import { getClientId } from '../utils/analytics';
 
 // API base URL
 // @ts-ignore - import.meta.env is defined by Vite
@@ -11,6 +12,22 @@ const apiBase = import.meta.env.VITE_API_BASE || 'https://api.trycloudflare.com/
 const apiClient = axios.create({
   baseURL: apiBase,
   withCredentials: true,
+});
+
+// Add interceptor to include the Metrica client ID with every request
+apiClient.interceptors.request.use(async config => {
+  try {
+    // Get the Metrica client ID
+    const clientId = await getClientId();
+    if (clientId) {
+      // Add it to request headers
+      config.headers['X-Client-Id'] = clientId;
+    }
+  } catch (error) {
+    // Silently fail - don't block API calls if analytics fails
+    console.error('Failed to add client ID to request:', error);
+  }
+  return config;
 });
 
 /**

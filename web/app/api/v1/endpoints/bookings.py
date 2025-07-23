@@ -130,6 +130,7 @@ async def update_booking_status(
     booking_id: int,
     payload: BookingStatusUpdate,
     sess: SessionDep,
+    request: Request,
     user=Depends(current_user),
 ):
     """Update booking status (confirm or reject)"""
@@ -137,10 +138,14 @@ async def update_booking_status(
         agency_id = get_agency_id(user)
         service = BookingService(sess)
         
+        # Extract client ID for analytics tracking
+        client_id = getattr(request.state, "client_id", None)
+        
         booking = await service.update_booking_status(
             booking_id=booking_id,
             agency_id=agency_id,
-            status=payload.status
+            status=payload.status,
+            client_id=client_id
         )
         
         await sess.commit()
@@ -189,25 +194,34 @@ async def list_tourist_bookings(
 async def cancel_tourist_booking(
     booking_id: int,
     sess: SessionDep,
+    request: Request,
     user=Depends(current_user),
 ):
-    """Cancel a booking for the current tourist user"""
+    """Cancel a booking as a tourist"""
     try:
-        user_id = int(user["sub"])
         service = BookingService(sess)
+        user_id = int(user["sub"])
+        
+        # Extract client ID for analytics tracking
+        client_id = getattr(request.state, "client_id", None)
         
         result = await service.cancel_tourist_booking(
             booking_id=booking_id,
-            user_id=user_id
+            user_id=user_id,
+            client_id=client_id
         )
         
-        await sess.commit()
-        
-        return {"success": True, "booking_id": booking_id}
+        if result:
+            return {"message": "Booking cancelled successfully"}
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Failed to cancel booking"}
+            )
     except BaseError as e:
         return JSONResponse(
             status_code=e.status_code,
-            content={"error": e.message}
+            content={"error": e.message, "details": e.details}
         )
     except Exception as e:
         return JSONResponse(

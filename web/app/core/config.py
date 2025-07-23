@@ -41,6 +41,10 @@ class Settings:
     DEFAULT_MAX_COMMISSION: float = 10.0
     DEFAULT_FREE_CANCELLATION_HOURS: int = 24
     
+    # Yandex Metrica
+    METRIKA_COUNTER: str = os.getenv("METRIKA_COUNTER", "")
+    METRIKA_MP_TOKEN: str = os.getenv("METRIKA_MP_TOKEN", "")
+    
     def __init__(self):
         self._validate()
         self._parse_cors_origins()

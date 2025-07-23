@@ -9,6 +9,7 @@ import Checkout from './pages/Checkout';
 import MyBookings from './pages/MyBookings';
 import ScrollRestoration from './components/ScrollRestoration';
 import { setupAxiosAuth, authenticateWithTelegram } from './auth';
+import { initAnalytics } from './utils/analytics';
 import './index.css';
 
 // Create a client
@@ -21,6 +22,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Initialize analytics
+initAnalytics();
 
 // Setup authentication flow
 const initializeAuth = async () => {

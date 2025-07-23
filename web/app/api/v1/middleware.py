@@ -2,8 +2,40 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+import uuid
 
 from app.core import BaseError
+
+
+class ClientIDMiddleware(BaseHTTPMiddleware):
+    """Middleware to extract and manage Yandex Metrica client IDs"""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Extract client ID from headers or cookies
+        client_id = request.headers.get("X-Client-Id") or request.cookies.get("_ym_uid")
+        
+        # If not found, generate a new one
+        if not client_id:
+            client_id = str(uuid.uuid4())
+        
+        # Store in request state for use in route handlers
+        request.state.client_id = client_id
+        
+        # Process the request
+        response = await call_next(request)
+        
+        # Set the client ID cookie in the response if it wasn't in cookies
+        if not request.cookies.get("_ym_uid"):
+            response.set_cookie(
+                "_ym_uid", 
+                client_id, 
+                max_age=31536000,  # 1 year
+                httponly=False,    # Allow JS to access for Metrica
+                samesite="lax"
+            )
+        
+        return response
 
 
 async def exception_handler(request: Request, call_next):

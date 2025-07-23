@@ -19,7 +19,7 @@ from .infrastructure.database import engine, AsyncSessionFactory
 from .deps import SessionDep
 from .models import Setting, Departure, Tour, Base
 from .api.v1.api import api_v1_router
-from .api.v1.middleware import exception_handler
+from .api.v1.middleware import exception_handler, ClientIDMiddleware
 from .storage import client, BUCKET
 from .security import role_required, current_user
 
@@ -104,6 +104,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# Add ClientID middleware for analytics tracking
+app.add_middleware(ClientIDMiddleware)
 
 # Rate limiting
 @app.exception_handler(RateLimitExceeded)

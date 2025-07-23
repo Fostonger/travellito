@@ -257,14 +257,22 @@ async def landlord_signup(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.post("/bookings", response_model=BookingCreatedResponse, dependencies=[Depends(role_required("bot_user"))])
-async def create_booking(payload: BookingIn, sess: SessionDep, user=Depends(current_user)):
+async def create_booking(
+    payload: BookingIn,
+    sess: SessionDep,
+    request: Request,
+    user=Depends(current_user)
+):
     """Create a new booking.
     
     If the user has an apartment_id set within the last week, it will be associated with the booking.
     Otherwise, the apartment_id will be cleared from the user profile.
     """
     service = PublicService(sess)
-    
+    client_id = request.headers.get("X-Client-Id")
+    print("Client ID:")
+    print(client_id)
+    print(request.headers)
     try:
         result = await service.create_booking(
             departure_id=payload.departure_id,
@@ -273,6 +281,7 @@ async def create_booking(payload: BookingIn, sess: SessionDep, user=Depends(curr
             contact_name=payload.contact_name,
             contact_phone=payload.contact_phone,
             virtual_timestamp=payload.virtual_timestamp,
+            client_id=client_id
         )
         return BookingCreatedResponse(**result)
     except NotFoundError as e:

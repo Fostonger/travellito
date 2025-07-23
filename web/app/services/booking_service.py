@@ -7,6 +7,7 @@ from app.core import BaseError
 from app.core import BaseService, NotFoundError, ValidationError, ConflictError, BusinessLogicError
 from app.models import Purchase, User, Departure, Tour, PurchaseItem, TicketCategory
 from app.infrastructure.repositories.purchase_repository import PurchaseRepository
+from app.infrastructure.metrika import track_async_event
 
 
 class BookingService:
@@ -35,7 +36,8 @@ class BookingService:
         self,
         booking_id: int,
         agency_id: int,
-        status: str
+        status: str,
+        client_id: Optional[str] = None
     ) -> Purchase:
         """Update booking status with validation"""
         
@@ -68,6 +70,17 @@ class BookingService:
         
         # Mark as viewed
         await self.repository.mark_as_viewed(booking_id)
+        
+        # Track event in analytics
+        if client_id:
+            track_async_event(
+                client_id=client_id,
+                action=f"booking_{status}",
+                ec="booking",  # event category
+                el=str(booking_id),  # event label
+                tour_id=str(booking.departure.tour_id),
+                amount=str(booking.total_amount)
+            )
         
         return updated_booking
 
@@ -191,50 +204,46 @@ class BookingService:
         
         return output
     
-    async def cancel_tourist_booking(self, booking_id: int, user_id: int) -> bool:
-        """Cancel a booking for a tourist user"""
-        # Get the booking
-        stmt = (
-            select(Purchase)
-            .join(Departure, Purchase.departure_id == Departure.id)
-            .join(Tour, Departure.tour_id == Tour.id)
-            .where(
-                Purchase.id == booking_id,
-                Purchase.user_id == user_id
-            )
-            .options(
-                joinedload(Purchase.departure).joinedload(Departure.tour),
-                joinedload(Purchase.items).joinedload(PurchaseItem.category)
-            )
-        )
-        
-        result = await self.session.execute(stmt)
-        booking = result.scalars().first()
-        
+    async def cancel_tourist_booking(
+        self, 
+        booking_id: int, 
+        user_id: int, 
+        client_id: Optional[str] = None
+    ) -> bool:
+        """Cancel a booking as a tourist"""
+        # Find the booking
+        booking = await self.repository.get_with_details(booking_id)
         if not booking:
-            raise BaseError("Booking not found", status_code=404)
+            raise NotFoundError("Booking", booking_id)
         
-        # Allow cancelling both pending and confirmed bookings
-        if booking.status not in ["pending"]:
-            raise BaseError("Only pending bookings can be cancelled", status_code=400)
+        # Check ownership
+        if booking.user_id != user_id:
+            raise NotFoundError("Booking", booking_id)
         
-        # Check cancellation policy
+        # Check if cancellable
         now = datetime.utcnow()
-        tour = booking.departure.tour
-        cutoff_time = booking.departure.starts_at
+        cutoff = booking.departure.starts_at - timedelta(hours=booking.departure.tour.free_cancellation_cutoff_h)
         
-        if now >= cutoff_time:
-            raise BaseError(
-                f"Free cancellation is only available {tour.free_cancellation_cutoff_h} hours before departure",
-                status_code=400
+        if now >= cutoff:
+            raise BusinessLogicError(
+                "Booking can't be cancelled within the cutoff period",
+                rule="booking_cancellation"
             )
         
         # Cancel the booking
-        booking.status = "cancelled"
-        booking.status_changed_at = datetime.utcnow()
+        result = await self.repository.update_status(booking_id, "cancelled")
         
-        # No need to explicitly update quotas as they are calculated dynamically
-        # based on active bookings (non-cancelled, non-rejected)
-        # The query in DepartureRepository.get_seats_taken already excludes cancelled bookings
+        # Track event in analytics
+        if client_id:
+            track_async_event(
+                client_id=client_id,
+                action="booking_cancelled",
+                value=1,
+                ec="booking",
+                el=str(booking_id),
+                tour_id=str(booking.departure.tour_id),
+                amount=str(booking.total_amount),
+                time_to_departure=str((booking.departure.starts_at - now).total_seconds() // 3600)  # hours
+            )
         
-        return True 
+        return bool(result) 

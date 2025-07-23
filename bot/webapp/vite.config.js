@@ -40,6 +40,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['ash-saying-that-boys.trycloudflare.com']
+    allowedHosts: ['terror-worlds-rotation-dee.trycloudflare.com']
   },
 }); 

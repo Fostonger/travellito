@@ -24,6 +24,8 @@ from ..infrastructure.repositories import TourRepository, DepartureRepository
 from ..storage import presigned
 from .tour_filter_service import TourFilterService
 
+from app.infrastructure.metrika import track_async_event
+
 HUNDRED = Decimal("100")  # module-level constant
 
 
@@ -683,6 +685,7 @@ class PublicService(BaseService):
         contact_name: str,
         contact_phone: str,
         virtual_timestamp: int | None = None,
+        client_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a booking for a user.
         
@@ -693,7 +696,7 @@ class PublicService(BaseService):
             contact_name: Customer name
             contact_phone: Customer phone
             virtual_timestamp: Timestamp for virtual departures in milliseconds (UTC)
-            
+            client_id: Client ID for analytics tracking
         Returns:
             Dict with booking details
             
@@ -776,6 +779,18 @@ class PublicService(BaseService):
             
         # Commit the transaction
         await self.session.commit()
+        
+        if client_id:
+            track_async_event(
+                client_id=client_id,
+                action="booking_created",
+                ec="booking",
+                user_id=user_id,
+                booking_id=purchase.id,
+                departure_id=departure_id,
+                apartment_id=apartment_id,
+                total_price=purchase.amount
+            )
         
         return {
             "booking_id": purchase.id,
