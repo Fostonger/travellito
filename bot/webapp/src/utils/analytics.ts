@@ -1,4 +1,6 @@
 // Yandex Metrica integration
+import axios, { AxiosInstance, AxiosStatic } from 'axios';
+
 declare global {
   interface Window {
     ym: (counterId: number, action: string, ...args: any[]) => void;
@@ -44,10 +46,34 @@ export function trackEvent(name: string, params?: Record<string, any>): void {
 }
 
 /**
+ * Apply the client ID interceptor to an axios instance
+ * @param axiosInstance The axios instance to apply the interceptor to
+ */
+export function applyClientIdInterceptor(axiosInstance: AxiosInstance | AxiosStatic = axios): void {
+  // Add interceptor to include the Metrica client ID with every request
+  axiosInstance.interceptors.request.use(async config => {
+    try {
+      // Get the Metrica client ID
+      const clientId = await getClientId();
+      if (clientId) {
+        // Add it to request headers, but don't overwrite if it's already set
+        if (!config.headers['X-Client-Id']) {
+          config.headers['X-Client-Id'] = clientId;
+        }
+      }
+    } catch (error) {
+      // Silently fail - don't block API calls if analytics fails
+      console.error('Failed to add client ID to request:', error);
+    }
+    return config;
+  });
+}
+
+/**
  * Initialize the analytics system
  * Should be called once at app startup
  */
 export function initAnalytics(): void {
-  // The actual Metrica code is injected in index.html
-  // This function is used for any additional initialization
+  // Apply the client ID interceptor to the global axios instance
+  applyClientIdInterceptor();
 } 

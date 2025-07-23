@@ -23,12 +23,12 @@ const queryClient = new QueryClient({
   },
 });
 
-// Initialize analytics
-initAnalytics();
-
-// Setup authentication flow
-const initializeAuth = async () => {
-  // Set up axios interceptors (which also gets tokens from URL)
+// Initialize application
+const initialize = async () => {
+  // First initialize analytics (which sets up global interceptors)
+  initAnalytics();
+  
+  // Then set up authentication flow
   setupAxiosAuth();
   
   // Add a small delay to let setupAxiosAuth process URL params
@@ -42,8 +42,8 @@ const initializeAuth = async () => {
   }, 500);
 };
 
-// Start auth initialization process
-initializeAuth();
+// Start initialization process
+initialize();
 
 // Register service worker for caching
 if ('serviceWorker' in navigator) {

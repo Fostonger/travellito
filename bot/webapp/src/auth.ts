@@ -1,6 +1,7 @@
 // auth.ts - Authentication utilities for the webapp
 
 import axios from 'axios';
+import { getClientId } from './utils/analytics';
 
 // Token storage keys and settings
 const ACCESS_TOKEN_KEY = 'authToken'; // Keeping original key for backward compatibility
@@ -102,6 +103,33 @@ const storeRefreshToken = (token: string): boolean => {
     return storedToken === token;
   } catch (err) {
     return false;
+  }
+};
+
+/**
+ * Preserve important headers like X-Client-Id when updating auth headers
+ * @param headers The headers object to update with auth token
+ * @param token The auth token to set
+ */
+const updateAuthHeadersPreservingClientId = async (headers: any, token: string) => {
+  // Get client ID
+  let clientId = headers['X-Client-Id'];
+  
+  // If clientId isn't already set in headers, try to get it
+  if (!clientId) {
+    try {
+      clientId = await getClientId();
+    } catch (error) {
+      // Silent fail
+    }
+  }
+  
+  // Set authorization header
+  headers['Authorization'] = `Bearer ${token}`;
+  
+  // Preserve client ID if available
+  if (clientId) {
+    headers['X-Client-Id'] = clientId;
   }
 };
 
@@ -249,6 +277,7 @@ export const setupAxiosAuth = () => {
     localStorage.setItem(TELEGRAM_USER_ID_KEY, telegramId.toString());
   }
   
+  // Set authorization header if token available
   if (authToken) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
   }
@@ -264,7 +293,10 @@ export const setupAxiosAuth = () => {
         if (refreshed && error.config) {
           // Retry the original request with new token
           const newToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-          error.config.headers['Authorization'] = `Bearer ${newToken}`;
+          // Update headers preserving client ID
+          if (newToken) {
+            await updateAuthHeadersPreservingClientId(error.config.headers, newToken);
+          }
           return axios(error.config);
         }
         
@@ -274,7 +306,10 @@ export const setupAxiosAuth = () => {
         if (success && error.config) {
           // Retry the original request with new token
           const newToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-          error.config.headers['Authorization'] = `Bearer ${newToken}`;
+          // Update headers preserving client ID
+          if (newToken) {
+            await updateAuthHeadersPreservingClientId(error.config.headers, newToken);
+          }
           return axios(error.config);
         }
       }
@@ -298,7 +333,8 @@ export const setupAxiosAuth = () => {
           // Update the Authorization header
           const newToken = localStorage.getItem(ACCESS_TOKEN_KEY);
           if (newToken) {
-            config.headers.Authorization = `Bearer ${newToken}`;
+            // Update headers preserving client ID
+            await updateAuthHeadersPreservingClientId(config.headers, newToken);
           }
         }
       }
