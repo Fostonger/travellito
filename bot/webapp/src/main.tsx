@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './pages/App';
 import TourDetail from './pages/TourDetail';
@@ -42,27 +42,17 @@ const initialize = async () => {
   }, 500);
 };
 
-// Start initialization process
 initialize();
 
-// Register service worker for caching
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(error => {
-      console.log('Service worker registration failed:', error);
-    });
-  });
-}
-
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-
-root.render(
+// Render the application
+ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ScrollRestoration />
         <Routes>
-          <Route path="/" element={<App />} />
+          <Route path="/" element={<Navigate to="/tours" replace />} />
+          <Route path="/tours" element={<App />} />
           <Route path="/tour/:id" element={<TourDetail />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/bookings" element={<MyBookings />} />

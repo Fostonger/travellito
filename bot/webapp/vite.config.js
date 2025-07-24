@@ -40,6 +40,6 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['terror-worlds-rotation-dee.trycloudflare.com']
+    allowedHosts: ['babes-theme-destroy-seller.trycloudflare.com']
   },
 }); 

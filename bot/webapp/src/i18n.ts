@@ -53,6 +53,7 @@ const translations = {
     confirm_cancel_description: 'Are you sure you want to cancel this booking?',
     yes_cancel: 'Yes, cancel',
     no_keep: 'No, keep it',
+    price: 'Price',
     // Filter translations
     filters: 'Filters',
     categories: 'Categories',
@@ -125,6 +126,7 @@ const translations = {
     confirm_cancel_description: 'Вы уверены, что хотите отменить это бронирование?',
     yes_cancel: 'Да, отменить',
     no_keep: 'Нет, оставить',
+    price: 'Цена',
     // Filter translations
     filters: 'Фильтры',
     categories: 'Категории',

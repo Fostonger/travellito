@@ -2,16 +2,29 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { ChevronLeft, Calendar, Clock, User, Phone, AlertTriangle } from 'lucide-react';
 import { t, fmtPrice } from '../i18n';
 import { formatTime, formatFullDate, getDepartureDate } from '../utils/dateUtils';
 import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
+import { Layout } from '../components/Layout';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Separator } from '../components/ui/separator';
 
 export default function Checkout() {
   const nav = useNavigate();
   const { state } = useLocation() as any;
   if (!state?.tourId || !state.departure) {
-    return <p>{t('missing_ctx')}</p>;
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <p className="text-lg text-muted-foreground">{t('missing_ctx')}</p>
+        </div>
+      </Layout>
+    );
   }
+  
   const tourId = state.tourId;
   const departure = state.departure;
   const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1';
@@ -280,118 +293,132 @@ export default function Checkout() {
   const departureTime = formatTime(departure.starts_at);
 
   return (
-    <div className="p-4 pb-20 bg-gray-50 min-h-screen">
-      <div className="mb-4">
-        <button onClick={() => nav(-1)} className="text-blue-600 font-medium flex items-center">
-          <span className="mr-1">←</span> {t('back')}
-        </button>
-      </div>
-      
-      <div className="bg-white rounded-xl shadow-md overflow-hidden mb-4">
-        <div className="p-4 bg-blue-600 text-white">
-          <h2 className="text-xl font-bold">{t('checkout').replace('{date}', departureTime)}</h2>
-          <p className="opacity-90">{departureDate}</p>
+    <Layout>
+      <div className="space-y-6">
+        <div className="flex items-center">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="gap-1"
+            onClick={() => nav(-1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            {t('back')}
+          </Button>
         </div>
         
-        {/* Ticket selection */}
-        <div className="p-4 border-b">
-          <h3 className="font-semibold mb-3">{t('select_tickets')}</h3>
+        <Card className="overflow-hidden">
+          <div className="bg-primary p-4 text-primary-foreground">
+            <h1 className="text-xl font-bold">{t('checkout').replace('{date}', departureTime)}</h1>
+            <p className="text-primary-foreground/80">{departureDate}</p>
+          </div>
           
-          <div className="space-y-4">
-            {categories.map((c: any) => (
-              <div key={c.id} className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-blue-600 font-semibold">{fmtPrice(c.price_net)}</div>
+          {/* Ticket selection */}
+          <div className="p-6 border-b">
+            <h2 className="font-semibold mb-4">{t('select_tickets')}</h2>
+            
+            <div className="space-y-4">
+              {categories.map((c: any) => (
+                <div key={c.id} className="flex items-center justify-between border-b pb-4">
+                  <div>
+                    <div className="font-medium">{c.name}</div>
+                    <div className="text-primary font-semibold">{fmtPrice(c.price_net)}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={() => handleQtyChange(c.id, Math.max(0, (quantities[c.id] || 0) - 1))}
+                    >
+                      -
+                    </Button>
+                    <span className="w-8 text-center font-medium">
+                      {quantities[c.id] || 0}
+                    </span>
+                    <Button 
+                      variant="default" 
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={() => handleQtyChange(c.id, (quantities[c.id] || 0) + 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center">
-                  <button 
-                    className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"
-                    onClick={() => handleQtyChange(c.id, Math.max(0, (quantities[c.id] || 0) - 1))}
-                  >
-                    -
-                  </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Contact information */}
+          <div className="p-6">
+            <h2 className="font-semibold mb-4">{t('contact_info')}</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-muted-foreground mb-1">{t('name')}</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
-                    type="number"
-                    min="0"
-                    className="w-12 text-center mx-2 border rounded"
-                    value={quantities[c.id] || ''}
-                    onChange={(e) => handleQtyChange(c.id, Number(e.target.value))}
+                    type="text"
+                    className="w-full p-2 pl-10 border rounded-md"
+                    value={contactInfo.name}
+                    onChange={(e) => handleContactChange('name', e.target.value)}
+                    placeholder={t('enter_name')}
                   />
-                  <button 
-                    className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center"
-                    onClick={() => handleQtyChange(c.id, (quantities[c.id] || 0) + 1)}
-                  >
-                    +
-                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Contact information */}
-        <div className="p-4 border-b">
-          <h3 className="font-semibold mb-3">{t('contact_info')}</h3>
-          
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">{t('name')}</label>
-              <input
-                type="text"
-                className="w-full p-2 border rounded"
-                value={contactInfo.name}
-                onChange={(e) => handleContactChange('name', e.target.value)}
-                placeholder={t('enter_name')}
-              />
+              
+              <div>
+                <label className="block text-sm text-muted-foreground mb-1">{t('phone')}</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="tel"
+                    className={`w-full p-2 pl-10 border rounded-md ${phoneError ? 'border-destructive' : ''}`}
+                    value={contactInfo.phone}
+                    onChange={(e) => handleContactChange('phone', e.target.value)}
+                    placeholder="+1234567890"
+                  />
+                </div>
+                {phoneError && (
+                  <div className="text-destructive text-sm mt-1">{phoneError}</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  {t('phone_format')}
+                </div>
+              </div>
             </div>
             
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">{t('phone')}</label>
-              <input
-                type="tel"
-                className={`w-full p-2 border rounded ${phoneError ? 'border-red-500' : ''}`}
-                value={contactInfo.phone}
-                onChange={(e) => handleContactChange('phone', e.target.value)}
-                placeholder="+1234567890"
-              />
-              {phoneError && (
-                <div className="text-red-500 text-sm mt-1">{phoneError}</div>
-              )}
-              <div className="text-xs text-gray-500 mt-1">
-                {t('phone_format')}
+            <Separator className="my-6" />
+            
+            {error && (
+              <div className="mb-6 p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                <div>{error}</div>
               </div>
-            </div>
+            )}
+            
+            {quote && (
+              <div className="flex justify-between items-center mb-6">
+                <div className="text-muted-foreground">{t('seats_left')}: {quote.seats_left}</div>
+                <div className="text-right">
+                  <div className="text-sm text-muted-foreground">{t('total')}</div>
+                  <div className="text-xl font-bold">{fmtPrice(quote.total_net)}</div>
+                </div>
+              </div>
+            )}
+            
+            <Button 
+              disabled={!quote || isSubmitting} 
+              onClick={handleConfirm} 
+              className="w-full"
+            >
+              {isSubmitting ? t('processing') : t('confirm')}
+            </Button>
           </div>
-        </div>
+        </Card>
       </div>
-      
-      {/* Summary and confirm button */}
-      <div className="bg-white rounded-xl shadow-md p-4">
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
-        
-        {quote && (
-          <div className="flex justify-between items-center mb-4">
-            <div className="text-gray-600">{t('seats_left')}: {quote.seats_left}</div>
-            <div>
-              <span className="text-gray-600">{t('total')}</span>
-              <span className="text-xl font-bold ml-2">{fmtPrice(quote.total_net)}</span>
-            </div>
-          </div>
-        )}
-        
-        <button 
-          disabled={!quote || isSubmitting} 
-          onClick={handleConfirm} 
-          className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50"
-        >
-          {isSubmitting ? t('processing') : t('confirm')}
-        </button>
-      </div>
-    </div>
+    </Layout>
   );
 } 
