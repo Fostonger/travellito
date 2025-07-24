@@ -66,7 +66,7 @@ export const TourFilters = ({
   return (
     <div>
       {/* Filter button and active filter indicators */}
-      <div className="sticky top-0 z-10 bg-gray-50 pb-4">
+      <div className="sticky top-0 z-10 pb-4">
         <div className="flex items-center justify-between mb-4">
           <Button 
             variant="outline" 

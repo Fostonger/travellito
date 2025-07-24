@@ -2,7 +2,7 @@
 const translations = {
   en: {
     loading: "Loading…",
-    available_tours: "Available Tours",
+    available_tours: "Tours",
     seats_left: "seats left",
     my_bookings: "My Bookings",
     back: "Back",
@@ -79,7 +79,7 @@ const translations = {
   },
   ru: {
     loading: "Загрузка…",
-    available_tours: "Доступные экскурсии",
+    available_tours: "Экскурсии",
     seats_left: "осталось мест",
     my_bookings: "Мои бронирования",
     back: "Назад",
