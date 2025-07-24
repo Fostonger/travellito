@@ -242,18 +242,6 @@ async def cmd_start(msg: Message):
     
     query_params.append(f"lang={lang}")
     
-    # Pass auth tokens and user ID to the webapp if available
-    if tokens:
-        if tokens.get('access_token'):
-            query_params.append(f"token={tokens['access_token']}")
-        
-        if tokens.get('refresh_token'):
-            query_params.append(f"refresh_token={tokens['refresh_token']}")
-        
-        # Also pass the Telegram user ID to ensure it's available
-        if msg.from_user and msg.from_user.id:
-            query_params.append(f"telegramUserId={msg.from_user.id}")
-    
     # Build the final URL with all query parameters
     if query_params:
         launch_url += f"?{'&'.join(query_params)}"
