@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { t, fmtPrice } from '../i18n';
 import { formatDate, formatTime, formatFullDate, getDateString, getDepartureDate } from '../utils/dateUtils';
@@ -89,6 +89,20 @@ export default function TourDetail() {
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Back button */}
+        <div className="flex items-center">
+          <Link to="/tours">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="flex items-center gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              {t('back_to_tours')}
+            </Button>
+          </Link>
+        </div>
+        
         {/* Image gallery */}
         <div className="relative rounded-xl overflow-hidden h-64 md:h-96 bg-gray-100">
           {tour.images && tour.images.length > 0 ? (

@@ -12,17 +12,5 @@ export const LanguageSwitcher = () => {
     window.location.reload(); // Reload to apply language change
   };
 
-  return (
-    <div className="relative group">
-      <Button 
-        variant="ghost" 
-        size="sm" 
-        className="gap-2"
-        onClick={() => handleLanguageChange(currentLang === 'en' ? 'ru' : 'en')}
-      >
-        <Globe className="h-4 w-4" />
-        {currentLang.toUpperCase()}
-      </Button>
-    </div>
-  );
+  return null;
 }; 

@@ -6,6 +6,7 @@ const translations = {
     seats_left: "seats left",
     my_bookings: "My Bookings",
     back: "Back",
+    back_to_tours: "Back to tours",
     cancel: "Cancel",
     checkout: "Checkout – {date}",
     total: "Total:",
@@ -53,7 +54,6 @@ const translations = {
     confirm_cancel_description: 'Are you sure you want to cancel this booking?',
     yes_cancel: 'Yes, cancel',
     no_keep: 'No, keep it',
-    price: 'Price',
     // Filter translations
     filters: 'Filters',
     categories: 'Categories',
@@ -72,6 +72,9 @@ const translations = {
     no_tours_found: 'No tours found',
     try_different_filters: 'Try adjusting your filters',
     no_image: 'No image',
+    price: 'Price',
+    total_tickets: 'Total tickets',
+    details: 'Details',
   },
   ru: {
     loading: "Загрузка…",
@@ -79,6 +82,7 @@ const translations = {
     seats_left: "осталось мест",
     my_bookings: "Мои бронирования",
     back: "Назад",
+    back_to_tours: "Назад к экскурсиям",
     cancel: "Отменить",
     checkout: "Бронирование – {date}",
     total: "Итого:",
@@ -126,7 +130,6 @@ const translations = {
     confirm_cancel_description: 'Вы уверены, что хотите отменить это бронирование?',
     yes_cancel: 'Да, отменить',
     no_keep: 'Нет, оставить',
-    price: 'Цена',
     // Filter translations
     filters: 'Фильтры',
     categories: 'Категории',
@@ -145,6 +148,9 @@ const translations = {
     no_tours_found: 'Экскурсии не найдены',
     try_different_filters: 'Попробуйте изменить фильтры',
     no_image: 'Нет изображения',
+    price: 'Цена',
+    total_tickets: 'Всего билетов',
+    details: 'Подробнее',
   }
 };
 
