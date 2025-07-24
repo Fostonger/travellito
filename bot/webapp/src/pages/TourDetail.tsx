@@ -88,7 +88,7 @@ export default function TourDetail() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-3">
         {/* Back button */}
         <div className="flex items-center">
           <Link to="/tours">
@@ -167,7 +167,7 @@ export default function TourDetail() {
         )}
 
         {/* Tour details */}
-        <div className="bg-card rounded-lg shadow-sm p-6">
+        <div className="bg-card rounded-lg shadow-sm p-4">
           <h1 className="text-2xl font-bold mb-4">{tour.title}</h1>
           
           <div className="flex flex-wrap gap-2 mb-4">
@@ -189,9 +189,12 @@ export default function TourDetail() {
             )}
             
             {tour.address && (
-              <div className="flex items-center text-muted-foreground">
-                <MapPin className="h-4 w-4 mr-2" />
-                <span>{tour.address}</span>
+              <div className="flex items-start text-muted-foreground">
+                <MapPin className="h-4 w-4 mr-2 mt-1" />
+                <div>
+                  <div className="font-medium text-foreground">{t('meeting_point')}</div>
+                  <div>{tour.address}</div>
+                </div>
               </div>
             )}
             
@@ -208,7 +211,7 @@ export default function TourDetail() {
 
         {/* Departures section */}
         <div className="bg-card rounded-lg shadow-sm overflow-hidden">
-          <h2 className="text-xl font-semibold p-6 border-b">
+          <h2 className="text-xl font-semibold p-4 border-b">
             {t('upcoming_departures')}
           </h2>
           

@@ -75,6 +75,7 @@ const translations = {
     price: 'Price',
     total_tickets: 'Total tickets',
     details: 'Details',
+    meeting_point: 'Meeting point',
   },
   ru: {
     loading: "Загрузка…",
@@ -151,6 +152,7 @@ const translations = {
     price: 'Цена',
     total_tickets: 'Всего билетов',
     details: 'Подробнее',
+    meeting_point: 'Место встречи',
   }
 };
 
