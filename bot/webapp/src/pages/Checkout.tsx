@@ -251,6 +251,7 @@ export default function Checkout() {
           'Authorization': `Bearer ${authToken}`
         }
       });
+      ym(103412565,'reachGoal','booking-create');
       alert(t('booking_confirmed'));
       nav('/bookings');
     } catch (err) {
