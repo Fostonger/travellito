@@ -311,3 +311,17 @@ class RepetitionType(Base):
     description = mapped_column(String(255), nullable=True)
     
     tours = relationship("Tour", back_populates="repeat_type_rel")
+
+# ---------- Referral Events (audit trail for referral changes) ----------
+class ReferralEvent(Base):
+    __tablename__ = "referral_events"
+    id           = mapped_column(Integer, primary_key=True)
+    user_id      = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    old_referral = mapped_column(ForeignKey("apartments.id"), nullable=True)
+    new_referral = mapped_column(ForeignKey("apartments.id"), nullable=False)
+    changed_at   = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    user = relationship("User")
+    old_apartment = relationship("Apartment", foreign_keys=[old_referral])
+    new_apartment = relationship("Apartment", foreign_keys=[new_referral])

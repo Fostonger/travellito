@@ -40,6 +40,21 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['babes-theme-destroy-seller.trycloudflare.com']
+    allowedHosts: ['insights-melbourne-hopefully-obj.trycloudflare.com'],
+    proxy: {
+      // Proxy API requests to backend to avoid CORS issues with cookies
+      '/api': {
+        target: process.env.VITE_API_BASE || 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+        credentials: true, // Important for cookies
+      }
+    },
+    cors: {
+      origin: true, // Allow all origins for development
+      credentials: true, // Important for cookies
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Id'],
+    }
   },
 }); 

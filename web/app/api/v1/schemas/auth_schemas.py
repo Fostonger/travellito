@@ -54,4 +54,15 @@ class UserOut(BaseModel):
 
     model_config = {
         "from_attributes": True,
-    } 
+    }
+
+
+class TelegramInitRequest(BaseModel):
+    """Schema for Telegram WebApp initData authentication request"""
+    init_data: str = Field(..., description="Raw initData string from Telegram.WebApp.initData")
+
+
+class TelegramAuthResponse(BaseModel):
+    """Schema for Telegram authentication response"""
+    user: dict
+    # No tokens in the response as they are set as cookies 

@@ -76,12 +76,18 @@ def decode_token(token: str) -> dict:
 #  Dependencies
 # ---------------------------------------------------------------------------
 async def _extract_token(req: Request) -> str | None:
-    """Return JWT from Authorization header *or* session cookie."""
+    """Return JWT from Authorization header *or* access_token/session cookie."""
     # Priority: Authorization: Bearer <token>
     auth: str | None = req.headers.get("Authorization")
     if auth and auth.startswith("Bearer "):
         return auth.split(" ", 1)[1]
-    # Fallback to cookie (browser flows)
+    
+    # Then try the new access_token cookie (preferred for WebApp)
+    access_token = req.cookies.get("access_token")
+    if access_token:
+        return access_token
+    
+    # Fallback to legacy session cookie (browser flows)
     return req.cookies.get("session")
 
 

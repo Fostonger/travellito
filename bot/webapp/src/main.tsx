@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -23,30 +23,48 @@ const queryClient = new QueryClient({
   },
 });
 
+// Add Telegram WebApp script to the document head
+const addTelegramScript = () => {
+  const script = document.createElement('script');
+  script.src = 'https://telegram.org/js/telegram-web-app.js';
+  script.async = true;
+  document.head.appendChild(script);
+};
+
 // Initialize application
 const initialize = async () => {
-  // First initialize analytics (which sets up global interceptors)
+  // First add the Telegram WebApp script
+  addTelegramScript();
+  
+  // Initialize analytics (which sets up global interceptors)
   initAnalytics();
   
   // Then set up authentication flow
   setupAxiosAuth();
-  
-  // Add a small delay to let setupAxiosAuth process URL params
-  setTimeout(async () => {
-    try {
-      // Try to authenticate with Telegram
-      await authenticateWithTelegram();
-    } catch (error) {
-      // Silent fail - auth will be retried on API calls if needed
-    }
-  }, 500);
 };
 
+// Run initialization
 initialize();
 
-// Render the application
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+// Root component to handle Telegram WebApp initialization
+const Root = () => {
+  useEffect(() => {
+    // Signal to Telegram that we're ready when component mounts
+    if (window.Telegram?.WebApp?.ready) {
+      window.Telegram.WebApp.ready();
+      
+      // Try to authenticate with Telegram after ready
+      setTimeout(async () => {
+        try {
+          await authenticateWithTelegram();
+        } catch (error) {
+          // Silent fail - auth will be retried on API calls if needed
+        }
+      }, 100);
+    }
+  }, []);
+
+  return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ScrollRestoration />
@@ -59,5 +77,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
+  );
+};
+
+// Render the application
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <Root />
   </React.StrictMode>
 ); 
