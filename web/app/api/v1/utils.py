@@ -27,6 +27,7 @@ def verify_telegram_webapp_data(init_data: str, max_age_seconds: int = 86400) ->
     # Parse the data string into a dictionary
     try:
         data_dict = dict(parse_qsl(init_data, keep_blank_values=True))
+        logger.debug(f"Parsed initData: {data_dict}")
     except Exception as e:
         logger.error(f"Failed to parse initData: {e}")
         return False, None, f"Invalid initData format: {e}"
@@ -60,7 +61,11 @@ def verify_telegram_webapp_data(init_data: str, max_age_seconds: int = 86400) ->
     secret_key = hashlib.sha256(bot_token.encode()).digest()
     
     # Build the data check string
-    data_check_string = "\n".join([f"{k}={v}" for k, v in sorted(data_dict.items())])
+    # Sort the keys alphabetically as required by Telegram
+    sorted_items = sorted(data_dict.items())
+    data_check_string = "\n".join([f"{k}={v}" for k, v in sorted_items])
+    
+    logger.debug(f"Data check string: {data_check_string}")
     
     # Calculate HMAC-SHA-256 signature
     computed_hash = hmac.new(
@@ -68,6 +73,9 @@ def verify_telegram_webapp_data(init_data: str, max_age_seconds: int = 86400) ->
         data_check_string.encode(),
         hashlib.sha256
     ).hexdigest()
+    
+    logger.debug(f"Computed hash: {computed_hash}")
+    logger.debug(f"Received hash: {hash_value}")
     
     # Use constant-time comparison to prevent timing attacks
     is_valid = hmac.compare_digest(computed_hash, hash_value)

@@ -76,6 +76,26 @@ export const authenticateWithTelegram = async (): Promise<boolean> => {
       return false;
     }
 
+    // Log the initData (for debugging, but don't log the whole thing for security)
+    const initData = initDataResult.initData;
+    if (initData && initData.length > 20) {
+      console.log(`Using initData: ${initData.substring(0, 10)}...${initData.substring(initData.length - 10)}`);
+    }
+
+    // Log user info from initDataUnsafe (safe to log)
+    if (tg?.initDataUnsafe?.user) {
+      console.log('User from initDataUnsafe:', {
+        id: tg.initDataUnsafe.user.id,
+        username: tg.initDataUnsafe.user.username,
+        first_name: tg.initDataUnsafe.user.first_name,
+      });
+    }
+
+    // Log start_param if available
+    if (tg?.initDataUnsafe?.start_param) {
+      console.log('Start param:', tg.initDataUnsafe.start_param);
+    }
+
     const apiBase = getApiBaseUrl();
     
     try {
@@ -91,12 +111,14 @@ export const authenticateWithTelegram = async (): Promise<boolean> => {
       
       // Check if authentication was successful
       if (response.data && response.data.user) {
+        console.log('Authentication successful:', response.data.user);
         return true;
       }
       
+      console.error('Authentication failed: Invalid response format');
       return false;
-    } catch (apiError) {
-      console.error('Authentication API error:', apiError);
+    } catch (apiError: any) {
+      console.error('Authentication API error:', apiError.response?.data || apiError.message);
       return false;
     }
   } catch (error) {

@@ -267,8 +267,14 @@ async def telegram_webapp_init(
     """
     logger = logging.getLogger("app.api.auth.telegram")
     
+    # Log the raw initData (but mask most of it for security)
+    init_data = payload.init_data
+    if len(init_data) > 20:
+        masked_data = init_data[:10] + "..." + init_data[-10:]
+        logger.info(f"Received initData: {masked_data}")
+    
     # Verify initData
-    is_valid, data, error = verify_telegram_webapp_data(payload.init_data)
+    is_valid, data, error = verify_telegram_webapp_data(init_data)
     
     if not is_valid:
         logger.error(f"Invalid Telegram initData: {error}")
@@ -276,13 +282,30 @@ async def telegram_webapp_init(
     
     # Extract user data
     user_data = {}
+    
+    # Handle different formats of user data in initData
     if "user" in data:
         # If user data is provided as a JSON string (common in WebApp)
         try:
-            user_data = json.loads(data["user"])
-        except (json.JSONDecodeError, TypeError):
-            logger.error("Failed to parse user data JSON")
-            raise HTTPException(status_code=400, detail="Invalid user data format")
+            user_json = data["user"]
+            logger.debug(f"User JSON from initData: {user_json}")
+            
+            # Try to parse as JSON
+            try:
+                user_data = json.loads(user_json)
+            except json.JSONDecodeError:
+                # If not valid JSON, it might be URL encoded
+                logger.debug("Failed to parse as JSON, trying URL decode")
+                import urllib.parse
+                try:
+                    decoded = urllib.parse.unquote(user_json)
+                    user_data = json.loads(decoded)
+                except Exception as e:
+                    logger.error(f"Failed to decode user data: {e}")
+                    raise HTTPException(status_code=400, detail="Invalid user data format")
+        except Exception as e:
+            logger.error(f"Failed to process user data: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid user data format: {str(e)}")
     else:
         # Extract user fields directly from the data
         for key in ["id", "first_name", "last_name", "username", "language_code"]:
@@ -293,6 +316,8 @@ async def telegram_webapp_init(
     if not user_data.get("id"):
         logger.error("Missing user ID in Telegram initData")
         raise HTTPException(status_code=400, detail="Missing user ID in Telegram initData")
+    
+    logger.info(f"Authenticating Telegram user: {user_data.get('id')} ({user_data.get('username', 'no username')})")
     
     # Get or create user
     from app.models import User
@@ -345,6 +370,8 @@ async def telegram_webapp_init(
     cookie_domain = os.getenv("COOKIE_DOMAIN", None)
     cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
     
+    logger.debug(f"Setting cookies with domain={cookie_domain}, secure={cookie_secure}")
+    
     # Set access token cookie - short-lived
     response.set_cookie(
         key="access_token",
@@ -368,6 +395,7 @@ async def telegram_webapp_init(
     )
     
     await sess.commit()
+    logger.info(f"Authentication successful for Telegram user {user.id}")
     
     # Return user info without tokens
     return TelegramAuthResponse(
@@ -378,6 +406,80 @@ async def telegram_webapp_init(
             "last": user.last
         }
     )
+
+
+@router.post("/telegram/debug")
+async def telegram_webapp_debug(
+    payload: TelegramInitRequest
+):
+    """
+    Debug endpoint to analyze Telegram WebApp initData without authentication
+    
+    This endpoint is for debugging only and should be disabled in production.
+    """
+    logger = logging.getLogger("app.api.auth.telegram.debug")
+    
+    # Parse the initData
+    try:
+        from urllib.parse import parse_qsl
+        data_dict = dict(parse_qsl(payload.init_data, keep_blank_values=True))
+        
+        # Get bot token and generate secret key
+        bot_token = os.getenv("BOT_TOKEN")
+        if not bot_token:
+            return {"error": "BOT_TOKEN not configured", "partial_token": bot_token[:5] + "..." if bot_token else None}
+        
+        # Generate secret key by hashing the bot token
+        import hashlib
+        import hmac
+        secret_key = hashlib.sha256(bot_token.encode()).digest()
+        
+        # Extract and remove hash for validation
+        hash_value = data_dict.pop("hash", None)
+        
+        # Build the data check string
+        sorted_items = sorted(data_dict.items())
+        data_check_string = "\n".join([f"{k}={v}" for k, v in sorted_items])
+        
+        # Calculate HMAC-SHA-256 signature
+        computed_hash = hmac.new(
+            secret_key,
+            data_check_string.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Check if hash matches
+        is_valid = hash_value and hmac.compare_digest(computed_hash, hash_value)
+        
+        # Try to parse user data if present
+        user_data = None
+        if "user" in data_dict:
+            try:
+                import json
+                user_data = json.loads(data_dict["user"])
+            except json.JSONDecodeError:
+                # Try URL decoding
+                import urllib.parse
+                try:
+                    decoded = urllib.parse.unquote(data_dict["user"])
+                    user_data = json.loads(decoded)
+                except Exception:
+                    user_data = {"error": "Failed to parse user data"}
+        
+        # Return analysis
+        return {
+            "parsed_data": data_dict,
+            "hash_valid": is_valid,
+            "computed_hash": computed_hash,
+            "received_hash": hash_value,
+            "user_data": user_data,
+            "auth_date_valid": "auth_date" in data_dict,
+            "bot_token_configured": bool(bot_token),
+            "bot_token_prefix": bot_token[:3] + "..." if bot_token else None
+        }
+    except Exception as e:
+        logger.exception("Error analyzing initData")
+        return {"error": str(e)}
 
 
 @router.post("/introspect")
