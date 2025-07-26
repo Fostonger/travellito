@@ -51,23 +51,23 @@ def verify_telegram_webapp_data(init_data: str, max_age_seconds: int = 86400) ->
     # Get the hash from the data and remove it for validation
     hash_value = data_dict.pop("hash")
     
-    # Get bot token and generate secret key
+    # Get bot token
     bot_token = os.getenv("BOT_TOKEN")
     if not bot_token:
         logger.error("BOT_TOKEN environment variable is not set")
         return False, None, "BOT_TOKEN not configured"
     
-    # Generate secret key by hashing the bot token
-    secret_key = hashlib.sha256(bot_token.encode()).digest()
+    # Step 1: Create HMAC-SHA256 of the bot token using "WebAppData" as the key
+    secret_key = hmac.new(
+        "WebAppData".encode(),
+        bot_token.encode(),
+        hashlib.sha256
+    ).digest()
     
-    # Build the data check string
-    # Sort the keys alphabetically as required by Telegram
-    sorted_items = sorted(data_dict.items())
-    data_check_string = "\n".join([f"{k}={v}" for k, v in sorted_items])
+    # Step 2: Build the data check string
+    data_check_string = "\n".join([f"{k}={v}" for k, v in sorted(data_dict.items())])
     
-    logger.debug(f"Data check string: {data_check_string}")
-    
-    # Calculate HMAC-SHA-256 signature
+    # Step 3: Calculate HMAC-SHA256 signature using the secret key from step 1
     computed_hash = hmac.new(
         secret_key,
         data_check_string.encode(),

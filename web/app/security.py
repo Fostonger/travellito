@@ -78,6 +78,7 @@ def decode_token(token: str) -> dict:
 async def _extract_token(req: Request) -> str | None:
     """Return JWT from Authorization header *or* access_token/session cookie."""
     # Priority: Authorization: Bearer <token>
+    print("cookies", req.cookies)
     auth: str | None = req.headers.get("Authorization")
     if auth and auth.startswith("Bearer "):
         return auth.split(" ", 1)[1]

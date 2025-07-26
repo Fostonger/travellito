@@ -221,14 +221,14 @@ async def cmd_start(msg: Message):
             logging.info(f"Detected apartment_id: {apartment_id} from start command")
 
     # Authenticate user first to ensure we have valid tokens
-    tokens = None
-    if msg.from_user:
-        try:
-            # This will automatically handle token expiry and refresh
-            tokens = await authenticate_user(msg.from_user.id, apartment_id)
-            logging.info(f"Got tokens for user {msg.from_user.id}: {tokens is not None}")
-        except Exception as e:
-            logging.warning(f"Authentication failed: {str(e)}")
+    # tokens = None
+    # if msg.from_user:
+    #     try:
+    #         # This will automatically handle token expiry and refresh
+    #         tokens = await authenticate_user(msg.from_user.id, apartment_id)
+    #         logging.info(f"Got tokens for user {msg.from_user.id}: {tokens is not None}")
+    #     except Exception as e:
+    #         logging.warning(f"Authentication failed: {str(e)}")
             # Continue anyway - the webapp will handle auth if needed
 
     # Preserve the raw payload (after /start) – contains QR metadata like

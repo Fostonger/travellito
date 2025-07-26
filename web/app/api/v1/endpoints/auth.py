@@ -376,22 +376,22 @@ async def telegram_webapp_init(
     response.set_cookie(
         key="access_token",
         value=access_token,
-        httponly=True,
-        secure=cookie_secure,
+        # httponly=True,
+        # secure=cookie_secure,
         samesite="none",  # Required for WebApp embedded in Telegram
-        max_age=ACCESS_TOKEN_EXP_SECONDS,
-        domain=cookie_domain
+        # max_age=ACCESS_TOKEN_EXP_SECONDS,
+        # domain=cookie_domain
     )
     
     # Set refresh token cookie - long-lived
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,
-        secure=cookie_secure,
+        # httponly=True,
+        # secure=cookie_secure,
         samesite="none",  # Required for WebApp embedded in Telegram
-        max_age=REFRESH_TOKEN_EXP_SECONDS,
-        domain=cookie_domain
+        # max_age=REFRESH_TOKEN_EXP_SECONDS,
+        # domain=cookie_domain
     )
     
     await sess.commit()
