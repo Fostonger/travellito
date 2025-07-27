@@ -7,6 +7,7 @@ import json
 from typing import Dict, Optional
 import logging
 from datetime import datetime
+import asyncio
 
 from app.api.v1.schemas.auth_schemas import (
     LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse,
@@ -44,12 +45,21 @@ async def login(
     
     # Set cookie for browser-based auth
     response.set_cookie(
-        key="session",
+        key="access_token",
         value=access_token,
         httponly=True,
         secure=True,
         samesite="lax",
-        max_age=60 * 15  # 15 minutes
+        max_age=ACCESS_TOKEN_EXP_SECONDS  # 15 minutes
+    )
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXP_SECONDS  # 30 days
     )
     
     return LoginResponse(
@@ -97,7 +107,7 @@ async def login_for_token(
 async def refresh_token(
     response: Response,
     sess: SessionDep,
-    refresh_token: Optional[str] = None,
+    refresh_token: Optional[str] = Cookie(None),
     payload: Optional[RefreshTokenRequest] = None
 ):
     """
@@ -119,6 +129,16 @@ async def refresh_token(
     # Refresh the token
     access_token = await service.refresh_access_token(token)
     
+    # Set the new access token as a cookie for browser-based auth
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXP_SECONDS
+    )
+    
     # Return token for API clients
     return RefreshTokenResponse(access_token=access_token)
 
@@ -126,6 +146,10 @@ async def refresh_token(
 @router.post("/logout")
 async def logout(response: Response):
     """Logout (clear auth cookies)"""
+    
+    # Clear the auth cookies
+    response.delete_cookie(key="access_token", secure=True, httponly=True, samesite="lax")
+    response.delete_cookie(key="refresh_token", secure=True, httponly=True, samesite="lax")
     
     return {"success": True}
 
@@ -337,3 +361,33 @@ async def introspect_token(
             "active": False,
             "error": str(e)
         } 
+
+@router.get("/test-auth", response_model=dict)
+async def test_auth(user=Depends(current_user)):
+    """Test endpoint to verify authentication and token refresh
+    
+    This endpoint simply returns the user claims from the token.
+    It's useful for testing token refresh as it requires authentication.
+    """
+    return {
+        "message": "Authentication successful",
+        "user_id": user["sub"],
+        "role": user["role"],
+        "timestamp": int(time.time())
+    } 
+
+@router.get("/test-expired")
+async def test_expired_token(user=Depends(current_user)):
+    """Test endpoint that waits for the token to expire
+    
+    This endpoint waits for 11 seconds (longer than the token expiry)
+    and then returns a response. This is useful for testing token refresh.
+    """
+    # Wait for the token to expire
+    await asyncio.sleep(11)
+    
+    return {
+        "message": "If you see this, token refresh worked!",
+        "user_id": user["sub"],
+        "timestamp": int(time.time())
+    } 

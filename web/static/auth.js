@@ -8,7 +8,7 @@ const REFRESH_TOKEN_KEY = 'auth_refresh_token';
 const TOKEN_EXP_KEY = 'auth_token_exp';
 
 // Token refresh settings
-const REFRESH_BEFORE_EXPIRY_MS = 60000; // Refresh 1 minute before expiry
+const REFRESH_BEFORE_EXPIRY_MS = 0; // Refresh 1 minute before expiry
 const REFRESH_ENDPOINT = '/api/v1/auth/refresh';
 const LOGOUT_ENDPOINT = '/api/v1/auth/logout';
 
@@ -80,21 +80,44 @@ function isTokenExpired() {
 }
 
 /**
+ * Check if authentication cookies are present
+ * @returns {boolean} True if either access_token or refresh_token cookie is present
+ */
+function hasCookieAuth() {
+  const cookies = document.cookie.split(';').map(c => c.trim());
+  const hasAccessCookie = cookies.some(c => c.startsWith('access_token='));
+  const hasRefreshCookie = cookies.some(c => c.startsWith('refresh_token='));
+  
+  return hasAccessCookie || hasRefreshCookie;
+}
+
+/**
  * Refresh the access token using the refresh token
+ * @param {boolean} useCookies - If true, rely on cookies for refresh instead of sending token
  * @returns {Promise<boolean>} True if refresh was successful
  */
-async function refreshAccessToken() {
+async function refreshAccessToken(useCookies = true) {
+  // If we're using cookies and have them, don't send the token in the body
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
+  const hasCookies = hasCookieAuth();
   
   try {
-    const response = await fetch(REFRESH_ENDPOINT, {
+    const options = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
+      // Include credentials to send cookies
+      credentials: 'include'
+    };
+    
+    // Only send refresh token in body if we don't have cookies or explicitly asked not to use them
+    if (!hasCookies || !useCookies) {
+      if (!refreshToken) return false;
+      options.body = JSON.stringify({ refresh_token: refreshToken });
+    }
+    
+    const response = await fetch(REFRESH_ENDPOINT, options);
     
     if (!response.ok) {
       // If refresh failed, clear tokens and return false
@@ -144,7 +167,8 @@ async function logout() {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${getAccessToken()}`
-      }
+      },
+      credentials: 'include' // Include credentials to send cookies
     });
     
     // Clear tokens from localStorage
@@ -171,24 +195,11 @@ function setupFetchInterceptor() {
   
   // Replace with our interceptor
   window.fetch = async function(resource, options = {}) {
-    // Check if token is expired and needs refresh before making authenticated requests
-    if (isTokenExpired() && getRefreshToken()) {
-      // Try to refresh the token
-      const refreshed = await refreshAccessToken();
-      if (!refreshed) {
-        // If refresh failed, redirect to login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-          return new Response(JSON.stringify({ error: 'Authentication required' }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-      }
-    }
+    // Default options to include credentials
+    options.credentials = options.credentials || 'include';
     
-    // Get the current access token after possible refresh
-    const accessToken = getAccessToken();
+    // Try request with current token first (don't pre-refresh)
+    // This is more efficient and lets the server middleware handle refresh if needed
     
     // Clone the options
     const newOptions = { ...options };
@@ -197,7 +208,9 @@ function setupFetchInterceptor() {
     newOptions.headers = newOptions.headers || {};
     
     // Add Authorization header if we have a token and it's not already set
-    if (accessToken && !newOptions.headers.Authorization) {
+    // and not explicitly set to empty string (for cookie-only auth testing)
+    const accessToken = getAccessToken();
+    if (accessToken && !newOptions.headers.Authorization && newOptions.headers.Authorization !== '') {
       newOptions.headers = {
         ...newOptions.headers,
         'Authorization': `Bearer ${accessToken}`
@@ -210,17 +223,25 @@ function setupFetchInterceptor() {
       
       // Handle 401 Unauthorized errors (token rejected)
       if (response.status === 401) {
+        console.log('Got 401, trying to refresh token');
+        
         // Try to refresh the token
-        const refreshed = await refreshAccessToken();
+        const refreshed = await refreshAccessToken(hasCookieAuth());
+        
         if (refreshed) {
+          console.log('Token refreshed successfully, retrying request');
           // If refresh successful, retry the request with the new token
-          newOptions.headers = {
-            ...newOptions.headers,
+          const retryOptions = { ...newOptions };
+          retryOptions.headers = {
+            ...retryOptions.headers,
             'Authorization': `Bearer ${getAccessToken()}`
           };
-          return originalFetch(resource, newOptions);
-        } else {
-          // If refresh failed, redirect to login page
+          
+          // Return the retried request
+          return originalFetch(resource, retryOptions);
+        } else if (!hasCookieAuth()) {
+          console.log('Token refresh failed and no cookie auth, redirecting to login');
+          // If refresh failed and we don't have cookie auth, redirect to login page
           if (window.location.pathname !== '/login') {
             window.location.href = '/login';
           }
@@ -237,13 +258,14 @@ function setupFetchInterceptor() {
 
 /**
  * Check if user is authenticated
- * @returns {boolean} True if user has valid tokens
+ * @returns {boolean} True if user has valid tokens or auth cookies
  */
 function isAuthenticated() {
   const hasAccessToken = !!getAccessToken();
   const hasRefreshToken = !!getRefreshToken();
+  const hasCookies = hasCookieAuth();
   
-  return hasAccessToken && hasRefreshToken;
+  return (hasAccessToken && hasRefreshToken) || hasCookies;
 }
 
 // Initialize auth system
@@ -252,8 +274,8 @@ function initAuth() {
   
   // Setup periodic check for token expiration
   setInterval(() => {
-    if (isTokenExpired() && getRefreshToken()) {
-      refreshAccessToken();
+    if (isTokenExpired() && (getRefreshToken() || hasCookieAuth())) {
+      refreshAccessToken(hasCookieAuth());
     }
   }, 60000); // Check every minute
 }
@@ -264,6 +286,7 @@ window.AuthManager = {
   getAccessToken,
   getRefreshToken,
   isTokenExpired,
+  hasCookieAuth,
   refreshAccessToken,
   clearTokens,
   logout,

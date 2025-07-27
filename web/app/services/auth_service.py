@@ -89,29 +89,48 @@ class AuthService(BaseService):
     async def refresh_access_token(self, refresh_token: str) -> str:
         """Generate new access token from refresh token"""
         
+        if not refresh_token:
+            raise AuthenticationError("Missing refresh token")
+        
         try:
+            # First, decode the token to verify it's valid
             payload = decode_token(refresh_token)
-        except:
-            raise AuthenticationError("Invalid refresh token")
-        
-        # Verify token is a refresh token (has longer expiry)
-        # This is a simple check - in production, you might want to store token types
-        
-        # Ensure we have required claims
-        sub = payload.get("sub")
-        role = payload.get("role")
-        
-        if not sub or not role:
-            raise AuthenticationError("Invalid token claims")
-        
-        # Generate new access token with same claims
-        access_token = create_token(
-            sub=sub,
-            role=role,
-            **{k: v for k, v in payload.items() if k not in ["sub", "role", "exp"]}
-        )
-        
-        return access_token
+            
+            # Ensure we have required claims
+            sub = payload.get("sub")
+            role = payload.get("role")
+            
+            if not sub or not role:
+                raise AuthenticationError("Invalid token claims")
+            
+            # Verify the user still exists and has the same role
+            user = await self.user_repo.get(int(sub))
+            if not user:
+                raise AuthenticationError("User not found")
+            
+            if user.role != role:
+                raise AuthenticationError("User role has changed")
+            
+            # Prepare extra claims
+            extra_claims = {k: v for k, v in payload.items() if k not in ["sub", "role", "exp"]}
+            
+            # Update agency_id if it has changed
+            if user.agency_id:
+                extra_claims["agency_id"] = user.agency_id
+            
+            # Generate new access token with same claims
+            access_token = create_token(
+                sub=sub,
+                role=role,
+                **extra_claims
+            )
+            
+            return access_token
+            
+        except Exception as e:
+            # Log the error but don't expose details in the exception
+            print(f"Token refresh error: {str(e)}")
+            raise AuthenticationError("Invalid or expired refresh token")
     
     async def create_user(
         self,

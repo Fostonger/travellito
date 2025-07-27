@@ -26,7 +26,7 @@ ALGORITHM = "HS256"
 # ---------------------------------------------------------------------------
 
 # Short-lived access token (default 15 min) and longer refresh token (default 30 days)
-ACCESS_TOKEN_EXP_SECONDS: int = int(os.getenv("JWT_ACCESS_TTL", "900"))  # 15 minutes
+ACCESS_TOKEN_EXP_SECONDS: int = int(os.getenv("JWT_ACCESS_TTL", "10"))  # 15 minutes
 REFRESH_TOKEN_EXP_SECONDS: int = int(os.getenv("JWT_REFRESH_TTL", str(60 * 60 * 24 * 30)))  # 30 days
 
 # Fallback used by create_token when custom expires_in passed
@@ -60,14 +60,21 @@ def create_token(
         "exp": _now() + expires_in,
     }
     payload.update(extra_claims)
+    # Ensure SECRET_KEY is not None before encoding
+    if SECRET_KEY is None:
+        raise ValueError("SECRET_KEY cannot be None")
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
     """Verify *token* and return its payload."""
     try:
+        # Ensure SECRET_KEY is not None before decoding
+        if SECRET_KEY is None:
+            raise ValueError("SECRET_KEY cannot be None")
         payload: dict = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError as exc:
+        print(exc)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token") from exc
     return payload
 
@@ -76,13 +83,22 @@ def decode_token(token: str) -> dict:
 #  Dependencies
 # ---------------------------------------------------------------------------
 async def _extract_token(req: Request) -> str | None:
-    """Return JWT from Authorization header *or* access_token/session cookie."""
+    """Return JWT from Authorization header *or* access_token/session cookie *or* request state."""
+    # Check if token was set in request state by middleware
+    if hasattr(req.state, "access_token"):
+        return req.state.access_token
+        
     # Priority: Authorization: Bearer <token>
     auth: str | None = req.headers.get("Authorization")
     if auth and auth.startswith("Bearer "):
         return auth.split(" ", 1)[1]
     
-    return None
+    return req.cookies.get("access_token")
+
+
+async def _extract_refresh_token(req: Request) -> str | None:
+    """Return JWT from refresh_token cookie."""
+    return req.cookies.get("refresh_token")
 
 
 async def current_user(req: Request) -> dict:
@@ -93,14 +109,14 @@ async def current_user(req: Request) -> dict:
     return decode_token(token)
 
 
-def _to_role_str(value: "str | Role") -> str:
+def _to_role_str(value: str | Role) -> str:
     """Return the *string* value of a Role or raw str."""
     if isinstance(value, Role):
         return value.value
     return str(value)
 
 
-def role_required(*allowed: "str | Role | Iterable[str | Role]") -> Callable[[dict], dict]:
+def role_required(*allowed: str | Role) -> Callable[[dict], dict]:
     """Return a dependency that checks *current_user* role is within *allowed*.
 
     Usage:
@@ -114,7 +130,8 @@ def role_required(*allowed: "str | Role | Iterable[str | Role]") -> Callable[[di
     # Normalise to strings
     allowed_set = {_to_role_str(a) for a in allowed}
 
-    async def _dep(user: Annotated[dict, Depends(current_user)]):
+    # Define the dependency as a non-async function to fix the type error
+    def _dep(user: Annotated[dict, Depends(current_user)]) -> dict:
         role: str | None = user.get("role")
         if role not in allowed_set:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
