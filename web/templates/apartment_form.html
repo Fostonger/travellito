@@ -5,8 +5,8 @@
   <h1 class="text-3xl font-extrabold mb-6 text-emerald-700">Новая квартира</h1>
   <form id="aptForm" class="space-y-6">
     <div>
-      <label class="block mb-2 font-medium">Название (необязательно)</label>
-      <input name="name" class="w-full rounded-lg border border-emerald-300 p-2.5 focus:ring-2 focus:ring-emerald-500">
+      <label class="block mb-2 font-medium">Название</label>
+      <input name="name" required class="w-full rounded-lg border border-emerald-300 p-2.5 focus:ring-2 focus:ring-emerald-500">
     </div>
     <div>
       <label class="block mb-2 font-medium">Город</label>
@@ -118,8 +118,14 @@
       return;
     }
     
+    // Validate that name is not empty
+    if (!form.name.value.trim()) {
+      document.getElementById('msg').textContent = '❌ Пожалуйста, введите название квартиры';
+      return;
+    }
+    
     const payload = {
-      name: form.name.value || null,
+      name: form.name.value.trim(),
       city_id: parseInt(form.city_id.value)
     };
     
