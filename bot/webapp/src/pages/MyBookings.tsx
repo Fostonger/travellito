@@ -45,7 +45,7 @@ export default function MyBookings() {
       setLoading(true);
       const { data } = await axios.get(`${apiBase}/bookings/tourist`, { 
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
       });
       // Filter out cancelled bookings
@@ -74,7 +74,7 @@ export default function MyBookings() {
       setCancelingId(id);
       await axios.patch(`${apiBase}/bookings/tourist/${id}/cancel`, {}, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
       });
       await load();

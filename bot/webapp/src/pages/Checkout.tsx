@@ -102,8 +102,8 @@ export default function Checkout() {
     
     try {
       // Get auth token from localStorage
-      const authToken = localStorage.getItem('authToken');
-      if (!authToken) {
+      const access_token = localStorage.getItem('access_token');
+      if (!access_token) {
         console.error('No auth token found');
         setError(t('auth_required'));
         return;
@@ -135,7 +135,7 @@ export default function Checkout() {
       
       const { data } = await axios.post(`${apiBase}/public/quote`, quotePayload, {
         headers: {
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${access_token}`
         }
       });
       
@@ -221,8 +221,8 @@ export default function Checkout() {
     
     try {
       // Get auth token from localStorage
-      const authToken = localStorage.getItem('authToken');
-      if (!authToken) {
+      const access_token = localStorage.getItem('access_token');
+      if (!access_token) {
         console.error('No auth token found');
         setError(t('auth_required'));
         setIsSubmitting(false);
@@ -261,7 +261,7 @@ export default function Checkout() {
       
       await axios.post(`${apiBase}/public/bookings`, bookingPayload, {
         headers: {
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${access_token}`
         }
       });
       ym(103412565,'reachGoal','booking-create');
