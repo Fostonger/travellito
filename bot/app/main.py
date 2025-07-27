@@ -74,96 +74,6 @@ user_tokens = {}
 #  Authentication helper
 # ---------------------------------------------------------------------------
 
-async def authenticate_user(user_id: int, apartment_id: str = None) -> dict:
-    """Authenticate a user with the web API and store their tokens.
-    
-    This function will:
-    1. Check if the user already has a valid token
-    2. If token exists and is not close to expiry, return it
-    3. If token doesn't exist or is close to expiry, get a new one
-    4. Store the token for future use
-    
-    Args:
-        user_id: Telegram user ID
-        apartment_id: Optional apartment ID from QR code
-    """
-    logging.info(f"Starting authentication for user_id: {user_id}, apartment_id: {apartment_id}")
-    
-    # Check if user already has a token
-    if user_id in user_tokens:
-        token_data = user_tokens[user_id]
-        
-        # Check if token is about to expire (within 5 minutes)
-        try:
-            # Decode token without verification to check expiry
-            payload = jwt.decode(token_data.get('access_token', ''), 
-                                options={"verify_signature": False})
-            exp = payload.get('exp', 0)
-            now = int(time.time())
-            
-            # If token is valid for more than 5 minutes, reuse it
-            if exp > now + 300:  # 5 minutes = 300 seconds
-                logging.info(f"Using cached token for user_id: {user_id} (expires in {exp - now} seconds)")
-                return token_data
-            else:
-                logging.info(f"Token for user_id: {user_id} is about to expire, refreshing")
-        except Exception as e:
-            logging.warning(f"Error checking token expiry: {str(e)}")
-            # Continue to get a new token
-    
-    # Get user info from Telegram
-    try:
-        user = await bot.get_chat(user_id)
-        logging.info(f"Got user from Telegram: {user.id}, {user.first_name}")
-    except Exception as e:
-        logging.exception(f"Error getting user from Telegram: {str(e)}")
-        raise ValueError(f"Could not get user info from Telegram: {str(e)}")
-    
-    if not user:
-        raise ValueError("Could not get user info from Telegram")
-        
-    # Convert to dict format expected by API
-    user_data = {
-        "id": user.id,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "username": user.username,
-    }
-    
-    # Add apartment_id if provided
-    if apartment_id:
-        user_data["apartment_id"] = apartment_id
-    
-    logging.info(f"Authenticating user: {user_data}")
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            # Call our auth endpoint
-            auth_url = f"{settings.WEB_API}/api/v1/auth/telegram/bot"
-            logging.info(f"Calling auth endpoint: {auth_url}")
-            
-            response = await client.post(
-                auth_url,
-                json=user_data,
-                timeout=10
-            )
-            
-            logging.info(f"Auth response status: {response.status_code}")
-            
-            if response.status_code != 200:
-                logging.error(f"Auth error: {response.status_code} - {response.text}")
-                return None
-                
-            tokens = response.json()
-            logging.info(f"Authentication successful for user {user_id}. Token received: {tokens.get('access_token')[:10]}...")
-            
-            # Store tokens for this user
-            user_tokens[user_id] = tokens
-            return tokens
-    except Exception as e:
-        logging.exception(f"Authentication error: {str(e)}")
-        return None
-
 # Middlewares ----------------------------------------------------------------
 
 # built-in logging middleware (requires python -m logging.basicConfig())
@@ -219,17 +129,6 @@ async def cmd_start(msg: Message):
         if args.startswith("apt_"):
             apartment_id = args[4:]  # Extract ID after "apt_" prefix
             logging.info(f"Detected apartment_id: {apartment_id} from start command")
-
-    # Authenticate user first to ensure we have valid tokens
-    # tokens = None
-    # if msg.from_user:
-    #     try:
-    #         # This will automatically handle token expiry and refresh
-    #         tokens = await authenticate_user(msg.from_user.id, apartment_id)
-    #         logging.info(f"Got tokens for user {msg.from_user.id}: {tokens is not None}")
-    #     except Exception as e:
-    #         logging.warning(f"Authentication failed: {str(e)}")
-            # Continue anyway - the webapp will handle auth if needed
 
     # Preserve the raw payload (after /start) – contains QR metadata like
     # `apt_<apartment_id>` which the WebApp will parse.

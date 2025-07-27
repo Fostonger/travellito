@@ -97,7 +97,7 @@ async def login_for_token(
 async def refresh_token(
     response: Response,
     sess: SessionDep,
-    refresh_token: Optional[str] = Cookie(None),
+    refresh_token: Optional[str] = None,
     payload: Optional[RefreshTokenRequest] = None
 ):
     """
@@ -119,20 +119,6 @@ async def refresh_token(
     # Refresh the token
     access_token = await service.refresh_access_token(token)
     
-    # Set cookie for browser-based auth
-    cookie_domain = os.getenv("COOKIE_DOMAIN", None)
-    cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
-    
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        secure=cookie_secure,
-        samesite="none",  # Required for WebApp embedded in Telegram
-        max_age=ACCESS_TOKEN_EXP_SECONDS,
-        domain=cookie_domain
-    )
-    
     # Return token for API clients
     return RefreshTokenResponse(access_token=access_token)
 
@@ -140,14 +126,6 @@ async def refresh_token(
 @router.post("/logout")
 async def logout(response: Response):
     """Logout (clear auth cookies)"""
-    cookie_domain = os.getenv("COOKIE_DOMAIN", None)
-    
-    # Clear both cookies
-    response.delete_cookie(key="access_token", domain=cookie_domain, samesite="none")
-    response.delete_cookie(key="refresh_token", domain=cookie_domain, samesite="none")
-    
-    # For backward compatibility
-    response.delete_cookie(key="session", domain=cookie_domain)
     
     return {"success": True}
 
@@ -187,71 +165,6 @@ async def get_current_user(
         raise Exception("User not found")
     
     return UserOut.model_validate(user_obj)
-
-
-@router.post("/telegram/bot")
-async def telegram_bot_auth(
-    user_data: Dict,
-    sess: SessionDep
-):
-    """Authenticate a user from Telegram bot
-    
-    This endpoint is called by the bot to authenticate users based on their Telegram ID.
-    It creates or updates a user record and returns JWT tokens.
-    
-    Optional apartment_id can be provided to track user origin from QR codes.
-    """
-    from app.models import User
-    from app.roles import Role
-    from datetime import datetime
-    
-    if not user_data.get("id"):
-        raise HTTPException(status_code=400, detail="Invalid user data")
-    
-    # Get or create user
-    user = await User.get_or_create(
-        sess, 
-        user_data,
-        role=Role.bot_user
-    )
-    
-    # Handle apartment_id if provided
-    apartment_id = user_data.get("apartment_id")
-    if apartment_id:
-        try:
-            # Convert to integer (it comes as string from the bot)
-            apartment_id = int(apartment_id)
-            # Update apartment_id and timestamp
-            user.apartment_id = apartment_id
-            user.apartment_set_at = datetime.utcnow()
-        except (ValueError, TypeError):
-            # Log error but continue with authentication
-            logging.error(f"Invalid apartment_id format: {apartment_id}")
-    
-    # Flush the session to ensure the user has an ID before authentication
-    await sess.flush()
-    
-    # Generate tokens
-    service = AuthService(sess)
-    _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
-    
-    await sess.commit()
-    token =  {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": {
-            "id": user.id,
-            "role": user.role,
-            "first": user.first,
-            "last": user.last
-        }
-    }
-
-    # TODO: remove this
-    print(token)
-    
-    return token
-
 
 @router.post("/telegram/init", response_model=TelegramAuthResponse)
 async def telegram_webapp_init(
@@ -372,28 +285,6 @@ async def telegram_webapp_init(
     
     logger.debug(f"Setting cookies with domain={cookie_domain}, secure={cookie_secure}")
     
-    # Set access token cookie - short-lived
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        # httponly=True,
-        # secure=cookie_secure,
-        samesite="none",  # Required for WebApp embedded in Telegram
-        # max_age=ACCESS_TOKEN_EXP_SECONDS,
-        # domain=cookie_domain
-    )
-    
-    # Set refresh token cookie - long-lived
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        # httponly=True,
-        # secure=cookie_secure,
-        samesite="none",  # Required for WebApp embedded in Telegram
-        # max_age=REFRESH_TOKEN_EXP_SECONDS,
-        # domain=cookie_domain
-    )
-    
     await sess.commit()
     logger.info(f"Authentication successful for Telegram user {user.id}")
     
@@ -404,83 +295,10 @@ async def telegram_webapp_init(
             "role": user.role,
             "first": user.first,
             "last": user.last
-        }
+        },
+        access_token=access_token,
+        refresh_token=refresh_token
     )
-
-
-@router.post("/telegram/debug")
-async def telegram_webapp_debug(
-    payload: TelegramInitRequest
-):
-    """
-    Debug endpoint to analyze Telegram WebApp initData without authentication
-    
-    This endpoint is for debugging only and should be disabled in production.
-    """
-    logger = logging.getLogger("app.api.auth.telegram.debug")
-    
-    # Parse the initData
-    try:
-        from urllib.parse import parse_qsl
-        data_dict = dict(parse_qsl(payload.init_data, keep_blank_values=True))
-        
-        # Get bot token and generate secret key
-        bot_token = os.getenv("BOT_TOKEN")
-        if not bot_token:
-            return {"error": "BOT_TOKEN not configured", "partial_token": bot_token[:5] + "..." if bot_token else None}
-        
-        # Generate secret key by hashing the bot token
-        import hashlib
-        import hmac
-        secret_key = hashlib.sha256(bot_token.encode()).digest()
-        
-        # Extract and remove hash for validation
-        hash_value = data_dict.pop("hash", None)
-        
-        # Build the data check string
-        sorted_items = sorted(data_dict.items())
-        data_check_string = "\n".join([f"{k}={v}" for k, v in sorted_items])
-        
-        # Calculate HMAC-SHA-256 signature
-        computed_hash = hmac.new(
-            secret_key,
-            data_check_string.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        # Check if hash matches
-        is_valid = hash_value and hmac.compare_digest(computed_hash, hash_value)
-        
-        # Try to parse user data if present
-        user_data = None
-        if "user" in data_dict:
-            try:
-                import json
-                user_data = json.loads(data_dict["user"])
-            except json.JSONDecodeError:
-                # Try URL decoding
-                import urllib.parse
-                try:
-                    decoded = urllib.parse.unquote(data_dict["user"])
-                    user_data = json.loads(decoded)
-                except Exception:
-                    user_data = {"error": "Failed to parse user data"}
-        
-        # Return analysis
-        return {
-            "parsed_data": data_dict,
-            "hash_valid": is_valid,
-            "computed_hash": computed_hash,
-            "received_hash": hash_value,
-            "user_data": user_data,
-            "auth_date_valid": "auth_date" in data_dict,
-            "bot_token_configured": bool(bot_token),
-            "bot_token_prefix": bot_token[:3] + "..." if bot_token else None
-        }
-    except Exception as e:
-        logger.exception("Error analyzing initData")
-        return {"error": str(e)}
-
 
 @router.post("/introspect")
 async def introspect_token(

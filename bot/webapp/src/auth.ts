@@ -27,6 +27,10 @@ declare global {
   }
 }
 
+// Token storage keys
+const ACCESS_TOKEN_KEY = 'access_token';
+const REFRESH_TOKEN_KEY = 'refresh_token';
+
 // Silent logger - does nothing in production
 const log = (...args: any[]) => {
   // No logging in production
@@ -38,6 +42,36 @@ const log = (...args: any[]) => {
 export const getApiBaseUrl = (): string => {
   // @ts-ignore - Vite specific environment variable
   return import.meta.env?.VITE_API_BASE || 'http://localhost:8000/api/v1';
+};
+
+/**
+ * Store authentication tokens in localStorage
+ */
+export const storeTokens = (accessToken: string, refreshToken: string): void => {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+};
+
+/**
+ * Get access token from localStorage
+ */
+export const getAccessToken = (): string | null => {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+};
+
+/**
+ * Get refresh token from localStorage
+ */
+export const getRefreshToken = (): string | null => {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+};
+
+/**
+ * Clear authentication tokens from localStorage
+ */
+export const clearTokens = (): void => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
 };
 
 /**
@@ -99,19 +133,21 @@ export const authenticateWithTelegram = async (): Promise<boolean> => {
     const apiBase = getApiBaseUrl();
     
     try {
-      // Call the new secure auth endpoint with initData
       const response = await axios.post(
         `${apiBase}/auth/telegram/init`, 
         { init_data: initDataResult.initData },
-        { 
-          withCredentials: true, // Important: needed to receive and send cookies
-          timeout: 10000 // 10 second timeout
-        }
+        { timeout: 10000 } // 10 second timeout
       );
       
       // Check if authentication was successful
       if (response.data && response.data.user) {
         console.log('Authentication successful:', response.data.user);
+        
+        // Store tokens in localStorage
+        if (response.data.access_token && response.data.refresh_token) {
+          storeTokens(response.data.access_token, response.data.refresh_token);
+        }
+        
         return true;
       }
       
@@ -128,12 +164,42 @@ export const authenticateWithTelegram = async (): Promise<boolean> => {
 };
 
 /**
+ * Refresh the access token using the refresh token
+ */
+export const refreshAccessToken = async (): Promise<boolean> => {
+  try {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      console.error('No refresh token available');
+      return false;
+    }
+    
+    const apiBase = getApiBaseUrl();
+    const response = await axios.post(
+      `${apiBase}/auth/refresh`,
+      { refresh_token: refreshToken }
+    );
+    
+    if (response.data && response.data.access_token) {
+      // Update only the access token
+      storeTokens(response.data.access_token, refreshToken);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Failed to refresh token:', error);
+    return false;
+  }
+};
+
+/**
  * Check if the user is authenticated by making a test request
  */
 export const checkAuthentication = async (): Promise<boolean> => {
   try {
     const apiBase = getApiBaseUrl();
-    await axios.get(`${apiBase}/auth/me`, { withCredentials: true });
+    await axios.get(`${apiBase}/auth/me`);
     return true;
   } catch (error) {
     return false;
@@ -146,22 +212,35 @@ export const checkAuthentication = async (): Promise<boolean> => {
 export const logout = async (): Promise<boolean> => {
   try {
     const apiBase = getApiBaseUrl();
-    await axios.post(`${apiBase}/auth/logout`, {}, { withCredentials: true });
+    await axios.post(`${apiBase}/auth/logout`, {});
+    
+    // Clear tokens from localStorage
+    clearTokens();
+    
     return true;
   } catch (error) {
+    // Still clear tokens even if the API call fails
+    clearTokens();
     return false;
   }
 };
 
 /**
- * Configure axios to include auth cookies and handle 401 errors
+ * Configure axios to include auth token and handle 401 errors
  */
 export const setupAxiosAuth = () => {
-  // Configure axios to include credentials (cookies)
-  axios.defaults.withCredentials = true;
+  // Remove withCredentials default since we're using token auth
+  axios.defaults.withCredentials = false;
   
-  // Add client ID header to all requests
+  // Add auth token and client ID to all requests
   axios.interceptors.request.use(async (config) => {
+    // Add access token if available
+    const token = getAccessToken();
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Add client ID header
     try {
       const clientId = await getClientId();
       if (clientId) {
@@ -170,6 +249,7 @@ export const setupAxiosAuth = () => {
     } catch (error) {
       // Silent fail
     }
+    
     return config;
   });
   
@@ -179,23 +259,27 @@ export const setupAxiosAuth = () => {
     async (error) => {
       // Only process 401 errors (unauthorized)
       if (error.response?.status === 401 && !error.config.url.includes('/auth/')) {
-        // Try to authenticate with Telegram
-        const success = await authenticateWithTelegram();
+        // Store the original request to retry later
+        const originalRequest = error.config;
         
-        if (success && error.config) {
-          // Retry the original request
-          return axios(error.config);
+        // First try to refresh the token
+        const refreshSuccess = await refreshAccessToken();
+        
+        if (refreshSuccess) {
+          // Retry the original request with the new token
+          return axios(originalRequest);
+        }
+        
+        // If refresh failed, try to authenticate with Telegram
+        const authSuccess = await authenticateWithTelegram();
+        
+        if (authSuccess) {
+          // Retry the original request with the new token
+          return axios(originalRequest);
         }
       }
       
       return Promise.reject(error);
     }
   );
-  
-  // Try to authenticate immediately if running in Telegram
-  if (isRunningInTelegram()) {
-    setTimeout(async () => {
-      await authenticateWithTelegram();
-    }, 100);
-  }
 }; 

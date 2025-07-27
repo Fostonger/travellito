@@ -65,4 +65,5 @@ class TelegramInitRequest(BaseModel):
 class TelegramAuthResponse(BaseModel):
     """Schema for Telegram authentication response"""
     user: dict
-    # No tokens in the response as they are set as cookies 
+    access_token: str
+    refresh_token: str
