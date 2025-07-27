@@ -1,7 +1,7 @@
 // auth.ts - Authentication utilities for the webapp
 
 import axios from 'axios';
-import { getClientId } from './utils/analytics';
+import { getClientId, setUserID } from './utils/analytics';
 
 // Declare global Telegram WebApp interface
 declare global {
@@ -146,6 +146,7 @@ export const authenticateWithTelegram = async (): Promise<boolean> => {
         // Store tokens in localStorage
         if (response.data.access_token && response.data.refresh_token) {
           storeTokens(response.data.access_token, response.data.refresh_token);
+          setUserID(response.data.user.id.toString());
         }
         
         return true;

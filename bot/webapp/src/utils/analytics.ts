@@ -46,6 +46,14 @@ export function trackEvent(name: string, params?: Record<string, any>): void {
 }
 
 /**
+ * Set the user ID for Yandex Metrica
+ * @param userID The user ID to set
+ */
+export function setUserID(userID: string): void {
+  window.ym(getMetrikaCounter(), "setUserID", userID);
+}
+
+/**
  * Apply the client ID interceptor to an axios instance
  * @param axiosInstance The axios instance to apply the interceptor to
  */

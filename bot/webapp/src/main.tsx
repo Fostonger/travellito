@@ -10,7 +10,6 @@ import MyBookings from './pages/MyBookings';
 import ScrollRestoration from './components/ScrollRestoration';
 import { setupAxiosAuth, authenticateWithTelegram } from './auth';
 import { initAnalytics } from './utils/analytics';
-import TelegramDebug from './components/TelegramDebug';
 import './index.css';
 
 // Create a client
@@ -75,7 +74,6 @@ const Root = () => {
           <Route path="/tour/:id" element={<TourDetail />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/bookings" element={<MyBookings />} />
-          <Route path="/debug" element={<TelegramDebug />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

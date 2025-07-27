@@ -8,7 +8,7 @@ const REFRESH_TOKEN_KEY = 'auth_refresh_token';
 const TOKEN_EXP_KEY = 'auth_token_exp';
 
 // Token refresh settings
-const REFRESH_BEFORE_EXPIRY_MS = 0; // Refresh 1 minute before expiry
+const REFRESH_BEFORE_EXPIRY_MS = 6000; // Refresh 1 minute before expiry
 const REFRESH_ENDPOINT = '/api/v1/auth/refresh';
 const LOGOUT_ENDPOINT = '/api/v1/auth/logout';
 

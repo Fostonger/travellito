@@ -26,7 +26,7 @@ ALGORITHM = "HS256"
 # ---------------------------------------------------------------------------
 
 # Short-lived access token (default 15 min) and longer refresh token (default 30 days)
-ACCESS_TOKEN_EXP_SECONDS: int = int(os.getenv("JWT_ACCESS_TTL", "10"))  # 15 minutes
+ACCESS_TOKEN_EXP_SECONDS: int = int(os.getenv("JWT_ACCESS_TTL", "900"))  # 15 minutes
 REFRESH_TOKEN_EXP_SECONDS: int = int(os.getenv("JWT_REFRESH_TTL", str(60 * 60 * 24 * 30)))  # 30 days
 
 # Fallback used by create_token when custom expires_in passed

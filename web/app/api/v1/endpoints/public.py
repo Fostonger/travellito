@@ -136,7 +136,7 @@ async def redirect_apartment_qr(
     # await service.log_qr_scan(analytics_data)
     
     # Redirect to Telegram bot
-    telegram_url = f"https://t.me/{BOT_ALIAS}?start={quote_plus(payload)}"
+    telegram_url = f"https://t.me/{BOT_ALIAS}/travellito?startapp={quote_plus(payload)}"
     return RedirectResponse(url=telegram_url)
 
 # Tour Categories
