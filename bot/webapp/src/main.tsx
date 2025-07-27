@@ -42,6 +42,15 @@ const initialize = async () => {
   
   // Then set up authentication flow
   setupAxiosAuth();
+  
+  // Try to authenticate with Telegram after script is loaded
+  setTimeout(async () => {
+    try {
+      await authenticateWithTelegram();
+    } catch (error) {
+      // Silent fail - auth will be retried on API calls if needed
+    }
+  }, 300);
 };
 
 // Run initialization
@@ -53,15 +62,6 @@ const Root = () => {
     // Signal to Telegram that we're ready when component mounts
     if (window.Telegram?.WebApp?.ready) {
       window.Telegram.WebApp.ready();
-      
-      // Try to authenticate with Telegram after ready
-      setTimeout(async () => {
-        try {
-          await authenticateWithTelegram();
-        } catch (error) {
-          // Silent fail - auth will be retried on API calls if needed
-        }
-      }, 100);
     }
   }, []);
 
