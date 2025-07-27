@@ -137,13 +137,15 @@ class BookingService:
         pending_count = await self.repository.count_by_status(agency_id, "pending")
         confirmed_count = await self.repository.count_by_status(agency_id, "confirmed")
         rejected_count = await self.repository.count_by_status(agency_id, "rejected")
-        total_count = pending_count + confirmed_count + rejected_count
+        cancelled_count = await self.repository.count_by_status(agency_id, "cancelled")
+        total_count = pending_count + confirmed_count + rejected_count + cancelled_count
         
         return {
             "total": total_count,
             "pending": pending_count,
             "confirmed": confirmed_count,
-            "rejected": rejected_count
+            "rejected": rejected_count,
+            "cancelled": cancelled_count
         }
         
     async def get_tourist_bookings(self, user_id: int) -> List[Dict[str, Any]]:
@@ -153,7 +155,11 @@ class BookingService:
             select(Purchase)
             .join(Departure, Purchase.departure_id == Departure.id)
             .join(Tour, Departure.tour_id == Tour.id)
-            .where(Purchase.user_id == user_id)
+            .where(
+                Purchase.user_id == user_id,
+                Purchase.status != "rejected",
+                Purchase.status != "cancelled"
+            )
             .options(
                 joinedload(Purchase.departure).joinedload(Departure.tour),
                 joinedload(Purchase.items).joinedload(PurchaseItem.category)
