@@ -286,7 +286,8 @@ class PublicService(BaseService):
         
         # Calculate capacity
         taken_stmt = select(func.coalesce(func.sum(Purchase.qty), 0)).where(
-            Purchase.departure_id == dep.id
+            Purchase.departure_id == dep.id,
+            Purchase.status.notin_(["cancelled", "rejected"])
         )
         taken: int = await self.session.scalar(taken_stmt) or 0
         remaining = dep.capacity - taken
