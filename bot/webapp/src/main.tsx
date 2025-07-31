@@ -23,18 +23,10 @@ const queryClient = new QueryClient({
   },
 });
 
-// Add Telegram WebApp script to the document head
-const addTelegramScript = () => {
-  const script = document.createElement('script');
-  script.src = 'https://telegram.org/js/telegram-web-app.js';
-  script.async = true;
-  document.head.appendChild(script);
-};
-
 // Initialize application
 const initialize = async () => {
-  // First add the Telegram WebApp script
-  addTelegramScript();
+  console.log('[Main] Starting initialization');
+  console.log('[Main] WebApp available:', !!window.Telegram?.WebApp);
   
   // Initialize analytics (which sets up global interceptors)
   initAnalytics();
@@ -42,14 +34,18 @@ const initialize = async () => {
   // Then set up authentication flow
   setupAxiosAuth();
   
-  // Try to authenticate with Telegram after script is loaded
-  setTimeout(async () => {
+  // Try to authenticate immediately if WebApp is available
+  if (window.Telegram?.WebApp) {
     try {
+      console.log('[Main] Attempting immediate authentication');
       await authenticateWithTelegram();
     } catch (error) {
+      console.error('[Main] Initial auth failed:', error);
       // Silent fail - auth will be retried on API calls if needed
     }
-  }, 300);
+  } else {
+    console.warn('[Main] Telegram WebApp not available at initialization');
+  }
 };
 
 // Run initialization
@@ -58,9 +54,11 @@ initialize();
 // Root component to handle Telegram WebApp initialization
 const Root = () => {
   useEffect(() => {
-    // Signal to Telegram that we're ready when component mounts
-    if (window.Telegram?.WebApp?.ready) {
+    // Double-check WebApp is ready (in case it wasn't available during initialize)
+    if (window.Telegram?.WebApp?.ready && !window.TelegramWebAppReady) {
       window.Telegram.WebApp.ready();
+      window.TelegramWebAppReady = true;
+      console.log('[Root] Called WebApp.ready() from React');
     }
   }, []);
 
@@ -69,7 +67,7 @@ const Root = () => {
       <BrowserRouter>
         <ScrollRestoration />
         <Routes>
-          <Route path="/" element={<Navigate to="/tours" replace />} />
+          <Route path="/" element={<Navigate to={`/tours${location.search}`} replace />} />
           <Route path="/tours" element={<App />} />
           <Route path="/tour/:id" element={<TourDetail />} />
           <Route path="/checkout" element={<Checkout />} />

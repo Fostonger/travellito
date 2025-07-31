@@ -22,8 +22,10 @@ declare global {
         showAlert: (message: string) => void;
         ready: () => void;
         platform: string;
+        version: string;
       };
     };
+    TelegramWebAppReady?: boolean;
   }
 }
 
@@ -77,12 +79,32 @@ export const clearTokens = (): void => {
 /**
  * Safe wrapper to get initData from Telegram WebApp
  */
-export function getInitDataSafely(): { ok: boolean; initData?: string; reason?: 'not-telegram' | 'empty-initdata' } {
+export function getInitDataSafely(): { ok: boolean; initData?: string; reason?: 'not-telegram' | 'empty-initdata' | 'fallback-used' } {
   const tg = window.Telegram?.WebApp;
   if (!tg) return { ok: false, reason: 'not-telegram' };
 
-  const initData: string = tg.initData || '';
-  if (!initData.length) return { ok: false, reason: 'empty-initdata' };
+  let initData: string = tg.initData || '';
+  
+  // If initData is empty, try to get it from sessionStorage (persisted from URL)
+  if (!initData.length) {
+    const persistedData = sessionStorage.getItem('tgWebAppData');
+    if (persistedData) {
+      console.log('[Auth] Using persisted tgWebAppData from sessionStorage');
+      // Note: We can't set tg.initData directly, but we can return the persisted data
+      return { ok: true, initData: persistedData, reason: 'fallback-used' };
+    }
+    
+    // Also check the current URL just in case
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlData = urlParams.get('tgWebAppData');
+    if (urlData) {
+      console.log('[Auth] Found tgWebAppData in current URL');
+      sessionStorage.setItem('tgWebAppData', urlData);
+      return { ok: true, initData: urlData, reason: 'fallback-used' };
+    }
+    
+    return { ok: false, reason: 'empty-initdata' };
+  }
 
   return { ok: true, initData };
 }
@@ -99,21 +121,37 @@ export const isRunningInTelegram = (): boolean => {
  */
 export const authenticateWithTelegram = async (): Promise<boolean> => {
   try {
-    // Signal to Telegram that we're ready
+    console.log('[Auth] authenticateWithTelegram called');
+    console.log('[Auth] Current URL:', window.location.href);
+    console.log('[Auth] Telegram WebApp exists:', !!window.Telegram?.WebApp);
+    
     const tg = window.Telegram?.WebApp;
-    tg?.ready?.();
+    
+    // Log WebApp state before attempting auth
+    if (tg) {
+      console.log('[Auth] WebApp state:', {
+        initData: tg.initData ? 'present' : 'empty',
+        initDataLength: tg.initData?.length || 0,
+        platform: tg.platform,
+        version: tg.version,
+      });
+    }
 
     // Get initData safely
     const initDataResult = getInitDataSafely();
     if (!initDataResult.ok) {
-      console.error(`Telegram WebApp authentication failed: ${initDataResult.reason}`);
+      console.error(`[Auth] Telegram WebApp authentication failed: ${initDataResult.reason}`);
       return false;
+    }
+    
+    if (initDataResult.reason === 'fallback-used') {
+      console.log('[Auth] Using fallback data from sessionStorage/URL');
     }
 
     // Log the initData (for debugging, but don't log the whole thing for security)
     const initData = initDataResult.initData;
     if (initData && initData.length > 20) {
-      console.log(`Using initData: ${initData.substring(0, 10)}...${initData.substring(initData.length - 10)}`);
+      console.log(`[Auth] Using initData: ${initData.substring(0, 10)}...${initData.substring(initData.length - 10)}`);
     }
 
     // Log user info from initDataUnsafe (safe to log)

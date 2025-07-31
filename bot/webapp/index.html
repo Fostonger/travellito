@@ -7,6 +7,41 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Telegram WebApp script with defer to ensure proper timing -->
+    <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+    <!-- Early initialization script to capture initData before routing -->
+    <script defer>
+      // This runs after Telegram script is loaded but before React
+      (function() {
+        console.log('[Early Init] HREF at first paint:', location.href);
+        console.log('[Early Init] WebApp exists?', !!window.Telegram?.WebApp);
+        
+        const WebApp = window.Telegram?.WebApp;
+        if (WebApp) {
+          // Call ready() as early as possible
+          if (typeof WebApp.ready === 'function') {
+            WebApp.ready();
+            console.log('[Early Init] Called WebApp.ready()');
+          }
+          
+          // Log current state
+          console.log('[Early Init] initData:', WebApp.initData || '(empty)');
+          console.log('[Early Init] initDataUnsafe:', JSON.stringify(WebApp.initDataUnsafe) || '(empty)');
+          console.log('[Early Init] platform/version:', WebApp.platform, WebApp.version);
+        }
+        
+        // Persist tgWebAppData from URL if present
+        const params = new URLSearchParams(location.search);
+        const tgWebAppData = params.get('tgWebAppData');
+        if (tgWebAppData) {
+          sessionStorage.setItem('tgWebAppData', tgWebAppData);
+          console.log('[Early Init] Persisted tgWebAppData to sessionStorage');
+        }
+        
+        // Store the full original URL including query params
+        sessionStorage.setItem('originalUrl', location.href);
+      })();
+    </script>
     <title>Travellito Tours</title>
   </head>
   <body>
