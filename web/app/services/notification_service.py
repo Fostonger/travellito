@@ -85,7 +85,10 @@ class NotificationService(BaseService):
         total_price = f"{Decimal(purchase.amount):.2f} ₽"
         tour_name = tour.title if tour else "(Неизвестный тур)"
 
-        message_text = BOOKING_TEMPLATE.format(
+        # Use tour's custom template if available, otherwise use default
+        template = tour.booking_template if tour and tour.booking_template else BOOKING_TEMPLATE
+        
+        message_text = template.format(
             tour_name=tour_name,
             total_price=total_price,
             items_block=items_block,

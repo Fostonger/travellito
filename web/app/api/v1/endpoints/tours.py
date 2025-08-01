@@ -100,6 +100,7 @@ async def create_tour(
         repeat_weekdays=payload.repeat_weekdays,
         repeat_time_str=payload.repeat_time,
         timezone=timezone,  # Pass the timezone parameter
+        booking_template=payload.booking_template,  # Pass the booking template
     )
     
     await sess.commit()

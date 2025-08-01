@@ -115,6 +115,8 @@ class Tour(Base):
     address    = mapped_column(String(500), nullable=True)  # Human-readable address
     latitude   = mapped_column(Numeric(8, 6))   # nullable
     longitude  = mapped_column(Numeric(9, 6))
+    # Custom booking template for notifications
+    booking_template = mapped_column(String(2000), nullable=True, comment="Custom template for booking confirmation messages")
     agency      = relationship("Agency", back_populates="tours")
     images      = relationship("TourImage", back_populates="tour")
     categories  = relationship("TicketCategory", back_populates="tour")

@@ -68,6 +68,7 @@ class TourService(BaseService):
         repeat_weekdays: Optional[List[int]] = None,
         repeat_time_str: Optional[str] = None,
         timezone: str = "UTC",
+        booking_template: Optional[str] = None,
         # Parameter for backward compatibility with existing API calls
         category_id: Optional[int] = None,  
     ) -> Tour:
@@ -122,6 +123,7 @@ class TourService(BaseService):
             "repeat_type": repeat_type,
             "repeat_weekdays": repeat_weekdays,
             "repeat_time": repeat_time,
+            "booking_template": booking_template,
         }
         
         tour = await self.tour_repository.create(obj_in=tour_data)

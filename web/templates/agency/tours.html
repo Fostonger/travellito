@@ -70,6 +70,29 @@
       </div>
 
       <div>
+        <label class="block text-sm font-medium mb-1" for="tourBookingTemplate">Шаблон подтверждения бронирования</label>
+        <div class="mb-2 text-xs text-gray-500">
+          Доступные переменные: <code>{tour_name}</code> (название экскурсии), <code>{total_price}</code> (общая сумма), 
+          <code>{items_block}</code> (список билетов), <code>{departure_datetime}</code> (дата и время)
+        </div>
+        <textarea 
+          id="tourBookingTemplate" 
+          class="w-full px-3 py-2 border rounded h-32 font-mono text-sm" 
+          placeholder="Вы успешно забронировали билеты на тур {tour_name} на общую сумму {total_price}:
+
+{items_block}
+
+Отправление {departure_datetime} от памятника Шаляпина, расположенного на улице Баумана
+Имейте в виду, что экскурсия проходит по воде, так что возьмите с собой дождевик.
+Приятного путешествия!"
+        ></textarea>
+        <div class="flex items-center mt-1">
+          <button type="button" id="testTemplateBtn" class="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded">Предпросмотр</button>
+          <div class="ml-2 text-xs text-gray-500">Поддерживает эмодзи 😊</div>
+        </div>
+      </div>
+
+      <div>
         <label class="block text-sm font-medium mb-1" for="tourImages">Фотографии</label>
         <div id="dropArea" class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition-colors">
           <p class="text-gray-500 mb-2">Перетащите изображения сюда или нажмите для выбора</p>
@@ -192,6 +215,17 @@
   </div>
 </div>
 
+<!-- Modal for template preview -->
+<div id="templatePreviewModal" class="fixed inset-0 bg-black/50 flex items-start justify-center hidden overflow-y-auto py-10">
+  <div class="bg-white w-full max-w-lg rounded-xl shadow-lg p-6 my-auto max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-semibold mb-4">Предпросмотр шаблона</h2>
+    <div id="templatePreviewContent" class="bg-gray-50 p-4 rounded border mb-4 whitespace-pre-wrap"></div>
+    <div class="flex justify-end gap-3 pt-4">
+      <button type="button" id="closeTemplatePreviewModal" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Tour array to store data in memory
@@ -250,6 +284,11 @@ document.addEventListener('DOMContentLoaded', function() {
   const tourTitleInput = document.getElementById('tourTitle');
   const tourDescInput = document.getElementById('tourDesc');
   const tourCitySelect = document.getElementById('tourCity');
+  const tourBookingTemplate = document.getElementById('tourBookingTemplate');
+  const testTemplateBtn = document.getElementById('testTemplateBtn');
+  const templatePreviewModal = document.getElementById('templatePreviewModal');
+  const templatePreviewContent = document.getElementById('templatePreviewContent');
+  const closeTemplatePreviewModal = document.getElementById('closeTemplatePreviewModal');
   const tourImages = document.getElementById('tourImages');
   const dropArea = document.getElementById('dropArea');
   const imagePreviewCarousel = document.getElementById('imagePreviewCarousel');
@@ -410,7 +449,61 @@ document.addEventListener('DOMContentLoaded', function() {
       btn.addEventListener('click', async () => {
         // Load tour details and open edit modal
         const tourId = parseInt(btn.getAttribute('data-id'));
-        // ... (edit implementation)
+        // Get tour details
+        try {
+          const res = await fetch(`/api/v1/agency/tours/${tourId}`);
+          if (!res.ok) throw new Error('Failed to load tour');
+          
+          const tour = await res.json();
+          
+          // Set form values
+          tourTitleInput.value = tour.title || '';
+          tourDescInput.value = tour.description || '';
+          tourCitySelect.value = tour.city_id || '';
+          document.getElementById('tourAddress').value = tour.address || '';
+          document.getElementById('tourBookingTemplate').value = tour.booking_template || '';
+          
+          // Load categories
+          await loadTourCategories(tourId);
+          
+          // Load ticket categories
+          const categoriesRes = await fetch(`/api/v1/agency/tours/${tourId}/categories`);
+          if (!categoriesRes.ok) throw new Error('Failed to load ticket categories');
+          
+          const categories = await categoriesRes.json();
+          ticketRows = categories.map(cat => ({
+            ticket_class_id: cat.ticket_class_id,
+            name: cat.name,
+            price: parseFloat(cat.price)
+          }));
+          renderTicketRows();
+          
+          // Reset images (we don't support editing images yet)
+          selectedFiles = [];
+          previewContainer.innerHTML = '';
+          imagePreviewCarousel.classList.add('hidden');
+          
+          // Set hidden tour ID for form submission
+          // Add hidden input if it doesn't exist
+          let tourIdInput = document.getElementById('editTourId');
+          if (!tourIdInput) {
+            tourIdInput = document.createElement('input');
+            tourIdInput.type = 'hidden';
+            tourIdInput.id = 'editTourId';
+            tourForm.appendChild(tourIdInput);
+          }
+          tourIdInput.value = tourId;
+          
+          // Update form submission text
+          const submitBtn = tourForm.querySelector('button[type="submit"]');
+          submitBtn.textContent = 'Сохранить';
+          
+          // Show the modal
+          tourModal.classList.remove('hidden');
+        } catch (err) {
+          console.error('Error loading tour:', err);
+          alert('Ошибка при загрузке данных экскурсии');
+        }
       });
     });
     
@@ -1045,6 +1138,19 @@ document.addEventListener('DOMContentLoaded', function() {
     ticketRows = [];
     renderTicketRows();
     
+    // Clear booking template
+    tourBookingTemplate.value = '';
+    
+    // Remove editTourId if it exists
+    const editTourIdElement = document.getElementById('editTourId');
+    if (editTourIdElement) {
+      editTourIdElement.remove();
+    }
+    
+    // Reset submit button text
+    const submitBtn = tourForm.querySelector('button[type="submit"]');
+    submitBtn.textContent = 'Создать';
+    
     // Show the modal
     tourModal.classList.remove('hidden');
   });
@@ -1075,12 +1181,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     try {
-      // Step 1: Create the tour with JSON data
+      // Check if we're editing or creating
+      const editTourId = document.getElementById('editTourId')?.value;
+      const isEditing = !!editTourId;
+      
+      // Step 1: Create/update the tour with JSON data
       const tourData = {
         title: tourTitleInput.value,
         description: tourDescInput.value,
         city_id: parseInt(tourCitySelect.value),
-        address: document.getElementById('tourAddress').value
+        address: document.getElementById('tourAddress').value,
+        booking_template: document.getElementById('tourBookingTemplate').value
       };
       
       // Add category_ids if present
@@ -1088,10 +1199,18 @@ document.addEventListener('DOMContentLoaded', function() {
         tourData.category_ids = hiddenCategoriesInput.value.split(',').map(id => parseInt(id));
       }
       
-      console.log('Creating tour with data:', tourData);
+      console.log(isEditing ? 'Updating tour with data:' : 'Creating tour with data:', tourData);
       
-      const res = await fetch('/api/v1/agency/tours/create', {
-        method: 'POST',
+      let url = '/api/v1/agency/tours/create';
+      let method = 'POST';
+      
+      if (isEditing) {
+        url = `/api/v1/agency/tours/${editTourId}`;
+        method = 'PATCH';
+      }
+      
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json'
         },
@@ -1100,15 +1219,15 @@ document.addEventListener('DOMContentLoaded', function() {
       
       if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`Failed to create tour: ${errorText}`);
+        throw new Error(`Failed to ${isEditing ? 'update' : 'create'} tour: ${errorText}`);
       }
       
-      // Get the created tour data
-      const createdTour = await res.json();
-      const tourId = createdTour.id;
+      // Get the tour data
+      const tourResponse = await res.json();
+      const tourId = tourResponse.id;
       
-      // Step 2: Upload images if any
-      if (selectedFiles.length > 0) {
+      // Step 2: Upload images if any (for new tours only)
+      if (!isEditing && selectedFiles.length > 0) {
         const formData = new FormData();
         selectedFiles.forEach(file => {
           formData.append('files', file);
@@ -1124,21 +1243,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
       
-      // Step 3: Add ticket categories one by one
-      for (const ticket of ticketRows) {
-        const categoryRes = await fetch(`/api/v1/agency/tours/${tourId}/categories`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ticket_class_id: ticket.ticket_class_id,
-            price: ticket.price
-          })
-        });
-        
-        if (!categoryRes.ok) {
-          console.error('Failed to add ticket category:', await categoryRes.text());
+      // Step 3: Add/update ticket categories (for new tours only)
+      if (!isEditing) {
+        for (const ticket of ticketRows) {
+          const categoryRes = await fetch(`/api/v1/agency/tours/${tourId}/categories`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ticket_class_id: ticket.ticket_class_id,
+              price: ticket.price
+            })
+          });
+          
+          if (!categoryRes.ok) {
+            console.error('Failed to add ticket category:', await categoryRes.text());
+          }
         }
       }
       
@@ -1156,9 +1277,19 @@ document.addEventListener('DOMContentLoaded', function() {
       ticketRows = []; // Clear ticket rows on successful creation
       renderTicketRows(); // Re-render ticket rows
       
+      // Remove editTourId if it exists
+      const editTourIdElement = document.getElementById('editTourId');
+      if (editTourIdElement) {
+        editTourIdElement.remove();
+      }
+      
+      // Reset submit button text
+      const submitBtn = tourForm.querySelector('button[type="submit"]');
+      submitBtn.textContent = 'Создать';
+      
     } catch (err) {
-      console.error('Error creating tour:', err);
-      alert('Ошибка при создании экскурсии: ' + err.message);
+      console.error('Error creating/updating tour:', err);
+      alert('Ошибка при создании/обновлении экскурсии: ' + err.message);
     }
   });
 
@@ -1200,6 +1331,35 @@ document.addEventListener('DOMContentLoaded', function() {
       console.error('Error loading tour categories:', err);
     }
   }
+
+  // Template preview modal
+  testTemplateBtn.addEventListener('click', () => {
+    const tourName = tourTitleInput.value || "Название тура";
+    const totalPrice = ticketRows.length > 0 
+      ? ticketRows.reduce((sum, ticket) => sum + parseFloat(ticket.price), 0).toFixed(2) + " ₽"
+      : "1000.00 ₽";
+    const itemsBlock = ticketRows.length > 0 
+      ? ticketRows.map(ticket => `    ${ticket.name} — 1`).join('\n')
+      : "    Взрослый — 1\n    Детский — 2";
+    const now = new Date();
+    const formattedDate = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    // Get template text, or use default if empty
+    const template = tourBookingTemplate.value || tourBookingTemplate.getAttribute('placeholder');
+    
+    const previewText = template
+      .replace('{tour_name}', tourName)
+      .replace('{total_price}', totalPrice)
+      .replace('{items_block}', itemsBlock)
+      .replace('{departure_datetime}', formattedDate);
+
+    templatePreviewContent.textContent = previewText;
+    templatePreviewModal.classList.remove('hidden');
+  });
+
+  closeTemplatePreviewModal.addEventListener('click', () => {
+    templatePreviewModal.classList.add('hidden');
+  });
 });
 </script>
 {% endblock %} 
