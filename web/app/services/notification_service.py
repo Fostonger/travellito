@@ -78,7 +78,17 @@ class NotificationService(BaseService):
             local_dt = departure.starts_at
             if city and city.timezone_offset_min is not None:
                 local_dt = local_dt + timedelta(minutes=city.timezone_offset_min)
-            dep_dt_str = local_dt.strftime("%d.%m.%Y %H:%M")
+            
+            # Format date in Russian style with month name
+            russian_months = {
+                1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня",
+                7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+            }
+            day = local_dt.day
+            month = russian_months[local_dt.month]
+            year = local_dt.year
+            time = local_dt.strftime("%H:%M")
+            dep_dt_str = f"{day} {month} {year}, {time}"
         else:
             dep_dt_str = "—"
 
