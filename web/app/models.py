@@ -268,6 +268,8 @@ class City(Base):
 
     id   = mapped_column(Integer, primary_key=True)
     name = mapped_column(String(64), unique=True, nullable=False, index=True)
+    # Offset from UTC in minutes (e.g. Moscow +180, Samara +240)
+    timezone_offset_min = mapped_column(Integer, nullable=True, comment="UTC offset in minutes")
 
     tours = relationship("Tour", back_populates="city")
     apartments = relationship("Apartment", back_populates="city")

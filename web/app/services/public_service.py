@@ -788,7 +788,14 @@ class PublicService(BaseService):
                 apartment_id=apartment_id,
                 total_price=purchase.amount
             )
-        
+        # Send Telegram confirmation asynchronously
+        try:
+            from .notification_service import NotificationService
+            notif_svc = NotificationService(self.session)
+            await notif_svc.send_booking_confirmation(purchase.id)
+        except Exception as exc:
+            # Log but do not fail booking creation if notification fails
+            logger.exception("Failed to send Telegram booking confirmation: %s", exc)
         return {
             "booking_id": purchase.id,
             "total_amount": str(purchase.amount),
