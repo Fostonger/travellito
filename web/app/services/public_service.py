@@ -744,15 +744,11 @@ class PublicService(BaseService):
         apartment_id = None
         if user.apartment_id and user.apartment_set_at:
             # Check if apartment_id was set less than a week ago
-            one_week_ago = datetime.utcnow() - timedelta(days=7)
+            one_week_ago = datetime.utcnow() - timedelta(days=14)
             
             if user.apartment_set_at > one_week_ago:
                 # Less than a week - use the apartment_id for this purchase
                 apartment_id = user.apartment_id
-            else:
-                # More than a week - clear the apartment_id from user
-                user.apartment_id = None
-                user.apartment_set_at = None
             
         # Create the purchase record
         purchase = Purchase(
