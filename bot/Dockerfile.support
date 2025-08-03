@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy bot code
+COPY app/support_bot.py ./app/
+
+# Environment variables will be set by docker-compose
+ENV PYTHONUNBUFFERED=1
+
+# Run the support bot
+CMD ["uvicorn", "app.support_bot:app", "--host", "0.0.0.0", "--port", "8001"] 

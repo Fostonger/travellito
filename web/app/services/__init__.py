@@ -9,6 +9,7 @@ from .manager_service import ManagerService
 from .external_service import ExternalService
 from .broadcast_service import BroadcastService
 from .referral_service import ReferralService
+from .support_service import SupportService
 
 __all__ = [
     "TourService",
@@ -22,4 +23,5 @@ __all__ = [
     "ExternalService",
     "BroadcastService",
     "ReferralService",
+    "SupportService",
 ] 

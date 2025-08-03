@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Support Messages - Admin{% endblock %}
+
+{% block body %}
+<div class="container mt-4">
+  <h1 class="mb-4">Support Messages</h1>
+  
+  <!-- Filters -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form id="filterForm" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="statusFilter">
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="typeFilter">
+            <option value="">All</option>
+            <option value="question">Questions</option>
+            <option value="issue">Issues</option>
+            <option value="payment_request">Payment Requests</option>
+          </select>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary">Apply Filters</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Messages Table -->
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>User</th>
+              <th>Message</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="messagesTableBody">
+            <tr>
+              <td colspan="7" class="text-center">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Response Modal -->
+<div class="modal fade" id="responseModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Respond to Message</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Original Message</label>
+          <div class="alert alert-secondary" id="originalMessage"></div>
+        </div>
+        <div class="mb-3">
+          <label for="responseText" class="form-label">Your Response</label>
+          <textarea class="form-control" id="responseText" rows="4" required></textarea>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="markResolved">
+          <label class="form-check-label" for="markResolved">
+            Mark as resolved
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="sendResponseBtn">Send Response</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentMessageId = null;
+
+async function loadMessages() {
+  const status = document.getElementById('statusFilter').value;
+  const type = document.getElementById('typeFilter').value;
+  
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  if (type) params.append('message_type', type);
+  
+  try {
+    const response = await fetch(`/api/v1/support/messages?${params}`, {
+      credentials: 'same-origin'
+    });
+    
+    if (!response.ok) throw new Error('Failed to load messages');
+    
+    const messages = await response.json();
+    renderMessages(messages);
+  } catch (error) {
+    console.error('Error loading messages:', error);
+    document.getElementById('messagesTableBody').innerHTML = 
+      '<tr><td colspan="7" class="text-center text-danger">Error loading messages</td></tr>';
+  }
+}
+
+function renderMessages(messages) {
+  const tbody = document.getElementById('messagesTableBody');
+  
+  if (messages.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No messages found</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = messages.map(msg => {
+    const typeIcon = msg.message_type === 'question' ? '❓' : 
+                    msg.message_type === 'issue' ? '⚠️' : '💰';
+    const statusBadge = msg.status === 'pending' ? 'bg-warning' :
+                       msg.status === 'in_progress' ? 'bg-info' : 'bg-success';
+    
+    return `
+      <tr>
+        <td>#${msg.id}</td>
+        <td>${typeIcon} ${msg.message_type}</td>
+        <td>${msg.user.first || ''} ${msg.user.last || ''}<br>
+            <small class="text-muted">@${msg.user.username || 'no_username'}</small></td>
+        <td class="text-truncate" style="max-width: 300px;">${msg.message}</td>
+        <td><span class="badge ${statusBadge}">${msg.status}</span></td>
+        <td>${new Date(msg.created_at).toLocaleString()}</td>
+        <td>
+          ${msg.message_type !== 'payment_request' ? 
+            `<button class="btn btn-sm btn-primary" onclick="openResponseModal(${msg.id}, '${msg.message}')">
+              Reply
+            </button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openResponseModal(messageId, message) {
+  currentMessageId = messageId;
+  document.getElementById('originalMessage').textContent = message;
+  document.getElementById('responseText').value = '';
+  document.getElementById('markResolved').checked = false;
+  
+  const modal = new bootstrap.Modal(document.getElementById('responseModal'));
+  modal.show();
+}
+
+document.getElementById('sendResponseBtn').addEventListener('click', async () => {
+  const response = document.getElementById('responseText').value;
+  const markResolved = document.getElementById('markResolved').checked;
+  
+  if (!response.trim()) {
+    alert('Please enter a response');
+    return;
+  }
+  
+  try {
+    const res = await fetch(`/api/v1/support/messages/${currentMessageId}/respond`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        response: response,
+        mark_resolved: markResolved
+      })
+    });
+    
+    if (!res.ok) throw new Error('Failed to send response');
+    
+    bootstrap.Modal.getInstance(document.getElementById('responseModal')).hide();
+    alert('Response sent successfully!');
+    loadMessages();
+  } catch (error) {
+    console.error('Error sending response:', error);
+    alert('Error sending response');
+  }
+});
+
+document.getElementById('filterForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  loadMessages();
+});
+
+// Load messages on page load
+document.addEventListener('DOMContentLoaded', loadMessages);
+
+// Refresh every 30 seconds
+setInterval(loadMessages, 30000);
+</script>
+{% endblock %} 

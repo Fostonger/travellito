@@ -8,10 +8,12 @@ from typing import Dict, Optional
 import logging
 from datetime import datetime
 import asyncio
+from sqlalchemy import select
 
 from app.api.v1.schemas.auth_schemas import (
     LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse,
-    ChangePasswordRequest, UserOut, TelegramInitRequest, TelegramAuthResponse
+    ChangePasswordRequest, UserOut, TelegramInitRequest, TelegramAuthResponse,
+    TelegramUserAuth
 )
 from app.deps import SessionDep
 from app.services.auth_service import AuthService
@@ -391,3 +393,76 @@ async def test_expired_token(user=Depends(current_user)):
         "user_id": user["sub"],
         "timestamp": int(time.time())
     } 
+
+@router.post("/telegram-auth", response_model=TelegramAuthResponse)
+async def telegram_auth(
+    payload: TelegramUserAuth,
+    sess: SessionDep,
+):
+    """Authenticate a user from Telegram based on user data
+    
+    This endpoint is used by the support bot to authenticate users.
+    It creates a new user if one does not exist and returns tokens.
+    """
+    logger = logging.getLogger("app.api.auth.telegram_auth")
+    
+    # Get telegram user data from request
+    telegram_user = payload.telegram_user
+    
+    logger.info(f"Authenticating Telegram user: {telegram_user.get('id')} (@{telegram_user.get('username', 'no_username')})")
+    
+    # Ensure we have a user ID
+    if not telegram_user.get("id"):
+        logger.error("Missing user ID in Telegram user data")
+        raise HTTPException(status_code=400, detail="Missing user ID in Telegram user data")
+    
+    from app.models import User
+    from app.roles import Role
+    
+    # First check if user exists, to preserve their role
+    tg_id = int(telegram_user.get("id"))
+    existing_user = None
+    
+    # Check for existing user first
+    stmt = select(User).where(User.tg_id == tg_id)
+    existing_user = await sess.scalar(stmt)
+    
+    # Determine role - preserve existing role or default to bot_user
+    role = None
+    if existing_user:
+        # Preserve the existing role (admin stays admin)
+        role = existing_user.role
+        logger.info(f"User exists with role: {role}")
+    else:
+        # New user gets bot_user role
+        role = Role.bot_user
+        logger.info(f"New user, assigning role: {Role.bot_user}")
+    
+    # Get or create user with the correct role
+    user = await User.get_or_create(
+        sess, 
+        telegram_user,
+        role=role  # Use preserved role or bot_user for new users
+    )
+    
+    # Flush the session to ensure the user has an ID before authentication
+    await sess.flush()
+    
+    # Generate tokens
+    service = AuthService(sess)
+    _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
+    
+    await sess.commit()
+    logger.info(f"Authentication successful for Telegram user {user.id} with role {user.role}")
+    
+    # Return user info and tokens
+    return TelegramAuthResponse(
+        user={
+            "id": user.id,
+            "role": user.role,
+            "first": user.first,
+            "last": user.last
+        },
+        access_token=access_token,
+        refresh_token=refresh_token
+    ) 

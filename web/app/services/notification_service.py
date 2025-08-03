@@ -29,7 +29,8 @@ class NotificationService(BaseService):
 
     def __init__(self, session: AsyncSession):
         super().__init__(session)
-        self._tg = TelegramService()
+        self._tg = TelegramService()  # Main bot for tourist notifications
+        self._support_tg = TelegramService(bot_type="support")  # Support bot for admin notifications
 
     async def send_booking_confirmation(self, booking_id: int) -> None:
         """Send Telegram confirmation message for a freshly created booking.
@@ -111,3 +112,22 @@ class NotificationService(BaseService):
         purchase.tourist_notified = True
         purchase.status_changed_at = datetime.utcnow()
         await self.session.commit() 
+
+    async def send_message_to_admin(self, admin_tg_id: int, text: str, reply_markup=None) -> None:
+        """Send a message to an admin user via Telegram using the support bot.
+        
+        Args:
+            admin_tg_id: Telegram ID of the admin
+            text: Message text to send
+            reply_markup: Optional inline keyboard markup
+        """
+        try:
+            # Use the support bot instead of main bot
+            await self._support_tg.send_message(
+                chat_id=admin_tg_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Failed to send message to admin {admin_tg_id}: {e}")
+            raise 

@@ -437,4 +437,60 @@ async def get_dashboard(sess: SessionDep, user=Depends(current_user)):
         data = await service.get_dashboard_data(user_id)
         return data
     except NotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# Payment request endpoints
+
+@router.get("/payment/status")
+async def get_payment_status(sess: SessionDep, user=Depends(current_user)):
+    """Get payment request eligibility and balance info."""
+    from ....services import SupportService
+    
+    landlord_id = await _get_landlord_id(sess, user)
+    support_service = SupportService(sess)
+    
+    try:
+        # Get eligibility info
+        eligibility = await support_service.can_request_payment(landlord_id)
+        
+        # Get balance info
+        balance_info = await support_service.get_landlord_balance_info(landlord_id)
+        
+        return {
+            "can_request": eligibility["can_request"],
+            "reason": eligibility["reason"],
+            "available_amount": str(eligibility["available_amount"]),
+            "unique_users_count": eligibility["unique_users_count"],
+            "has_payment_info": eligibility["has_payment_info"],
+            "total_earned": str(balance_info["total_earned"]),
+            "total_paid": str(balance_info["total_paid"]),
+            "available_balance": str(balance_info["available_balance"]),
+            "pending_request": balance_info["pending_request"] is not None,
+            "pending_request_amount": str(balance_info["pending_request"].amount) if balance_info["pending_request"] else None
+        }
+    except NotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/payment/request")
+async def request_payment(sess: SessionDep, user=Depends(current_user)):
+    """Request a payment for available commissions."""
+    from ....services import SupportService
+    
+    landlord_id = await _get_landlord_id(sess, user)
+    support_service = SupportService(sess)
+    
+    try:
+        payment_request = await support_service.create_payment_request(landlord_id)
+        
+        return {
+            "status": "success",
+            "message": "Запрос на выплату успешно создан",
+            "request_id": payment_request.id,
+            "amount": str(payment_request.amount)
+        }
+    except ValidationError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e)) 

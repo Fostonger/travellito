@@ -5,6 +5,32 @@
 <div class="max-w-5xl mx-auto my-10 p-8 bg-white/90 rounded-2xl shadow-xl backdrop-blur">
   <h1 class="text-3xl font-extrabold mb-6 text-emerald-700">Добро пожаловать, {{ landlord.name or 'Партнёр' }}</h1>
 
+  <!-- Balance and Payment Section -->
+  <div class="bg-gradient-to-br from-indigo-100 to-indigo-50 rounded-xl p-6 mb-8 shadow">
+    <div class="flex justify-between items-start">
+      <div>
+        <h3 class="text-xl font-semibold text-indigo-800 mb-2">Баланс для выплаты</h3>
+        <p class="text-4xl font-black text-indigo-700" id="availableBalance">₽ 0</p>
+        <p class="text-sm text-gray-600 mt-2">
+          Заработано: <span id="totalEarned">₽ 0</span> | 
+          Выплачено: <span id="totalPaid">₽ 0</span>
+        </p>
+        <p class="text-sm text-gray-600 mt-1" id="pendingInfo" style="display: none;">
+          <span class="text-orange-600 font-medium">⏳ Выплата обрабатывается...</span><br>
+          Оплата придет не позднее 1 числа следующего месяца
+        </p>
+      </div>
+      <div>
+        <button id="requestPaymentBtn" 
+          class="px-6 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          disabled>
+          Получить комиссионные
+        </button>
+        <p id="paymentDisabledReason" class="text-xs text-red-600 mt-2 max-w-xs"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- Metrics -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
     <div class="p-6 rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-50 shadow">
@@ -52,4 +78,78 @@
     </table>
   </div>
 </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', async function() {
+    // Load payment status
+    try {
+      const response = await fetch('/api/v1/landlord/payment/status', {
+        credentials: 'same-origin'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Update balance display
+        document.getElementById('availableBalance').textContent = `₽ ${parseFloat(data.available_balance).toFixed(2)}`;
+        document.getElementById('totalEarned').textContent = `₽ ${parseFloat(data.total_earned).toFixed(2)}`;
+        document.getElementById('totalPaid').textContent = `₽ ${parseFloat(data.total_paid).toFixed(2)}`;
+        
+        // Show pending info if there's a pending request
+        if (data.pending_request) {
+          document.getElementById('pendingInfo').style.display = 'block';
+        }
+        
+        // Update payment button state
+        const btn = document.getElementById('requestPaymentBtn');
+        const reasonEl = document.getElementById('paymentDisabledReason');
+        
+        if (data.can_request) {
+          btn.disabled = false;
+          reasonEl.textContent = '';
+        } else {
+          btn.disabled = true;
+          reasonEl.textContent = data.reason;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading payment status:', error);
+    }
+    
+    // Handle payment request
+    document.getElementById('requestPaymentBtn').addEventListener('click', async function() {
+      if (this.disabled) return;
+      
+      if (!confirm('Вы уверены, что хотите запросить выплату?')) {
+        return;
+      }
+      
+      this.disabled = true;
+      this.textContent = 'Обработка...';
+      
+      try {
+        const response = await fetch('/api/v1/landlord/payment/request', {
+          method: 'POST',
+          credentials: 'same-origin'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          alert(`Запрос на выплату ${data.amount} ₽ успешно создан!`);
+          location.reload();
+        } else {
+          const error = await response.json();
+          alert(`Ошибка: ${error.detail}`);
+          this.disabled = false;
+          this.textContent = 'Получить комиссионные';
+        }
+      } catch (error) {
+        console.error('Error requesting payment:', error);
+        alert('Произошла ошибка при запросе выплаты');
+        this.disabled = false;
+        this.textContent = 'Получить комиссионные';
+      }
+    });
+  });
+</script>
 {% endblock %} 

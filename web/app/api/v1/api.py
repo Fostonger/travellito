@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from app.security import role_required
 from app.api.v1.endpoints import (
     tours, departures, bookings, auth, admin, landlord, public, managers,
-    external, broadcast, referrals, landlord_profile
+    external, broadcast, referrals, landlord_profile, support
 )
 
 
@@ -101,4 +101,10 @@ api_v1_router.include_router(
     prefix="/bookings",
     tags=["tourist-bookings"],
     dependencies=[Depends(role_required("bot_user"))]
+)
+
+# Include support endpoints (authenticated users)
+api_v1_router.include_router(
+    support.router,
+    tags=["support"]
 ) 

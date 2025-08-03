@@ -15,6 +15,7 @@ services:
     environment:
       BOT_TOKEN:   "${BOT_TOKEN}"
       BOT_ALIAS:   "${BOT_ALIAS}"
+      SUPPORT_BOT_TOKEN: "${SUPPORT_BOT_TOKEN}"
       DB_DSN:      "postgresql+asyncpg://admin:secret@db/app"
       SECRET_KEY:  "${SECRET_KEY}"
       SERVER_HOST: "${SERVER_HOST}"
@@ -42,6 +43,18 @@ services:
       BOT_MODE: "tourist"
     depends_on: [web]
     ports: ["8080:8080"]
+    restart: unless-stopped
+
+  support-bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile.support
+    environment:
+      SUPPORT_BOT_TOKEN: "${SUPPORT_BOT_TOKEN}"
+      SUPPORT_BOT_WEBHOOK_URL: "${SUPPORT_BOT_WEBHOOK_URL}"
+      WEB_API: "http://web:8000"
+    depends_on: [web]
+    ports: ["8081:8001"]
     restart: unless-stopped
 
   # manager-bot:

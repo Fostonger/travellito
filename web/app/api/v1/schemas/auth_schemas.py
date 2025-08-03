@@ -1,6 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
-
+from .support_schemas import UserInfo
 
 class LoginRequest(BaseModel):
     """Schema for login request"""
@@ -63,7 +63,11 @@ class TelegramInitRequest(BaseModel):
 
 
 class TelegramAuthResponse(BaseModel):
-    """Schema for Telegram authentication response"""
-    user: dict
+    """Response data for Telegram WebApp authentication."""
+    user: UserInfo
     access_token: str
     refresh_token: str
+
+class TelegramUserAuth(BaseModel):
+    """Request schema for direct Telegram user authentication."""
+    telegram_user: dict
