@@ -58,8 +58,8 @@ class UserOut(BaseModel):
 
 
 class TelegramInitRequest(BaseModel):
-    """Schema for Telegram WebApp initData authentication request"""
-    init_data: str = Field(..., description="Raw initData string from Telegram.WebApp.initData")
+    init_data: str
+    apt_id: Optional[str] = None
 
 
 class TelegramAuthResponse(BaseModel):

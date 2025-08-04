@@ -211,6 +211,7 @@ async def telegram_webapp_init(
     
     # Log the raw initData (but mask most of it for security)
     init_data = payload.init_data
+    print(init_data)
     if len(init_data) > 20:
         masked_data = init_data[:10] + "..." + init_data[-10:]
         logger.info(f"Received initData: {masked_data}")
@@ -226,7 +227,7 @@ async def telegram_webapp_init(
     user_data = {}
     
     # Handle different formats of user data in initData
-    if "user" in data:
+    if data and "user" in data:
         # If user data is provided as a JSON string (common in WebApp)
         try:
             user_json = data["user"]
@@ -248,7 +249,7 @@ async def telegram_webapp_init(
         except Exception as e:
             logger.error(f"Failed to process user data: {e}")
             raise HTTPException(status_code=400, detail=f"Invalid user data format: {str(e)}")
-    else:
+    elif data:
         # Extract user fields directly from the data
         for key in ["id", "first_name", "last_name", "username", "language_code"]:
             if key in data:
@@ -272,34 +273,55 @@ async def telegram_webapp_init(
         role=Role.bot_user
     )
     
-    # Handle start_param (referral) if provided
-    start_param = data.get("start_param")
-    if start_param and start_param.strip():
-        try:
-            # Convert to integer (apartment_id)
-            apartment_id = int(start_param)
+    # Handle start_param (referral) or apt_id if provided
+    apartment_id = None
+    
+    # Check for apt_id parameter (from query string)
+    if data and "apt_id" in data:
+        apt_id = data.get("apt_id")
+        if apt_id and apt_id.strip():
+            try:
+                apartment_id = int(apt_id)
+                logger.info(f"Found apartment ID from apt_id parameter: {apartment_id}")
+            except (ValueError, TypeError):
+                logger.error(f"Invalid apt_id format: {apt_id}")
+    
+    # Fall back to start_param if apt_id wasn't found or valid
+    if not apartment_id and data and "start_param" in data:
+        start_param = data.get("start_param")
+        if start_param and start_param.strip():
+            try:
+                # Check if start_param has apt_ prefix
+                if start_param.startswith("apt_"):
+                    apartment_id = int(start_param[4:])
+                    logger.info(f"Found apartment ID from start_param with prefix: {apartment_id}")
+                else:
+                    # Try direct conversion
+                    apartment_id = int(start_param)
+                    logger.info(f"Found apartment ID from start_param: {apartment_id}")
+            except (ValueError, TypeError):
+                # Log error but continue with authentication
+                logger.error(f"Invalid start_param format: {start_param}")
+    
+    # Update user's apartment_id if we found a valid one
+    if apartment_id:
+        # Record old referral for audit
+        old_referral = user.apartment_id
+        
+        # Set the apartment_id
+        user.apartment_id = apartment_id
+        user.apartment_set_at = datetime.utcnow()
+        
+        # Add to referral_events if the referral changed
+        if old_referral != apartment_id:
+            referral_event = ReferralEvent(
+                user_id=user.id,
+                old_referral=old_referral,
+                new_referral=apartment_id
+            )
+            sess.add(referral_event)
             
-            # Record old referral for audit
-            old_referral = user.apartment_id
-            
-            # Always overwrite apartment_id with start_param if present
-            user.apartment_id = apartment_id
-            user.apartment_set_at = datetime.utcnow()
-            
-            # Add to referral_events if the referral changed
-            if old_referral != apartment_id:
-                referral_event = ReferralEvent(
-                    user_id=user.id,
-                    old_referral=old_referral,
-                    new_referral=apartment_id
-                )
-                sess.add(referral_event)
-                
-                logger.info(f"Updated referral for user {user.id}: {old_referral} -> {apartment_id}")
-            
-        except (ValueError, TypeError):
-            # Log error but continue with authentication
-            logger.error(f"Invalid start_param format: {start_param}")
+            logger.info(f"Updated referral for user {user.id}: {old_referral} -> {apartment_id}")
     
     # Flush the session to ensure the user has an ID before authentication
     await sess.flush()

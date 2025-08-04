@@ -40,7 +40,7 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['sandwich-corners-affiliates-cameron.trycloudflare.com'],
+    allowedHosts: ['cycles-namely-rrp-fiji.trycloudflare.com'],
     proxy: {
       // Proxy API requests to backend to avoid CORS issues with cookies
       '/api': {

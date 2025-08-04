@@ -123,6 +123,7 @@ async def cmd_start(msg: Message):
     # Parse start parameters
     args: str | None = None
     apartment_id: str | None = None
+    print(msg.text)
     if msg.text and len(msg.text.split(maxsplit=1)) == 2:
         args = msg.text.split(maxsplit=1)[1]
         # Check if args contains apartment_id in format "apt_XXX"
@@ -138,6 +139,10 @@ async def cmd_start(msg: Message):
     
     if args:
         query_params.append(f"start={args}")
+    
+    # Add apartment_id as a separate parameter if available
+    if apartment_id:
+        query_params.append(f"apt_id={apartment_id}")
     
     query_params.append(f"lang={lang}")
     

@@ -167,13 +167,30 @@ export const authenticateWithTelegram = async (): Promise<boolean> => {
     if (tg?.initDataUnsafe?.start_param) {
       console.log('Start param:', tg.initDataUnsafe.start_param);
     }
+    
+    // Check for apt_id in URL query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const aptId = urlParams.get('apt_id');
+    if (aptId) {
+      console.log('[Auth] Found apartment ID in URL:', aptId);
+    }
 
     const apiBase = getApiBaseUrl();
+    
+    // Prepare request payload with apt_id if available
+    const payload: { init_data: string; apt_id?: string } = { 
+      init_data: initDataResult.initData 
+    };
+    
+    // Add apt_id to payload if available in URL
+    if (aptId) {
+      payload.apt_id = aptId;
+    }
     
     try {
       const response = await axios.post(
         `${apiBase}/auth/telegram/init`, 
-        { init_data: initDataResult.initData },
+        payload,
         { timeout: 10000 } // 10 second timeout
       );
       
