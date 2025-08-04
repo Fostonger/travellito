@@ -45,7 +45,8 @@ async def login(
         password=payload.password
     )
     
-    # Set cookie for browser-based auth
+    # Set cookies as fallback for browser-based auth
+    # But primarily we'll use Authorization headers
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -120,10 +121,12 @@ async def refresh_token(
     """
     service = AuthService(sess)
     
-    # Get refresh token from cookie or request body
-    token = refresh_token
-    if not token and payload and payload.refresh_token:
+    # Get refresh token from request body or cookie as fallback
+    token = None
+    if payload and payload.refresh_token:
         token = payload.refresh_token
+    elif refresh_token:
+        token = refresh_token
     
     if not token:
         raise HTTPException(status_code=401, detail="Missing refresh token")
@@ -305,7 +308,7 @@ async def telegram_webapp_init(
     service = AuthService(sess)
     _, access_token, refresh_token = await service.authenticate_user_by_id(user.id)
     
-    # Set cookies for browser-based auth
+    # Set cookies as fallback for browser-based auth
     cookie_domain = os.getenv("COOKIE_DOMAIN", None)
     cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
     
@@ -314,7 +317,7 @@ async def telegram_webapp_init(
     await sess.commit()
     logger.info(f"Authentication successful for Telegram user {user.id}")
     
-    # Return user info without tokens
+    # Return user info with tokens in response body
     return TelegramAuthResponse(
         user={
             "id": user.id,

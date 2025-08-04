@@ -1,212 +1,242 @@
 {% extends "base.html" %}
-
 {% block title %}Support Messages - Admin{% endblock %}
-
 {% block body %}
-<div class="container mt-4">
-  <h1 class="mb-4">Support Messages</h1>
+<div class="max-w-7xl mx-auto px-6 py-8">
+  <h1 class="text-3xl font-extrabold text-indigo-700 mb-6">Сообщения поддержки</h1>
   
   <!-- Filters -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <form id="filterForm" class="row g-3">
-        <div class="col-md-3">
-          <label class="form-label">Status</label>
-          <select class="form-select" id="statusFilter">
-            <option value="">All</option>
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-            <option value="resolved">Resolved</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">Type</label>
-          <select class="form-select" id="typeFilter">
-            <option value="">All</option>
-            <option value="question">Questions</option>
-            <option value="issue">Issues</option>
-            <option value="payment_request">Payment Requests</option>
-          </select>
-        </div>
-        <div class="col-md-6 d-flex align-items-end">
-          <button type="submit" class="btn btn-primary">Apply Filters</button>
-        </div>
-      </form>
-    </div>
-  </div>
-  
-  <!-- Messages Table -->
-  <div class="card">
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-hover">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Type</th>
-              <th>User</th>
-              <th>Message</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="messagesTableBody">
-            <tr>
-              <td colspan="7" class="text-center">Loading...</td>
-            </tr>
-          </tbody>
-        </table>
+  <div class="bg-white shadow rounded-xl p-6 mb-6">
+    <form id="filterForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Статус</label>
+        <select id="statusFilter" class="w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
+          <option value="">Все</option>
+          <option value="pending">Ожидает</option>
+          <option value="in_progress">В работе</option>
+          <option value="resolved">Решено</option>
+        </select>
       </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Тип</label>
+        <select id="typeFilter" class="w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
+          <option value="">Все</option>
+          <option value="question">Вопрос</option>
+          <option value="issue">Проблема</option>
+          <option value="payment_request">Запрос выплаты</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full">Применить</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Messages Table -->
+  <div class="bg-white shadow rounded-xl">
+    <div class="overflow-x-auto rounded-xl">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Тип</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Пользователь</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сообщение</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Создано</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="messagesTableBody" class="bg-white divide-y divide-gray-200">
+          <tr>
+            <td colspan="7" class="px-4 py-6 text-center text-gray-500">Загрузка...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
 
 <!-- Response Modal -->
 <div class="modal fade" id="responseModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Respond to Message</h5>
+        <h5 class="modal-title font-semibold">Ответ на сообщение</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label">Original Message</label>
-          <div class="alert alert-secondary" id="originalMessage"></div>
+      <div class="modal-body space-y-4">
+        <div>
+          <label class="form-label text-sm text-gray-600">Исходное сообщение</label>
+          <div class="p-3 bg-gray-100 rounded" id="originalMessage"></div>
         </div>
-        <div class="mb-3">
-          <label for="responseText" class="form-label">Your Response</label>
-          <textarea class="form-control" id="responseText" rows="4" required></textarea>
+        <div>
+          <label for="responseText" class="form-label text-sm text-gray-600">Ваш ответ</label>
+          <textarea class="form-control" id="responseText" rows="5" placeholder="Введите ваш ответ..." required></textarea>
         </div>
         <div class="form-check">
           <input class="form-check-input" type="checkbox" id="markResolved">
-          <label class="form-check-label" for="markResolved">
-            Mark as resolved
-          </label>
+          <label class="form-check-label" for="markResolved">Пометить как решённое</label>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="sendResponseBtn">Send Response</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-primary" id="sendResponseBtn">Отправить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Request Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title font-semibold">Запрос выплаты</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div class="space-y-1">
+          <p><span class="font-semibold">Пользователь:</span> <span id="payUser"></span></p>
+          <p><span class="font-semibold">Телефон:</span> <span id="payPhone"></span></p>
+          <p><span class="font-semibold">Банк:</span> <span id="payBank"></span></p>
+          <p><span class="font-semibold">Сумма:</span> <span id="payAmount" class="text-lg font-bold"></span></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+        <button type="button" class="btn btn-success" id="markPaidBtn">Отметить как выплачено</button>
       </div>
     </div>
   </div>
 </div>
 
 <script>
+/* Existing JS updated with nicer badge colors & message escaping */
+const STATUS_BADGES = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  in_progress: 'bg-blue-100 text-blue-800',
+  resolved: 'bg-green-100 text-green-800'
+};
+
 let currentMessageId = null;
+
+function escapeHtml(text){
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
 
 async function loadMessages() {
   const status = document.getElementById('statusFilter').value;
   const type = document.getElementById('typeFilter').value;
-  
   const params = new URLSearchParams();
   if (status) params.append('status', status);
   if (type) params.append('message_type', type);
-  
   try {
-    const response = await fetch(`/api/v1/support/messages?${params}`, {
-      credentials: 'same-origin'
-    });
-    
+    const response = await fetch(`/api/v1/support/messages?${params}`, { credentials: 'same-origin' });
     if (!response.ok) throw new Error('Failed to load messages');
-    
     const messages = await response.json();
+    messagesCache = messages;
     renderMessages(messages);
   } catch (error) {
     console.error('Error loading messages:', error);
-    document.getElementById('messagesTableBody').innerHTML = 
-      '<tr><td colspan="7" class="text-center text-danger">Error loading messages</td></tr>';
+    document.getElementById('messagesTableBody').innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-red-600">Ошибка загрузки</td></tr>';
   }
 }
 
 function renderMessages(messages) {
   const tbody = document.getElementById('messagesTableBody');
-  
   if (messages.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No messages found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-500">Сообщения не найдены</td></tr>';
     return;
   }
-  
   tbody.innerHTML = messages.map(msg => {
-    const typeIcon = msg.message_type === 'question' ? '❓' : 
-                    msg.message_type === 'issue' ? '⚠️' : '💰';
-    const statusBadge = msg.status === 'pending' ? 'bg-warning' :
-                       msg.status === 'in_progress' ? 'bg-info' : 'bg-success';
-    
+    const icon = msg.message_type === 'question' ? '❓' : msg.message_type === 'issue' ? '⚠️' : '💰';
+    const badgeClass = STATUS_BADGES[msg.status] || 'bg-gray-100 text-gray-800';
+    const safeMsg = escapeHtml(msg.message);
+    const actionBtn = msg.message_type !== 'payment_request'
+      ? `<button class="text-indigo-600 hover:text-indigo-800 text-sm font-medium" onclick="openResponseModal(${msg.id})">Ответить</button>`
+      : `<button class="text-emerald-600 hover:text-emerald-800 text-sm font-medium" onclick="openPaymentModal(${msg.id})">Детали</button>`;
     return `
-      <tr>
-        <td>#${msg.id}</td>
-        <td>${typeIcon} ${msg.message_type}</td>
-        <td>${msg.user.first || ''} ${msg.user.last || ''}<br>
-            <small class="text-muted">@${msg.user.username || 'no_username'}</small></td>
-        <td class="text-truncate" style="max-width: 300px;">${msg.message}</td>
-        <td><span class="badge ${statusBadge}">${msg.status}</span></td>
-        <td>${new Date(msg.created_at).toLocaleString()}</td>
-        <td>
-          ${msg.message_type !== 'payment_request' ? 
-            `<button class="btn btn-sm btn-primary" onclick="openResponseModal(${msg.id}, '${msg.message}')">
-              Reply
-            </button>` : ''}
-        </td>
-      </tr>
-    `;
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 font-medium text-sm text-gray-700">#${msg.id}</td>
+        <td class="px-4 py-3 text-sm">${icon}</td>
+        <td class="px-4 py-3 text-sm">${escapeHtml(msg.user.first || '')} ${escapeHtml(msg.user.last || '')}<br><span class="text-xs text-gray-500">@${escapeHtml(msg.user.username || 'no_username')}</span></td>
+        <td class="px-4 py-3 text-sm max-w-xs truncate">${safeMsg}</td>
+        <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${msg.status}</span></td>
+        <td class="px-4 py-3 text-sm">${new Date(msg.created_at).toLocaleString()}</td>
+        <td class="px-4 py-3 text-center">${actionBtn}</td>
+      </tr>`;
   }).join('');
 }
 
 function openResponseModal(messageId, message) {
   currentMessageId = messageId;
-  document.getElementById('originalMessage').textContent = message;
+  document.getElementById('originalMessage').innerHTML = escapeHtml(message);
   document.getElementById('responseText').value = '';
   document.getElementById('markResolved').checked = false;
-  
-  const modal = new bootstrap.Modal(document.getElementById('responseModal'));
-  modal.show();
+  new bootstrap.Modal(document.getElementById('responseModal')).show();
 }
 
-document.getElementById('sendResponseBtn').addEventListener('click', async () => {
-  const response = document.getElementById('responseText').value;
+async function sendResponse(){
+  const response = document.getElementById('responseText').value.trim();
   const markResolved = document.getElementById('markResolved').checked;
-  
-  if (!response.trim()) {
-    alert('Please enter a response');
-    return;
-  }
-  
-  try {
-    const res = await fetch(`/api/v1/support/messages/${currentMessageId}/respond`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
-        response: response,
-        mark_resolved: markResolved
-      })
+  if(!response){ alert('Введите текст ответа'); return; }
+  try{
+    const res = await fetch(`/api/v1/support/messages/${currentMessageId}/respond`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body:JSON.stringify({response, mark_resolved:markResolved})
     });
-    
-    if (!res.ok) throw new Error('Failed to send response');
-    
+    if(!res.ok) throw new Error('Failed');
     bootstrap.Modal.getInstance(document.getElementById('responseModal')).hide();
-    alert('Response sent successfully!');
-    loadMessages();
-  } catch (error) {
-    console.error('Error sending response:', error);
-    alert('Error sending response');
-  }
-});
+    await loadMessages();
+  }catch(err){console.error(err);alert('Ошибка отправки ответа');}
+}
 
-document.getElementById('filterForm').addEventListener('submit', (e) => {
-  e.preventDefault();
-  loadMessages();
-});
-
-// Load messages on page load
+document.getElementById('sendResponseBtn').addEventListener('click', sendResponse);
+document.getElementById('filterForm').addEventListener('submit', e=>{e.preventDefault();loadMessages();});
 document.addEventListener('DOMContentLoaded', loadMessages);
-
-// Refresh every 30 seconds
 setInterval(loadMessages, 30000);
+
+const PAYMENT_REGEX = /Запрос на выплату (\d+[.,]?\d*) ₽/i;
+let messagesCache = [];
+
+function openResponseModal(id){
+  const m = messagesCache.find(x=>x.id===id);
+  if(!m) return;
+  currentMessageId=id;
+  document.getElementById('originalMessage').innerHTML=escapeHtml(m.message);
+  new bootstrap.Modal(document.getElementById('responseModal')).show();
+}
+
+function openPaymentModal(id){
+  const m = messagesCache.find(x=>x.id===id);
+  if(!m) return;
+  currentMessageId=id;
+  const match=m.message.match(PAYMENT_REGEX);
+  const amount=match?match[1]:'';
+  document.getElementById('payUser').textContent=`${m.user.first||''} ${m.user.last||''}`;
+  document.getElementById('payAmount').textContent=amount+' ₽';
+  const phoneLine=m.message.split('\n').find(l=>l.toLowerCase().includes('телефон'))||'';
+  const bankLine=m.message.split('\n').find(l=>l.toLowerCase().includes('банк'))||'';
+  document.getElementById('payPhone').textContent=phoneLine.replace('Телефон:','').trim();
+  document.getElementById('payBank').textContent=bankLine.replace('Банк:','').trim();
+  new bootstrap.Modal(document.getElementById('paymentModal')).show();
+}
+
+document.getElementById('markPaidBtn').addEventListener('click',async()=>{
+  if(!currentMessageId) return;
+  try{
+    const res=await fetch(`/api/v1/support/messages/${currentMessageId}/respond`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body:JSON.stringify({response:'Выплата обработана вручную', mark_resolved:true})
+    });
+    if(!res.ok) throw new Error('fail');
+    bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+    await loadMessages();
+  }catch(err){alert('Ошибка');}
+});
 </script>
 {% endblock %} 

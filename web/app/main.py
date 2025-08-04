@@ -184,6 +184,10 @@ async def admin_landlords(request: Request):
 async def admin_settings(request: Request):
     return templates.TemplateResponse("admin/settings.html", {"request": request})
 
+@app.get("/admin/support", response_class=HTMLResponse, dependencies=[Depends(role_required("admin"))])
+async def admin_support(request: Request):
+    return templates.TemplateResponse("admin/support.html", {"request": request})
+
 # Partner pages
 @app.get("/api/v1/landlord", response_class=HTMLResponse, dependencies=[Depends(role_required("landlord"))])
 async def landlord_dashboard(request: Request, sess: SessionDep, user=Depends(current_user)):

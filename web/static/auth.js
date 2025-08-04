@@ -93,31 +93,22 @@ function hasCookieAuth() {
 
 /**
  * Refresh the access token using the refresh token
- * @param {boolean} useCookies - If true, rely on cookies for refresh instead of sending token
  * @returns {Promise<boolean>} True if refresh was successful
  */
-async function refreshAccessToken(useCookies = true) {
-  // If we're using cookies and have them, don't send the token in the body
+async function refreshAccessToken() {
   const refreshToken = getRefreshToken();
-  const hasCookies = hasCookieAuth();
+  
+  // If no refresh token in localStorage, can't refresh
+  if (!refreshToken) return false;
   
   try {
-    const options = {
+    const response = await fetch(REFRESH_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      // Include credentials to send cookies
-      credentials: 'include'
-    };
-    
-    // Only send refresh token in body if we don't have cookies or explicitly asked not to use them
-    if (!hasCookies || !useCookies) {
-      if (!refreshToken) return false;
-      options.body = JSON.stringify({ refresh_token: refreshToken });
-    }
-    
-    const response = await fetch(REFRESH_ENDPOINT, options);
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
     
     if (!response.ok) {
       // If refresh failed, clear tokens and return false
@@ -128,19 +119,23 @@ async function refreshAccessToken(useCookies = true) {
     const data = await response.json();
     
     // Store the new access token
-    localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
-    
-    // Update the expiry time
-    try {
-      const payload = JSON.parse(atob(data.access_token.split('.')[1]));
-      if (payload.exp) {
-        localStorage.setItem(TOKEN_EXP_KEY, payload.exp * 1000);
+    if (data.access_token) {
+      localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
+      
+      // Update the expiry time
+      try {
+        const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+        if (payload.exp) {
+          localStorage.setItem(TOKEN_EXP_KEY, payload.exp * 1000);
+        }
+      } catch (e) {
+        console.error('Error parsing refreshed JWT token:', e);
       }
-    } catch (e) {
-      console.error('Error parsing refreshed JWT token:', e);
+      
+      return true;
     }
     
-    return true;
+    return false;
   } catch (error) {
     console.error('Error refreshing token:', error);
     return false;
@@ -162,13 +157,13 @@ function clearTokens() {
  */
 async function logout() {
   try {
-    // Call the logout endpoint to clear the session cookie
+    // Call the logout endpoint with token in header
+    const accessToken = getAccessToken();
     await fetch(LOGOUT_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${getAccessToken()}`
-      },
-      credentials: 'include' // Include credentials to send cookies
+        'Authorization': accessToken ? `Bearer ${accessToken}` : ''
+      }
     });
     
     // Clear tokens from localStorage
@@ -195,22 +190,15 @@ function setupFetchInterceptor() {
   
   // Replace with our interceptor
   window.fetch = async function(resource, options = {}) {
-    // Default options to include credentials
-    options.credentials = options.credentials || 'include';
-    
-    // Try request with current token first (don't pre-refresh)
-    // This is more efficient and lets the server middleware handle refresh if needed
-    
     // Clone the options
     const newOptions = { ...options };
     
     // Initialize headers if they don't exist
     newOptions.headers = newOptions.headers || {};
     
-    // Add Authorization header if we have a token and it's not already set
-    // and not explicitly set to empty string (for cookie-only auth testing)
+    // Always add Authorization header if we have a token
     const accessToken = getAccessToken();
-    if (accessToken && !newOptions.headers.Authorization && newOptions.headers.Authorization !== '') {
+    if (accessToken) {
       newOptions.headers = {
         ...newOptions.headers,
         'Authorization': `Bearer ${accessToken}`
@@ -226,7 +214,7 @@ function setupFetchInterceptor() {
         console.log('Got 401, trying to refresh token');
         
         // Try to refresh the token
-        const refreshed = await refreshAccessToken(hasCookieAuth());
+        const refreshed = await refreshAccessToken();
         
         if (refreshed) {
           console.log('Token refreshed successfully, retrying request');
@@ -239,9 +227,9 @@ function setupFetchInterceptor() {
           
           // Return the retried request
           return originalFetch(resource, retryOptions);
-        } else if (!hasCookieAuth()) {
-          console.log('Token refresh failed and no cookie auth, redirecting to login');
-          // If refresh failed and we don't have cookie auth, redirect to login page
+        } else {
+          console.log('Token refresh failed, redirecting to login');
+          // If refresh failed, redirect to login page
           if (window.location.pathname !== '/login') {
             window.location.href = '/login';
           }
@@ -258,14 +246,13 @@ function setupFetchInterceptor() {
 
 /**
  * Check if user is authenticated
- * @returns {boolean} True if user has valid tokens or auth cookies
+ * @returns {boolean} True if user has valid tokens
  */
 function isAuthenticated() {
   const hasAccessToken = !!getAccessToken();
   const hasRefreshToken = !!getRefreshToken();
-  const hasCookies = hasCookieAuth();
   
-  return (hasAccessToken && hasRefreshToken) || hasCookies;
+  return hasAccessToken && hasRefreshToken;
 }
 
 // Initialize auth system
@@ -274,8 +261,8 @@ function initAuth() {
   
   // Setup periodic check for token expiration
   setInterval(() => {
-    if (isTokenExpired() && (getRefreshToken() || hasCookieAuth())) {
-      refreshAccessToken(hasCookieAuth());
+    if (isTokenExpired() && getRefreshToken()) {
+      refreshAccessToken();
     }
   }, 60000); // Check every minute
 }

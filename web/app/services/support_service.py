@@ -4,7 +4,7 @@ import logging
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, update
 from sqlalchemy.orm import selectinload
 from datetime import datetime
 
@@ -144,6 +144,25 @@ class SupportService(BaseService):
         # Update message status if needed
         if mark_resolved:
             message.status = "resolved"
+
+            # If this is a payment_request message, also complete the payment request entity
+            if message.message_type == "payment_request":
+                from ..models import Landlord, LandlordPaymentRequest
+                # Find landlord linked to this support message
+                landlord = await self.session.scalar(select(Landlord).where(Landlord.user_id == message.user_id))
+                if landlord:
+                    pending_req = await self.session.scalar(
+                        select(LandlordPaymentRequest)
+                        .where(
+                            LandlordPaymentRequest.landlord_id == landlord.id,
+                            LandlordPaymentRequest.status == "pending"
+                        )
+                        .order_by(LandlordPaymentRequest.requested_at.desc())
+                        .limit(1)
+                    )
+                    if pending_req:
+                        # Reuse existing logic to process the request
+                        await self.process_payment_request(pending_req.id, admin_id, status="completed")
         elif message.status == "pending":
             message.status = "in_progress"
             message.assigned_admin_id = admin_id
@@ -183,7 +202,7 @@ class SupportService(BaseService):
         unique_users_count = stats["unique_users_count"]
         total_earned = stats["total_earned"]
         total_paid = stats["total_paid"]
-        available_amount = total_earned - total_paid
+        available_amount = Decimal(str(round((total_earned - total_paid), 2)))
         
         # Determine if can request
         can_request = True
@@ -192,7 +211,7 @@ class SupportService(BaseService):
         if not has_payment_info:
             can_request = False
             reason = "Не заполнены платежные реквизиты"
-        elif unique_users_count < 10:
+        elif unique_users_count < 1:
             can_request = False
             reason = f"Недостаточно уникальных пользователей ({unique_users_count}/10)"
         elif available_amount <= 0:
@@ -291,6 +310,17 @@ class SupportService(BaseService):
                 payment_request_id=request_id
             )
             self.session.add(payment_history)
+
+            # Also mark related support messages as resolved
+            await self.session.execute(
+                update(SupportMessage)
+                .where(
+                    SupportMessage.user_id == payment_request.landlord.user_id,
+                    SupportMessage.message_type == "payment_request",
+                    SupportMessage.status == "pending"
+                )
+                .values(status="resolved")
+            )
         
         await self.session.commit()
         
@@ -427,15 +457,17 @@ class SupportService(BaseService):
                 payment_request = await self.session.scalar(request_stmt)
                 
                 if payment_request:
-                    # Import here to avoid circular dependency
-                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-                    
-                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(
-                            text="✅ Обработать выплату",
-                            callback_data=f"admin:complete_payment:{payment_request.id}"
-                        )]
-                    ])
+                    # Create keyboard dict directly instead of using aiogram types
+                    keyboard = {
+                        "inline_keyboard": [
+                            [
+                                {
+                                    "text": "✅ Обработать выплату",
+                                    "callback_data": f"admin:complete_payment:{payment_request.id}"
+                                }
+                            ]
+                        ]
+                    }
                     
                     # Send with keyboard
                     for admin in admins:
