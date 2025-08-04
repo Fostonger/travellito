@@ -211,7 +211,6 @@ async def telegram_webapp_init(
     
     # Log the raw initData (but mask most of it for security)
     init_data = payload.init_data
-    print(init_data)
     if len(init_data) > 20:
         masked_data = init_data[:10] + "..." + init_data[-10:]
         logger.info(f"Received initData: {masked_data}")
@@ -276,13 +275,23 @@ async def telegram_webapp_init(
     # Handle start_param (referral) or apt_id if provided
     apartment_id = None
     
-    # Check for apt_id parameter (from query string)
-    if data and "apt_id" in data:
+    # First check for apt_id in the request payload (sent by webapp)
+    if payload.apt_id:
+        apt_id = payload.apt_id
+        if apt_id.strip():
+            try:
+                apartment_id = int(apt_id)
+                logger.info(f"Found apartment ID from request payload: {apartment_id}")
+            except (ValueError, TypeError):
+                logger.error(f"Invalid apt_id format from payload: {apt_id}")
+    
+    # If not found in payload, check for apt_id parameter in parsed initData
+    if not apartment_id and data and "apt_id" in data:
         apt_id = data.get("apt_id")
         if apt_id and apt_id.strip():
             try:
                 apartment_id = int(apt_id)
-                logger.info(f"Found apartment ID from apt_id parameter: {apartment_id}")
+                logger.info(f"Found apartment ID from apt_id parameter in initData: {apartment_id}")
             except (ValueError, TypeError):
                 logger.error(f"Invalid apt_id format: {apt_id}")
     

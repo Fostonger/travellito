@@ -127,29 +127,31 @@ async def cmd_start(msg: Message):
     if msg.text and len(msg.text.split(maxsplit=1)) == 2:
         args = msg.text.split(maxsplit=1)[1]
         # Check if args contains apartment_id in format "apt_XXX"
-        if args.startswith("apt_"):
+        if args and args.startswith("apt_"):
             apartment_id = args[4:]  # Extract ID after "apt_" prefix
             logging.info(f"Detected apartment_id: {apartment_id} from start command")
 
-    # Preserve the raw payload (after /start) – contains QR metadata like
-    # `apt_<apartment_id>` which the WebApp will parse.
+    # Build WebApp URL with query parameters
     lang = _detect_lang(msg)
     launch_url = settings.WEBAPP_URL
+    
+    # For keyboard button WebApps, we must pass data via URL query params
+    # since Telegram doesn't pass start_param to keyboard button WebApps
     query_params = []
     
-    if args:
-        query_params.append(f"start={args}")
-    
-    # Add apartment_id as a separate parameter if available
     if apartment_id:
+        # Pass the apartment_id directly as a query parameter
         query_params.append(f"apt_id={apartment_id}")
+        logging.info(f"Adding apt_id={apartment_id} to WebApp URL")
     
+    # Add language parameter
     query_params.append(f"lang={lang}")
     
-    # Build the final URL with all query parameters
+    # Build the final URL with query parameters
     if query_params:
         launch_url += f"?{'&'.join(query_params)}"
-
+        logging.info(f"Final WebApp URL: {launch_url}")
+    
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=_("browse_btn", lang), web_app=WebAppInfo(url=launch_url))]
