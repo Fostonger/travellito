@@ -154,7 +154,18 @@ async def cmd_start(msg: Message):
     
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=_("browse_btn", lang), web_app=WebAppInfo(url=launch_url))]
+            [
+                InlineKeyboardButton(
+                    text=_("browse_btn", lang),
+                    web_app=WebAppInfo(url=launch_url),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("support_btn", lang),
+                    url="https://t.me/travellito_support_bot",
+                )
+            ],
         ]
     )
 
@@ -372,6 +383,7 @@ _MESSAGES = {
         "manager_greet": "👋 Здравствуйте, менеджер! Используйте /my_tours для рассылки сообщений туристам.",
         "lang_prompt": "🌐 Выберите язык / Choose language",
         "lang_set": "✅ Язык переключён на {lang}",
+        "support_btn": "💬 Поддержка",
     },
     "en": {
         "greet": "👋 Hi! Tap the button below to browse tours.",
@@ -379,6 +391,7 @@ _MESSAGES = {
         "manager_greet": "👋 Hi Manager! Use /my_tours to send updates to your tourists.",
         "lang_prompt": "🌐 Choose your language",
         "lang_set": "✅ Language switched to {lang}",
+        "support_btn": "💬 Support",
     },
 }
 
