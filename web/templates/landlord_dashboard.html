@@ -67,7 +67,7 @@
           <td class="px-4 py-2 whitespace-nowrap">{{ a.name or 'Apartment #' ~ a.id }}</td>
           <td class="px-4 py-2 whitespace-nowrap">{{ a.city.name if a.city else 'Не указан' }}</td>
           <td class="px-4 py-2 whitespace-nowrap">
-            <a href="/api/v1/landlord/apartments/{{ a.id }}/qr-pdf" target="_blank" class="text-emerald-600 hover:underline">Скачать</a>
+            <button type="button" data-qr-url="/api/v1/landlord/apartments/{{ a.id }}/qr-pdf" class="downloadQrBtn text-emerald-600 hover:underline">Скачать</button>
           </td>
         </tr>
         {% endfor %}
@@ -149,6 +149,13 @@
         this.disabled = false;
         this.textContent = 'Получить комиссионные';
       }
+    });
+    // Handle QR download buttons
+    document.querySelectorAll('.downloadQrBtn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        ym(103594615,'reachGoal','download-qr');
+        window.open(this.dataset.qrUrl, '_blank');
+      });
     });
   });
 </script>
