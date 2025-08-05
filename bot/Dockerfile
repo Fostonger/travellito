@@ -5,6 +5,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+ARG APP_VERSION="0.1.0"
+LABEL org.opencontainers.image.version=${APP_VERSION}
+
 WORKDIR /app
 
 COPY requirements.txt ./

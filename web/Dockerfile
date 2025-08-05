@@ -1,6 +1,9 @@
 FROM python:3.12-slim
 WORKDIR /app
 
+ARG APP_VERSION="0.1.0"
+LABEL org.opencontainers.image.version=${APP_VERSION}
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -14,8 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Refresh font cache
 RUN fc-cache -f -v
 
-COPY alembic.ini .
-COPY migrations/ ./migrations/
+# COPY alembic.ini .
+# COPY migrations/ ./migrations/
 
 COPY app/ ./app/
 COPY templates/ ./templates/

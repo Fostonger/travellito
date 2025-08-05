@@ -11,7 +11,11 @@ services:
     restart: unless-stopped
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        APP_VERSION: "${APP_VERSION:-0.1.0}"
+    image: travellito-web:${APP_VERSION:-0.1.0}
     environment:
       BOT_TOKEN:   "${BOT_TOKEN}"
       BOT_ALIAS:   "${BOT_ALIAS}"
@@ -25,7 +29,6 @@ services:
       S3_ACCESS_KEY: "minioadmin"
       S3_SECRET_KEY: "minioadminsecret"
       S3_BUCKET: "tour-images"
-      REDIS_DSN: "redis://redis:6379/0"
       METRIKA_COUNTER: "${METRIKA_COUNTER}"
       METRIKA_MP_TOKEN: "${METRIKA_MP_TOKEN}"
     depends_on: [db]
@@ -33,7 +36,11 @@ services:
     restart: unless-stopped
 
   bot:
-    build: ./bot
+    build:
+      context: ./bot
+      args:
+        APP_VERSION: "${APP_VERSION:-0.1.0}"
+    image: travellito-bot:${APP_VERSION:-0.1.0}
     environment:
       BOT_TOKEN: "${BOT_TOKEN}"
       WEBAPP_URL: "${WEBAPP_URL}"
@@ -49,6 +56,9 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile.support
+      args:
+        APP_VERSION: "${APP_VERSION:-0.1.0}"
+    image: travellito-support-bot:${APP_VERSION:-0.1.0}
     environment:
       SUPPORT_BOT_TOKEN: "${SUPPORT_BOT_TOKEN}"
       SUPPORT_BOT_WEBHOOK_URL: "${SUPPORT_BOT_WEBHOOK_URL}"
@@ -67,12 +77,6 @@ services:
   #     BOT_MODE: "manager"
   #   depends_on: [web]
   #   restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
 
   minio:
     image: minio/minio:latest

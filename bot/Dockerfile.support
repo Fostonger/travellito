@@ -12,5 +12,8 @@ COPY app/support_bot.py ./app/
 # Environment variables will be set by docker-compose
 ENV PYTHONUNBUFFERED=1
 
+ARG APP_VERSION="0.1.0"
+LABEL org.opencontainers.image.version=${APP_VERSION}
+
 # Run the support bot
 CMD ["uvicorn", "app.support_bot:app", "--host", "0.0.0.0", "--port", "8001"] 
