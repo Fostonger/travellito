@@ -71,6 +71,7 @@
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Телефон</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Кол-во</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Сумма</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Детали</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Статус</th>
                 <th class="px-4 py-2"></th>
               </tr>
@@ -83,6 +84,7 @@
                   <td class="px-4 py-2">${r.customer_phone}</td>
                   <td class="px-4 py-2 text-center">${r.total_quantity}</td>
                   <td class="px-4 py-2">${r.total_amount}</td>
+                  <td class="px-4 py-2 whitespace-nowrap">${r.categories.map(c => `${c.name} ×${c.quantity}`).join('<br/>')}</td>
                   <td class="px-4 py-2">${r.status || 'pending'}</td>
                   <td class="px-4 py-2 text-right whitespace-nowrap">
                     ${r.status === 'pending' ? `
