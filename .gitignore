@@ -5,3 +5,7 @@ bot/webapp/.env
 # Ignore .DS_Store in all directories
 **/.DS_Store
 **/node_modules
+.cursor
+.idea
+.venv
+bot/webapp/dist

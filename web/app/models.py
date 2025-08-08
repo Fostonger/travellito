@@ -228,7 +228,7 @@ class PurchaseItem(Base):
 class Apartment(Base):
     __tablename__ = "apartments"
     id           = mapped_column(Integer, primary_key=True)
-    landlord_id  = mapped_column(ForeignKey("landlords.user_id"), nullable=False)
+    landlord_id  = mapped_column(ForeignKey("landlords.id"), nullable=False)
     name         = mapped_column(String(120))
     city_id      = mapped_column(ForeignKey("cities.id"), nullable=False)
     latitude     = mapped_column(Numeric(8, 6))   # optional

@@ -558,7 +558,6 @@ class LandlordService(BaseService):
                 Purchase.ts,
                 Purchase.qty,
                 Purchase.amount,
-                literal(None).label('commission_pct'),
                 literal('apartment').label('referral_type'),
                 Apartment.name.label('apartment_name')
             )
@@ -572,12 +571,15 @@ class LandlordService(BaseService):
         
         # Union the two queries and order by timestamp
         stmt = stmt_direct.union(stmt_apt).order_by(desc(column('ts')))
-        
+
+        comm_pct = select(Setting).where(Setting.key == "default_max_commission")
+        comm_pct_res = await self.session.scalar(comm_pct)
+
         rows = await self.session.execute(stmt)
         
         details = []
         for row in rows:
-            purchase_id, ts, qty, amount, comm_pct, referral_type = row[:6]
+            purchase_id, ts, qty, amount, referral_type = row[:6]
             apartment_name = row[6] if len(row) > 6 and referral_type == 'apartment' else None
             
             detail = {
@@ -589,7 +591,7 @@ class LandlordService(BaseService):
             }
             
             if referral_type == 'direct':
-                detail["commission_pct"] = str(comm_pct or 0)
+                detail["commission_pct"] = str(comm_pct_res or 0)
             elif referral_type == 'apartment':
                 detail["apartment_name"] = apartment_name
                 

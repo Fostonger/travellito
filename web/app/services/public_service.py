@@ -175,7 +175,7 @@ class PublicService(BaseService):
         # Format output data
         out: List[Dict[str, Any]] = []
         for t in tours:
-            price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == t.id, TicketCategory.ticket_class_id == 0))
+            price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == t.id, TicketCategory.ticket_class_id == 1))
             
             # Get categories
             categories = []
@@ -597,7 +597,7 @@ class PublicService(BaseService):
             # Get the standard price from TicketCategory with id=0
             price = await self.session.scalar(
                 select(TicketCategory.price)
-                .where(TicketCategory.tour_id == tour.id, TicketCategory.ticket_class_id == 0)
+                .where(TicketCategory.tour_id == tour.id, TicketCategory.ticket_class_id == 1)
             )
             result.append({
                 "id": tour.id,
@@ -625,7 +625,7 @@ class PublicService(BaseService):
         ).where(Tour.id == tour_id)
         
         tour = await self.session.scalar(stmt)
-        tour_standart_price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == tour_id, TicketCategory.ticket_class_id == 0))
+        tour_standart_price = await self.session.scalar(select(TicketCategory.price).where(TicketCategory.tour_id == tour_id, TicketCategory.ticket_class_id == 1))
         
         if not tour:
             raise NotFoundError("Tour not found")

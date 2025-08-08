@@ -3,9 +3,9 @@ services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: app
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -20,19 +20,22 @@ services:
       BOT_TOKEN:   "${BOT_TOKEN}"
       BOT_ALIAS:   "${BOT_ALIAS}"
       SUPPORT_BOT_TOKEN: "${SUPPORT_BOT_TOKEN}"
-      DB_DSN:      "postgresql+asyncpg://admin:secret@db/app"
+      DB_DSN:      "${DB_DSN}"
       SECRET_KEY:  "${SECRET_KEY}"
       SERVER_HOST: "${SERVER_HOST}"
       WEBAPP_URL: "${WEBAPP_URL}"
-      S3_ENDPOINT: "minio:9000"
-      PUBLIC_S3_ENDPOINT: "localhost:9000"
-      S3_ACCESS_KEY: "minioadmin"
-      S3_SECRET_KEY: "minioadminsecret"
-      S3_BUCKET: "tour-images"
+      S3_ENDPOINT: "${S3_ENDPOINT}"
+      PUBLIC_S3_ENDPOINT: "${S3_ENDPOINT}"
+      S3_REGION: "ru-central1"
+      CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS}"
+      S3_SECURE: ${S3_SECURE}
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY}"
+      S3_BUCKET: "${S3_BUCKET}"
       METRIKA_COUNTER: "${METRIKA_COUNTER}"
       METRIKA_MP_TOKEN: "${METRIKA_MP_TOKEN}"
     depends_on: [db]
-    ports: ["80:8000"]
+    ports: ["8000:8000"]
     restart: unless-stopped
 
   bot:
@@ -44,7 +47,7 @@ services:
     environment:
       BOT_TOKEN: "${BOT_TOKEN}"
       WEBAPP_URL: "${WEBAPP_URL}"
-      WEB_API: "http://web:8000"
+      WEB_API: "${WEB_API}"
       PANEL_URL: "http://localhost:8000/login"
       SECRET_KEY: "${SECRET_KEY}"
       BOT_MODE: "tourist"
@@ -67,32 +70,5 @@ services:
     ports: ["8081:8001"]
     restart: unless-stopped
 
-  # manager-bot:
-  #   build: ./bot
-  #   environment:
-  #     BOT_TOKEN: "${MANAGER_BOT_TOKEN}"
-  #     WEBAPP_URL: "${WEBAPP_URL}"
-  #     WEB_API: "${WEB_API}"
-  #     SECRET_KEY: "${SECRET_KEY}"
-  #     BOT_MODE: "manager"
-  #   depends_on: [web]
-  #   restart: unless-stopped
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER:     minioadmin
-      MINIO_ROOT_PASSWORD: minioadminsecret
-    volumes:
-      - minio_data:/data
-    ports: ["9000:9000", "9001:9001"]          # 9001 → nice web console
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 3s
-      retries: 5
-
 volumes:
   pgdata:
-  minio_data:

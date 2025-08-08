@@ -6,53 +6,30 @@ from minio.error import S3Error
 ENDPOINT     = os.getenv("S3_ENDPOINT", "minio:9000")
 ACCESS_KEY   = os.getenv("S3_ACCESS_KEY", "minioadmin")
 SECRET_KEY   = os.getenv("S3_SECRET_KEY", "minioadminsecret")
-BUCKET       = os.getenv("S3_BUCKET", "tour-images")
+BUCKET       = os.getenv("S3_BUCKET", "travellito")
+
+# Optional parameters useful for external providers (e.g. Yandex Object Storage)
+# Set S3_SECURE="true" and S3_REGION="ru-central1" in your environment if needed.
+SECURE_ENV   = os.getenv("S3_SECURE", "false").lower() == "true"
+REGION       = os.getenv("S3_REGION")
+
 # Use this for external access (from browser)
 PUBLIC_ENDPOINT = os.getenv("PUBLIC_S3_ENDPOINT", "localhost:9000")
 
-client = Minio(
-    ENDPOINT,
-    access_key=ACCESS_KEY,
-    secret_key=SECRET_KEY,
-    secure=False                       # internal network → HTTP
-)
+# Choose secure flag automatically unless explicitly specified
+if not SECURE_ENV:
+    # Default to insecure when working with local MinIO, otherwise secure
+    SECURE_ENV = not ENDPOINT.startswith("minio") and not ENDPOINT.startswith("localhost")
 
-if not client.bucket_exists(BUCKET):
-    client.make_bucket(BUCKET)
+client_kwargs = {
+    "access_key": ACCESS_KEY,
+    "secret_key": SECRET_KEY,
+    "secure": SECURE_ENV,
+}
+if REGION:
+    client_kwargs["region"] = REGION
 
-# Set bucket policy to allow public read access
-try:
-    policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {"AWS": "*"},
-                "Action": ["s3:GetObject"],
-                "Resource": [f"arn:aws:s3:::{BUCKET}/*"]
-            }
-        ]
-    }
-    client.set_bucket_policy(BUCKET, json.dumps(policy))
-except Exception as e:
-    print(f"Error setting bucket policy: {str(e)}")
-
-# Always set the CORS policy (even if bucket already exists)
-try:
-    cors_config = {
-        'CORSRules': [
-            {
-                'AllowedHeaders': ['*'],
-                'AllowedMethods': ['GET', 'PUT', 'POST'],
-                'AllowedOrigins': ['*'],
-                'ExposeHeaders': ['ETag', 'Content-Length', 'Content-Type'],
-                'MaxAgeSeconds': 3600
-            }
-        ]
-    }
-    client.set_bucket_cors(BUCKET, cors_config)
-except Exception as e:
-    print(f"Error setting CORS policy: {str(e)}")
+client = Minio(ENDPOINT, **client_kwargs)
 
 def upload_image(upload_file):
     """Upload FastAPI UploadFile → returns object key"""
