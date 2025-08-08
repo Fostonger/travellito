@@ -129,6 +129,13 @@ class Tour(Base):
         secondary="tour_category_associations",
         back_populates="tour_list",
     )
+    
+    # NEW: multiple repetition rules
+    repetitions = relationship(
+        "TourRepetition",
+        back_populates="tour",
+        cascade="all, delete-orphan"
+    )
 
 class TourImage(Base):
     __tablename__ = "tour_images"
@@ -315,6 +322,17 @@ class RepetitionType(Base):
     description = mapped_column(String(255), nullable=True)
     
     tours = relationship("Tour", back_populates="repeat_type_rel")
+
+# NEW: explicit repetitions per tour
+class TourRepetition(Base):
+    __tablename__ = "tour_repetitions"
+    id = mapped_column(Integer, primary_key=True)
+    tour_id = mapped_column(ForeignKey("tours.id"), nullable=False)
+    repeat_type = mapped_column(String(16), ForeignKey("repetition_types.code"), nullable=False)
+    repeat_weekdays = mapped_column(JSON, nullable=True)  # List[int] for weekly
+    repeat_time = mapped_column(Time, nullable=False)
+
+    tour = relationship("Tour", back_populates="repetitions")
 
 # ---------- Referral Events (audit trail for referral changes) ----------
 class ReferralEvent(Base):

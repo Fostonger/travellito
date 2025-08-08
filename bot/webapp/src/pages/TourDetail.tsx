@@ -49,9 +49,15 @@ export default function TourDetail() {
   const departuresByDate = departures.reduce((acc, dep) => {
     const dateStr = getDateString(dep.starts_at);
     if (!acc[dateStr]) acc[dateStr] = [];
-    acc[dateStr].push(dep);
+    // Deduplicate by starts_at minute-level to avoid duplicates when toggling tabs
+    const key = `${dep.starts_at}`;
+    if (!acc[dateStr].some((d) => d.starts_at === dep.starts_at)) {
+      acc[dateStr].push(dep);
+    }
+    // Sort by time ascending for consistent order
+    acc[dateStr].sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
     return acc;
-  }, {});
+  }, {} as Record<string, any[]>);
   
   // Get unique dates
   const uniqueDates = Object.keys(departuresByDate);
@@ -246,7 +252,7 @@ export default function TourDetail() {
                     {departuresByDate[selectedDate].map((dep) => {
                       const time = formatTime(dep.starts_at);
                       return (
-                        <div key={dep.id} className="flex justify-between items-center border-b pb-4">
+                        <div key={(dep.id !== null && dep.id !== undefined) ? `id-${dep.id}` : `start-${dep.starts_at}`} className="flex justify-between items-center border-b pb-4">
                           <div>
                             <div className="font-bold">{time}</div>
                             <div className="text-sm text-muted-foreground">

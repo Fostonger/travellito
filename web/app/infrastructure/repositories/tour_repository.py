@@ -40,7 +40,8 @@ class TourRepository(ITourRepository):
         query = (
             select(Tour)
             .options(
-                selectinload(Tour.tour_categories)
+                selectinload(Tour.tour_categories),
+                selectinload(Tour.repetitions),
             )
             .where(Tour.id == id)
         )
@@ -59,7 +60,8 @@ class TourRepository(ITourRepository):
             select(Tour)
             .where(Tour.agency_id == agency_id)
             .options(
-                selectinload(Tour.tour_categories)
+                selectinload(Tour.tour_categories),
+                selectinload(Tour.repetitions),
             )
             .order_by(Tour.id.desc())
             .offset(skip)
@@ -74,7 +76,8 @@ class TourRepository(ITourRepository):
             select(Tour)
             .options(
                 selectinload(Tour.images),
-                selectinload(Tour.tour_categories)
+                selectinload(Tour.tour_categories),
+                selectinload(Tour.repetitions),
             )
             .where(Tour.id == tour_id)
         )

@@ -262,18 +262,33 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function formatScheduleBadge(t) {
-    // t.repeat_time comes from the server in UTC
-    // Convert it to local time for display
+    // If multiple repetitions are present, render chips for each
+    if (t.repetitions && Array.isArray(t.repetitions) && t.repetitions.length > 0) {
+      const chips = t.repetitions.map(rep => {
+        const timeToShow = fmtTime(rep.repeat_time) || '';
+        if (rep.repeat_type === 'daily') {
+          return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow}</span>`;
+        }
+        if (rep.repeat_type === 'weekly') {
+          const days = (rep.repeat_weekdays || []).map(i => weekdaysRU[i]).join(' ');
+          return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${timeToShow} — ${days}</span>`;
+        }
+        return '';
+      }).join(' ');
+      // Always add a '+' button to add more
+      return `${chips} <button class="addRepBtn inline-block px-2 rounded bg-gray-100 hover:bg-gray-200" title="Добавить">+</button>`;
+    }
+
+    // Fallback to legacy single schedule
     const timeToShow = fmtTime(t.repeat_time);
-    
     if (t.repeat_type === 'daily') {
-      return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow}</span>`;
+      return `<button class="scheduleBtn inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow || '+'}</button>`;
     }
     if (t.repeat_type === 'weekly') {
-      const days = t.repeat_weekdays.map(i => weekdaysRU[i]).join(' ');
-      return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${timeToShow} — ${days}</span>`;
+      const days = (t.repeat_weekdays || []).map(i => weekdaysRU[i]).join(' ');
+      return `<button class="scheduleBtn inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${timeToShow} — ${days}</button>`;
     }
-    return '<span class="inline-block px-2 bg-gray-100 rounded">+</span>';
+    return '<button class="scheduleBtn inline-block px-2 bg-gray-100 rounded">+</button>';
   }
   
   // Various DOM elements
@@ -419,7 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <button data-id="${tour.id}" class="ticketsBtn px-2 py-1 text-xs rounded bg-blue-100 hover:bg-blue-200">Управление</button>
         </td>
         <td class="px-6 py-4">
-          <button data-id="${tour.id}" class="scheduleBtn">${formatScheduleBadge(tour)}</button>
+          <div data-id="${tour.id}" class="scheduleCell">${formatScheduleBadge(tour)}</div>
         </td>
         <td class="px-6 py-4 text-right">
           <div class="flex justify-end space-x-2">
@@ -430,14 +445,23 @@ document.addEventListener('DOMContentLoaded', function() {
       </tr>
     `).join('');
     
-    // Add event listeners to buttons
-    toursBody.querySelectorAll('.scheduleBtn').forEach(btn => {
+    // Add event listeners for schedule actions
+    toursBody.querySelectorAll('.scheduleCell .scheduleBtn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const tour = tourRows.find(t => t.id === parseInt(btn.getAttribute('data-id')));
+        const tour = tourRows.find(t => t.id === parseInt(btn.parentElement.getAttribute('data-id')));
         openRecModal(tour);
       });
     });
     
+    toursBody.querySelectorAll('.scheduleCell .addRepBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tourId = parseInt(btn.parentElement.getAttribute('data-id'));
+        const tour = tourRows.find(t => t.id === tourId);
+        openRecModal(tour);
+      });
+    });
+    
+    // Restore tickets button click handler
     toursBody.querySelectorAll('.ticketsBtn').forEach(btn => {
       btn.addEventListener('click', () => {
         openTicketsModal(parseInt(btn.getAttribute('data-id')));
@@ -761,25 +785,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     scheduleTourIdInput.value = tour.id;
     
-    // Set initial values
-    repeatTypeSelect.value = tour.repeat_type || 'none';
-    
-    // Set time if exists - convert from UTC to local time for editing
-    if (tour.repeat_time) {
-      const localTime = fmtTime(tour.repeat_time);
-      repeatTimeInput.value = localTime;
-    } else {
-      repeatTimeInput.value = '09:00';
-    }
-    
-    // Set weekdays if exists
+    // Reset for new repetition (we don't prefill editing here)
+    repeatTypeSelect.value = 'none';
+    repeatTimeInput.value = '09:00';
     weekdayCbs.forEach(cb => cb.checked = false);
-    if (tour.repeat_weekdays && Array.isArray(tour.repeat_weekdays)) {
-      tour.repeat_weekdays.forEach(day => {
-        const cb = document.querySelector(`.weekday-cb[value="${day}"]`);
-        if (cb) cb.checked = true;
-      });
-    }
     
     // Show/hide sections based on type
     timeSection.classList.toggle('hidden', repeatTypeSelect.value === 'none');
@@ -980,7 +989,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
   
-  // Submit schedule form
+  // Submit schedule form - create a new repetition entry
   scheduleForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -996,36 +1005,31 @@ document.addEventListener('DOMContentLoaded', function() {
         .map(cb => parseInt(cb.value));
     }
     
-    // Use timezone offset directly
     const timezone = getTimezone();
-    console.log("Using timezone:", timezone);
     
     try {
-      // Create the payload
+      if (type === 'none' || !time) {
+        throw new Error('Выберите тип повторения и время');
+      }
       const payload = {
         repeat_type: type,
         repeat_weekdays: weekdays,
         repeat_time: time,
         timezone: timezone
       };
-      
-      console.log("Sending payload:", payload);
-      
-      const res = await fetch(`/api/v1/agency/tours/${tourId}`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/v1/agency/tours/${tourId}/repetitions`, {
+        method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
       });
-      
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Failed to update schedule: ${errorText}`);
+        const text = await res.text();
+        throw new Error(text || 'Failed to create repetition');
       }
-      
       scheduleModal.classList.add('hidden');
       loadTours();
     } catch (err) {
-      console.error("Schedule update error:", err);
+      console.error('Schedule create error:', err);
       alert('Error: ' + err.message);
     }
   });

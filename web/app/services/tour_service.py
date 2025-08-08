@@ -6,7 +6,7 @@ import pytz
 
 from app.core import BaseService, NotFoundError, ValidationError, BusinessLogicError
 from app.infrastructure.repositories import TourRepository
-from app.models import Tour, TourImage, TicketCategory, TicketClass, TourCategory, TourCategoryAssociation
+from app.models import Tour, TourImage, TicketCategory, TicketClass, TourCategory, TourCategoryAssociation, TourRepetition
 from app.storage import upload_image, presigned
 from sqlalchemy import select
 
@@ -262,6 +262,102 @@ class TourService(BaseService):
         # TODO: Check if tour has departures/bookings before deletion
         
         return await self.tour_repository.delete(id=tour_id)
+
+    # NEW: repetitions CRUD
+    async def list_repetitions(self, tour_id: int, agency_id: int) -> List[TourRepetition]:
+        tour = await self.tour_repository.get(tour_id)
+        if not tour or tour.agency_id != agency_id:
+            raise NotFoundError("Tour", tour_id)
+        return tour.repetitions or []
+
+    async def create_repetition(
+        self,
+        tour_id: int,
+        agency_id: int,
+        repeat_type: str,
+        repeat_time_str: str,
+        timezone: str = "UTC",
+        repeat_weekdays: Optional[List[int]] = None,
+    ) -> TourRepetition:
+        tour = await self.tour_repository.get(tour_id)
+        if not tour or tour.agency_id != agency_id:
+            raise NotFoundError("Tour", tour_id)
+        if repeat_type not in ["daily", "weekly"]:
+            raise ValidationError("Invalid repeat type", field="repeat_type")
+        if repeat_type == "weekly":
+            if not repeat_weekdays:
+                raise ValidationError("Weekly repeat requires weekdays", field="repeat_weekdays")
+            if any(day < 0 or day > 6 for day in repeat_weekdays):
+                raise ValidationError("Invalid weekday values (0-6)", field="repeat_weekdays")
+        # Parse time with timezone
+        try:
+            hour, minute = map(int, repeat_time_str.split(":"))
+            tz = self._parse_timezone(timezone)
+            today = datetime.now().date()
+            local_dt = tz.localize(datetime.combine(today, time(hour=hour, minute=minute)))
+            utc_dt = local_dt.astimezone(pytz.UTC)
+            repeat_time = utc_dt.time()
+        except (ValueError, AttributeError):
+            raise ValidationError("Invalid time format. Use HH:MM", field="repeat_time")
+        rep = TourRepetition(
+            tour_id=tour_id,
+            repeat_type=repeat_type,
+            repeat_weekdays=repeat_weekdays,
+            repeat_time=repeat_time,
+        )
+        self.session.add(rep)
+        await self.session.flush()
+        return rep
+
+    async def update_repetition(
+        self,
+        tour_id: int,
+        repetition_id: int,
+        agency_id: int,
+        *,
+        repeat_type: Optional[str] = None,
+        repeat_time_str: Optional[str] = None,
+        timezone: Optional[str] = None,
+        repeat_weekdays: Optional[List[int]] = None,
+    ) -> TourRepetition:
+        tour = await self.tour_repository.get(tour_id)
+        if not tour or tour.agency_id != agency_id:
+            raise NotFoundError("Tour", tour_id)
+        rep = next((r for r in (tour.repetitions or []) if r.id == repetition_id), None)
+        if not rep:
+            raise NotFoundError("TourRepetition", repetition_id)
+        if repeat_type is not None:
+            if repeat_type not in ["daily", "weekly"]:
+                raise ValidationError("Invalid repeat type", field="repeat_type")
+            rep.repeat_type = repeat_type
+        if repeat_type == "weekly" and repeat_weekdays is not None:
+            if not repeat_weekdays:
+                raise ValidationError("Weekly repeat requires weekdays", field="repeat_weekdays")
+            if any(day < 0 or day > 6 for day in repeat_weekdays):
+                raise ValidationError("Invalid weekday values (0-6)", field="repeat_weekdays")
+            rep.repeat_weekdays = repeat_weekdays
+        if repeat_time_str is not None:
+            tz_str = timezone or "UTC"
+            try:
+                hour, minute = map(int, repeat_time_str.split(":"))
+                tz = self._parse_timezone(tz_str)
+                today = datetime.now().date()
+                local_dt = tz.localize(datetime.combine(today, time(hour=hour, minute=minute)))
+                utc_dt = local_dt.astimezone(pytz.UTC)
+                rep.repeat_time = utc_dt.time()
+            except (ValueError, AttributeError):
+                raise ValidationError("Invalid time format. Use HH:MM", field="repeat_time")
+        await self.session.flush()
+        return rep
+
+    async def delete_repetition(self, tour_id: int, repetition_id: int, agency_id: int) -> None:
+        tour = await self.tour_repository.get(tour_id)
+        if not tour or tour.agency_id != agency_id:
+            raise NotFoundError("Tour", tour_id)
+        rep = next((r for r in (tour.repetitions or []) if r.id == repetition_id), None)
+        if not rep:
+            raise NotFoundError("TourRepetition", repetition_id)
+        await self.session.delete(rep)
     
     async def get_agency_tours(
         self,

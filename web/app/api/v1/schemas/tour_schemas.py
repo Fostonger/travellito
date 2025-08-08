@@ -3,6 +3,24 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator
 
 
+# Repetition schemas defined early to avoid forward refs
+class RepetitionIn(BaseModel):
+    repeat_type: str = Field(..., pattern="^(daily|weekly)$")
+    repeat_weekdays: Optional[List[int]] = None
+    repeat_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    timezone: Optional[str] = "UTC"
+
+class RepetitionOut(BaseModel):
+    id: int
+    repeat_type: str
+    repeat_weekdays: Optional[List[int]] = None
+    repeat_time: str
+
+    model_config = {
+        "from_attributes": True,
+    }
+
+
 class TourIn(BaseModel):
     """Schema for creating tours"""
     title: str
@@ -66,6 +84,8 @@ class TourOut(BaseModel):
     repeat_time: Optional[str] = None
     local_time: Optional[str] = None  # Add local time representation
     booking_template: Optional[str] = None  # Custom template for booking confirmations
+    # multiple repetitions, optional
+    repetitions: Optional[List[RepetitionOut]] = None
 
     model_config = {
         "from_attributes": True,
@@ -88,6 +108,23 @@ class TourOut(BaseModel):
             if hasattr(obj, "tour_categories"):
                 data["category_ids"] = [cat.id for cat in obj.tour_categories]
                 data["categories"] = [cat.name for cat in obj.tour_categories]
+            
+            # Handle repetitions if loaded
+            reps_out = []
+            if hasattr(obj, "repetitions") and obj.repetitions is not None:
+                for r in obj.repetitions:
+                    try:
+                        time_str = r.repeat_time.strftime("%H:%M") if r.repeat_time else None
+                    except Exception:
+                        time_str = None
+                    reps_out.append({
+                        "id": r.id,
+                        "repeat_type": r.repeat_type,
+                        "repeat_weekdays": r.repeat_weekdays,
+                        "repeat_time": time_str,
+                    })
+            if reps_out:
+                data["repetitions"] = reps_out
                 
             return super().model_validate(data, *args, **kwargs)
         return super().model_validate(obj, *args, **kwargs)

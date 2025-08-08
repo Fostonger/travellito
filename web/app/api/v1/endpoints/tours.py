@@ -4,6 +4,7 @@ import pytz
 from datetime import datetime, time
 
 from app.api.v1.schemas import TourIn, TourOut, TourUpdate, ImagesOut, TicketCategoryIn, TicketCategoryOut
+from app.api.v1.schemas.tour_schemas import RepetitionIn, RepetitionOut
 from app.api.v1.endpoints.utils import get_agency_id
 from app.deps import SessionDep
 from app.security import current_user, role_required
@@ -63,10 +64,8 @@ async def list_tours(
         skip=offset,
         limit=limit
     )
-
-    print(tours)
     
-    # Convert UTC times to local times
+    # Convert UTC times to local times for legacy repeat_time
     for tour in tours:
         convert_to_local_time(tour)
     
@@ -294,4 +293,90 @@ async def get_tour(
     # Convert UTC time to local time
     convert_to_local_time(tour)
     
-    return TourOut.model_validate(tour) 
+    return TourOut.model_validate(tour)
+
+# NEW: repetitions API
+@router.get("/{tour_id}/repetitions", response_model=List[RepetitionOut])
+async def list_repetitions(
+    tour_id: int,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    reps = await service.list_repetitions(tour_id, agency_id)
+    # Convert times to HH:MM for response
+    out = []
+    for r in reps:
+        out.append(RepetitionOut.model_validate({
+            "id": r.id,
+            "repeat_type": r.repeat_type,
+            "repeat_weekdays": r.repeat_weekdays,
+            "repeat_time": r.repeat_time.strftime("%H:%M") if r.repeat_time else None,
+        }))
+    return out
+
+@router.post("/{tour_id}/repetitions", response_model=RepetitionOut, status_code=status.HTTP_201_CREATED)
+async def create_repetition(
+    tour_id: int,
+    payload: RepetitionIn,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    rep = await service.create_repetition(
+        tour_id=tour_id,
+        agency_id=agency_id,
+        repeat_type=payload.repeat_type,
+        repeat_time_str=payload.repeat_time,
+        timezone=payload.timezone or "UTC",
+        repeat_weekdays=payload.repeat_weekdays,
+    )
+    await sess.commit()
+    return RepetitionOut.model_validate({
+        "id": rep.id,
+        "repeat_type": rep.repeat_type,
+        "repeat_weekdays": rep.repeat_weekdays,
+        "repeat_time": rep.repeat_time.strftime("%H:%M") if rep.repeat_time else None,
+    })
+
+@router.patch("/{tour_id}/repetitions/{repetition_id}", response_model=RepetitionOut)
+async def update_repetition(
+    tour_id: int,
+    repetition_id: int,
+    payload: RepetitionIn,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    rep = await service.update_repetition(
+        tour_id=tour_id,
+        repetition_id=repetition_id,
+        agency_id=agency_id,
+        repeat_type=payload.repeat_type,
+        repeat_time_str=payload.repeat_time,
+        timezone=payload.timezone,
+        repeat_weekdays=payload.repeat_weekdays,
+    )
+    await sess.commit()
+    return RepetitionOut.model_validate({
+        "id": rep.id,
+        "repeat_type": rep.repeat_type,
+        "repeat_weekdays": rep.repeat_weekdays,
+        "repeat_time": rep.repeat_time.strftime("%H:%M") if rep.repeat_time else None,
+    })
+
+@router.delete("/{tour_id}/repetitions/{repetition_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_repetition(
+    tour_id: int,
+    repetition_id: int,
+    sess: SessionDep,
+    user=Depends(current_user),
+):
+    agency_id = get_agency_id(user)
+    service = TourService(sess)
+    await service.delete_repetition(tour_id, repetition_id, agency_id)
+    await sess.commit()
+    return None 

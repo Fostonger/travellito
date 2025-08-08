@@ -67,6 +67,7 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Дата</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Отправление</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Турист</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Телефон</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Кол-во</th>
@@ -80,6 +81,7 @@
               ${rows.map(r => `
                 <tr class="${r.viewed ? '' : 'bg-amber-50'}">
                   <td class="px-4 py-2">${new Date(r.booking_date).toLocaleString()}</td>
+                  <td class="px-4 py-2">${r.departure_date ? new Date(r.departure_date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}</td>
                   <td class="px-4 py-2">${r.customer_name}</td>
                   <td class="px-4 py-2">${r.customer_phone}</td>
                   <td class="px-4 py-2 text-center">${r.total_quantity}</td>

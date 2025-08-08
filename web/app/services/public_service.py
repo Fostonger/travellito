@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from decimal import Decimal
 from typing import List, Dict, Any, Sequence, Optional
 from sqlalchemy import select, func, and_, or_, Time, Text
@@ -424,8 +424,9 @@ class PublicService(BaseService):
         
         now = datetime.utcnow()
         
-        # Get the tour to check its repetition type
-        tour: Tour | None = await self.session.get(Tour, tour_id)
+        # Load tour with repetitions if any
+        stmt_tour = select(Tour).options(selectinload(Tour.repetitions)).where(Tour.id == tour_id)
+        tour: Tour | None = await self.session.scalar(stmt_tour)
         if tour is None:
             raise NotFoundError("Tour not found")
         
@@ -442,6 +443,7 @@ class PublicService(BaseService):
         
         # Process existing departures
         existing_dates = set()
+        existing_datetimes = set()
         for dep in deps:
             taken = await self.departure_repository.get_seats_taken(dep.id)
             all_departures.append({
@@ -452,39 +454,64 @@ class PublicService(BaseService):
                 "is_existing": True
             })
             existing_dates.add(dep.starts_at.date())
+            existing_datetimes.add(dep.starts_at.replace(second=0, microsecond=0))
         
-        # Calculate future departures based on repetition type
-        if tour.repeat_type != "none" and tour.repeat_time:
+        # Calculate future departures based on repetition rules
+        rules: list[dict[str, Any]] = []
+        if getattr(tour, "repetitions", None):
+            for r in tour.repetitions:
+                if not r.repeat_time:
+                    continue
+                rules.append({
+                    "type": r.repeat_type,
+                    "weekdays": r.repeat_weekdays or [],
+                    "time": r.repeat_time,
+                })
+        else:
+            # Fallback to legacy single repetition on tour
+            if tour.repeat_type and tour.repeat_type != "none" and tour.repeat_time:
+                rules.append({
+                    "type": tour.repeat_type,
+                    "weekdays": tour.repeat_weekdays or [],
+                    "time": tour.repeat_time,
+                })
+        
+        if rules:
             future_days = 30
             default_capacity = 10
             if deps:
                 default_capacity = deps[0].capacity
             
-            # Generate dates based on repetition type
-            future_dates = []
-            
-            if tour.repeat_type == "daily":
-                for i in range(future_days):
-                    future_date = now.date() + timedelta(days=i)
-                    future_datetime = datetime.combine(future_date, tour.repeat_time)
-                    if future_datetime > now:
-                        future_dates.append(future_datetime)
-            
-            elif tour.repeat_type == "weekly" and tour.repeat_weekdays:
-                for i in range(future_days):
-                    future_date = now.date() + timedelta(days=i)
-                    weekday = future_date.weekday()
-                    
-                    if weekday in tour.repeat_weekdays:
-                        future_datetime = datetime.combine(future_date, tour.repeat_time)
+            future_dates: list[datetime] = []
+            for rule in rules:
+                rtype = rule["type"]
+                rtime: time = rule["time"]
+                if rtype == "daily":
+                    for i in range(future_days):
+                        future_date = now.date() + timedelta(days=i)
+                        future_datetime = datetime.combine(future_date, rtime)
                         if future_datetime > now:
                             future_dates.append(future_datetime)
+                elif rtype == "weekly":
+                    weekdays = rule["weekdays"] or []
+                    for i in range(future_days):
+                        future_date = now.date() + timedelta(days=i)
+                        weekday = future_date.weekday()
+                        if weekday in weekdays:
+                            future_datetime = datetime.combine(future_date, rtime)
+                            if future_datetime > now:
+                                future_dates.append(future_datetime)
             
-            # Filter out existing dates
-            new_dates = [date for date in future_dates if date.date() not in existing_dates]
-            
-            # Add virtual departures
-            for date in new_dates:
+            # Filter out dates that already have existing materialized departures for that date
+            # and deduplicate identical datetimes (from overlapping rules)
+            seen_virtual = set()
+            for date in future_dates:
+                dt_key = date.replace(second=0, microsecond=0)
+                if dt_key in existing_datetimes:
+                    continue
+                if dt_key in seen_virtual:
+                    continue
+                seen_virtual.add(dt_key)
                 all_departures.append({
                     "id": None,
                     "starts_at": date,
