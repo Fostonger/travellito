@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  base: '/app/',
   plugins: [
     react(),
     VitePWA({
@@ -40,7 +41,7 @@ export default defineConfig({
     host: true,
     https: false,
     port: 5173,
-    allowedHosts: ['cycles-namely-rrp-fiji.trycloudflare.com'],
+    allowedHosts: ['travellito.ru'],
     proxy: {
       // Proxy API requests to backend to avoid CORS issues with cookies
       '/api': {

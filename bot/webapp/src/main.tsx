@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './pages/App';
 import TourDetail from './pages/TourDetail';
@@ -51,6 +51,11 @@ const initialize = async () => {
 // Run initialization
 initialize();
 
+const RedirectToTours = () => {
+  const { search } = useLocation();
+  return <Navigate to={`/tours${search}`} replace />;
+};
+
 // Root component to handle Telegram WebApp initialization
 const Root = () => {
   useEffect(() => {
@@ -64,10 +69,10 @@ const Root = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename="/app">
         <ScrollRestoration />
         <Routes>
-          <Route path="/" element={<Navigate to={`/tours${location.search}`} replace />} />
+          <Route path="/" element={<RedirectToTours />} />
           <Route path="/tours" element={<App />} />
           <Route path="/tour/:id" element={<TourDetail />} />
           <Route path="/checkout" element={<Checkout />} />
