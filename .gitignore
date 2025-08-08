@@ -1,3 +1,7 @@
 bot/webapp/node_modules
 bot/webapp/.env
 .env
+.DS_Store
+# Ignore .DS_Store in all directories
+**/.DS_Store
+**/node_modules
