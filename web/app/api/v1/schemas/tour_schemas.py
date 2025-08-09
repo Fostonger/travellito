@@ -139,7 +139,7 @@ class ImagesOut(BaseModel):
 class TicketCategoryIn(BaseModel):
     """Schema for creating/updating ticket categories"""
     ticket_class_id: int
-    price: Decimal = Field(..., gt=0)
+    price: Decimal = Field(..., ge=0)
 
 
 class TicketCategoryOut(BaseModel):

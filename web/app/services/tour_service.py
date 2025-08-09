@@ -532,8 +532,8 @@ class TourService(BaseService):
             raise NotFoundError("Tour", tour_id)
         
         # Validate price
-        if price <= 0:
-            raise ValidationError("Price must be greater than 0", field="price")
+        if price < 0:
+            raise ValidationError("Price must be greater than or equal to 0", field="price")
         
         # Get ticket category
         stmt = select(TicketCategory).where(
