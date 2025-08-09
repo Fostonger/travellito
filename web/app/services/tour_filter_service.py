@@ -74,13 +74,10 @@ class TourFilterService(BaseService):
         
         # First, get all tours with recurring patterns for debugging
         if date_from is not None or date_to is not None:
-            debug_stmt = select(Tour.id, Tour.title, Tour.repeat_type, Tour.repeat_time)
-            debug_stmt = debug_stmt.where(
-                and_(
-                    Tour.repeat_type.isnot(None),
-                    Tour.repeat_type != REPETITION_NONE,
-                    Tour.repeat_time.isnot(None)
-                )
+            from ..models import TourRepetition
+            debug_stmt = (
+                select(Tour.id, Tour.title, TourRepetition.repeat_type, TourRepetition.repeat_time)
+                .join(TourRepetition, TourRepetition.tour_id == Tour.id)
             )
             result = await self.session.execute(debug_stmt)
             logger.debug("Available repeating tours:")
@@ -115,8 +112,9 @@ class TourFilterService(BaseService):
             # If we have IDs, fetch their details
             if virtual_tour_ids:
                 debug_tours = await self.session.execute(
-                    select(Tour.id, Tour.title, Tour.repeat_type)
+                    select(Tour.id, Tour.title, TourRepetition.repeat_type)
                     .where(Tour.id.in_(virtual_tour_ids))
+                    .join(TourRepetition, TourRepetition.tour_id == Tour.id)
                 )
                 for tour_id, title, repeat_type in debug_tours:
                     logger.debug(f"  Matched virtual tour: ID: {tour_id}, Title: {title}, Type: {repeat_type}")
@@ -277,24 +275,20 @@ class TourFilterService(BaseService):
         Returns:
             SQLAlchemy query for tour IDs with virtual departures
         """
-        # Start with a clean query for repeating tours - only include tours with repetition
+        # Start with tours that have repetition rows
+        from ..models import TourRepetition
         stmt = select(Tour.id)
-        stmt = stmt.where(
-            and_(
-                Tour.repeat_type.isnot(None),
-                Tour.repeat_type != REPETITION_NONE,  # Make sure we exclude tours with no repetition
-                Tour.repeat_time.isnot(None)  # Make sure we have a repeat time
-            )
-        )
+        stmt = stmt.join(TourRepetition, TourRepetition.tour_id == Tour.id)
+        stmt = stmt.where(TourRepetition.repeat_time.isnot(None))
         
         # Add a debug log for the base query before any filters
-        logger.debug(f"Base virtual departures query: tours with repetition != none and with repeat_time")
+        logger.debug(f"Base virtual departures query: tours with TourRepetition rows (has repeat_time)")
 
         # Time filtering for repeating tours
         if time_filter_start_minutes is not None or time_filter_end_minutes is not None:
             # Extract minutes since midnight from the repeat_time field
-            repeat_time_minutes = func.extract('hour', func.cast(Tour.repeat_time, Time)) * 60 + \
-                                func.extract('minute', func.cast(Tour.repeat_time, Time))
+            repeat_time_minutes = func.extract('hour', func.cast(TourRepetition.repeat_time, Time)) * 60 + \
+                                func.extract('minute', func.cast(TourRepetition.repeat_time, Time))
             
             stmt = self._apply_time_range_filter(stmt, repeat_time_minutes, time_filter_start_minutes, time_filter_end_minutes)
             logger.debug(f"Applied time filtering to virtual departures: start={time_filter_start_minutes}, end={time_filter_end_minutes}")
@@ -302,7 +296,7 @@ class TourFilterService(BaseService):
         # Date/weekday filtering for repeating tours
         if date_from or date_to:
             logger.debug(f"Filtering repeating tours with date_from={date_from}, date_to={date_to}")
-            stmt = self._apply_weekday_filter_for_repeating_tours(stmt, date_from, date_to)
+            stmt = self._apply_weekday_filter_for_repetitions(stmt, date_from, date_to)
         else:
             logger.debug("No date filters applied to virtual departures")
         
@@ -347,7 +341,7 @@ class TourFilterService(BaseService):
         
         return stmt
     
-    def _apply_weekday_filter_for_repeating_tours(self, stmt, date_from: date | None, date_to: date | None):
+    def _apply_weekday_filter_for_repetitions(self, stmt, date_from: date | None, date_to: date | None):
         """Apply weekday filter for repeating tours.
         
         Args:
@@ -396,12 +390,9 @@ class TourFilterService(BaseService):
             
             logger.debug(f"Matching weekdays for filter: {matching_weekdays}")
             
-            # For daily repeating tours, we don't need to check weekdays,
-            # they should always be included regardless of date.
-            # IMPORTANT: Return tours with either daily repetition or weekly with matching weekdays
-            
             # Daily repetition condition - these tours run every day, always include
-            daily_condition = Tour.repeat_type == REPETITION_DAILY
+            from ..models import TourRepetition
+            daily_condition = TourRepetition.repeat_type == REPETITION_DAILY
             logger.debug(f"Looking for daily repetitions with: {REPETITION_DAILY}")
             
             # Build a condition for weekly repeating tours
@@ -424,14 +415,14 @@ class TourFilterService(BaseService):
                     f'[{day_str}]'
                 ]
                 weekday_conditions.extend([
-                    func.cast(Tour.repeat_weekdays, Text).like(f'%{pattern}%')
+                    func.cast(TourRepetition.repeat_weekdays, Text).like(f'%{pattern}%')
                     for pattern in patterns
                 ])
             
             # For weekly repetitions, must check that the weekday matches
             weekly_condition = and_(
-                Tour.repeat_type == REPETITION_WEEKLY,
-                Tour.repeat_weekdays.isnot(None),
+                TourRepetition.repeat_type == REPETITION_WEEKLY,
+                TourRepetition.repeat_weekdays.isnot(None),
                 or_(*weekday_conditions) if weekday_conditions else False
             )
             logger.debug(f"Looking for weekly repetitions with: {REPETITION_WEEKLY}")
