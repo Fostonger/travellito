@@ -266,14 +266,20 @@ document.addEventListener('DOMContentLoaded', function() {
     if (t.repetitions && Array.isArray(t.repetitions) && t.repetitions.length > 0) {
       const chips = t.repetitions.map(rep => {
         const timeToShow = fmtTime(rep.repeat_time) || '';
+        let label = '';
         if (rep.repeat_type === 'daily') {
-          return `<span class="inline-block px-2 bg-emerald-100 rounded hover:bg-emerald-200 transition-colors">🗓 ${timeToShow}</span>`;
-        }
-        if (rep.repeat_type === 'weekly') {
+          label = `🗓 ${timeToShow}`;
+        } else if (rep.repeat_type === 'weekly') {
           const days = (rep.repeat_weekdays || []).map(i => weekdaysRU[i]).join(' ');
-          return `<span class="inline-block px-2 bg-amber-100 rounded hover:bg-amber-200 transition-colors">⏲ ${timeToShow} — ${days}</span>`;
+          label = `⏲ ${timeToShow} — ${days}`;
         }
-        return '';
+        // Wrap in a group so the delete button appears on hover
+        return `
+          <span class="group inline-flex items-center px-2 rounded bg-gray-100 hover:bg-gray-200 transition-colors mr-1">
+            <span>${label}</span>
+            <button type="button" class="delRepBtn ml-1 text-red-600 hover:text-red-800 opacity-0 group-hover:opacity-100 transition-opacity" data-tour-id="${t.id}" data-rep-id="${rep.id}" title="Удалить">×</button>
+          </span>
+        `;
       }).join(' ');
       // Always add a '+' button to add more
       return `${chips} <button class="addRepBtn inline-block px-2 rounded bg-gray-100 hover:bg-gray-200" title="Добавить">+</button>`;
@@ -458,6 +464,26 @@ document.addEventListener('DOMContentLoaded', function() {
         const tourId = parseInt(btn.parentElement.getAttribute('data-id'));
         const tour = tourRows.find(t => t.id === tourId);
         openRecModal(tour);
+      });
+    });
+    
+    // Add delete handlers for repetition chips
+    toursBody.querySelectorAll('.scheduleCell .delRepBtn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const tourIdAttr = btn.getAttribute('data-tour-id');
+        const tourId = tourIdAttr ? parseInt(tourIdAttr) : parseInt(btn.closest('.scheduleCell').getAttribute('data-id'));
+        const repId = btn.getAttribute('data-rep-id');
+        if (!tourId || !repId) return;
+        if (!confirm('Удалить расписание?')) return;
+        try {
+          const res = await fetch(`/api/v1/agency/tours/${tourId}/repetitions/${repId}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Failed to delete');
+          loadTours();
+        } catch (err) {
+          console.error('Error deleting repetition:', err);
+          alert('Ошибка при удалении расписания');
+        }
       });
     });
     
