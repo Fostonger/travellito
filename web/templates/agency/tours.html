@@ -985,7 +985,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const ticketClassId = ticketModalClassSel.value;
     const price = ticketModalPriceInput.value;
     
-    if (!ticketClassId || !price || isNaN(price) || parseFloat(price) <= 0) {
+    if (!ticketClassId || !price || isNaN(price) || parseFloat(price) < 0) {
       alert('Пожалуйста, выберите тип билета и введите корректную цену');
       return;
     }
