@@ -610,9 +610,36 @@ class PublicService(BaseService):
         }
     
     async def list_tours(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-        """List tours with basic information."""
+        """List tours with basic information - only tours with upcoming departures."""
+        from datetime import datetime
+        from ..models import TourRepetition
+        
+        # Get current time for filtering
+        now = datetime.utcnow()
+        
+        # Subquery for tours with upcoming materialized departures
+        upcoming_departures_subq = (
+            select(Departure.tour_id)
+            .where(Departure.starts_at >= now)
+            .subquery()
+        )
+        
+        # Subquery for tours with repetitions (virtual departures)
+        virtual_departures_subq = (
+            select(TourRepetition.tour_id)
+            .where(TourRepetition.repeat_time.isnot(None))
+            .subquery()
+        )
+        
+        # Main query: get tours that have either upcoming departures or repetitions
         stmt = (
             select(Tour)
+            .where(
+                or_(
+                    Tour.id.in_(select(upcoming_departures_subq.c.tour_id)),
+                    Tour.id.in_(select(virtual_departures_subq.c.tour_id))
+                )
+            )
             .order_by(Tour.id.desc())
             .limit(limit)
             .offset(offset)
@@ -621,7 +648,7 @@ class PublicService(BaseService):
         
         result = []
         for tour in tours:
-            # Get the standard price from TicketCategory with id=0
+            # Get the standard price from TicketCategory with ticket_class_id=1
             price = await self.session.scalar(
                 select(TicketCategory.price)
                 .where(TicketCategory.tour_id == tour.id, TicketCategory.ticket_class_id == 1)

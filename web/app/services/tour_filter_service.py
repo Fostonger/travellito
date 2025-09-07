@@ -242,6 +242,11 @@ class TourFilterService(BaseService):
         # Date filtering for real departures
         if date_from:
             stmt = stmt.where(Departure.starts_at >= date_from)
+        else:
+            # If no date_from is provided, default to current datetime to filter out past departures
+            from datetime import datetime
+            stmt = stmt.where(Departure.starts_at >= datetime.utcnow())
+            
         if date_to:
             # Add one day to include the entire end date
             next_day = date_to + timedelta(days=1)
