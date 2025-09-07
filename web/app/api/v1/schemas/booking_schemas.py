@@ -52,6 +52,7 @@ class BookingExportOut(BaseModel):
     status: str
     viewed: bool
     categories: List[Dict[str, Any]]
+    timezone_offset_min: Optional[int] = 0  # Timezone offset in minutes from UTC
 
 
 class BookingMetrics(BaseModel):

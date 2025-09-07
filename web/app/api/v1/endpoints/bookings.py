@@ -71,6 +71,37 @@ async def list_bookings(
             format=format or "json"
         )
         
+        # Add timezone offset from the tour's city
+        # We need to fetch this information separately to avoid modifying the service
+        from app.models import Purchase, Departure, Tour, City
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+        
+        # Get all booking IDs from the exported data
+        booking_ids = [b["booking_id"] for b in bookings_data]
+        
+        if booking_ids:
+            # Fetch purchases with city timezone info
+            query = (
+                select(Purchase)
+                .options(
+                    selectinload(Purchase.departure)
+                    .selectinload(Departure.tour)
+                    .selectinload(Tour.city)
+                )
+                .where(Purchase.id.in_(booking_ids))
+            )
+            result = await sess.execute(query)
+            purchases_with_city = {p.id: p for p in result.scalars().all()}
+            
+            # Add timezone offset to each booking
+            for booking in bookings_data:
+                purchase = purchases_with_city.get(booking["booking_id"])
+                if purchase and purchase.departure and purchase.departure.tour and purchase.departure.tour.city:
+                    booking["timezone_offset_min"] = purchase.departure.tour.city.timezone_offset_min or 0
+                else:
+                    booking["timezone_offset_min"] = 0
+        
         # Add missing fields required by schema
         for booking in bookings_data:
             if "commission_percent" not in booking:

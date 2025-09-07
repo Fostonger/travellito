@@ -19,6 +19,45 @@
 <script>
 (function(){
 
+  // Russian month names
+  const russianMonths = [
+    'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+  ];
+
+  // Helper function to format date with timezone offset
+  const formatDateWithOffset = (dateStr, offsetMin, showTimeOnly = false) => {
+    if (!dateStr) return '';
+    
+    const date = new Date(dateStr);
+    // Apply timezone offset (convert minutes to milliseconds)
+    const localDate = new Date(date.getTime() + (offsetMin || 0) * 60 * 1000);
+    
+    if (showTimeOnly) {
+      // Just time in HH:MM format
+      return localDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    }
+    
+    // Full date and time
+    return localDate.toLocaleString('ru-RU');
+  };
+
+  // Helper function to format date like "18 сентября, 17:00"
+  const formatDepartureDate = (dateStr, offsetMin) => {
+    if (!dateStr) return '';
+    
+    const date = new Date(dateStr);
+    // Apply timezone offset
+    const localDate = new Date(date.getTime() + (offsetMin || 0) * 60 * 1000);
+    
+    const day = localDate.getDate();
+    const month = russianMonths[localDate.getMonth()];
+    const hours = String(localDate.getHours()).padStart(2, '0');
+    const minutes = String(localDate.getMinutes()).padStart(2, '0');
+    
+    return `${day} ${month}, ${hours}:${minutes}`;
+  };
+
   const fetchBookings = async () => {
     try {
       const url = '/api/v1/agency/bookings/';
@@ -66,7 +105,7 @@
           <table class="min-w-full divide-y divide-gray-200 text-sm">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Дата</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Дата бронирования</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Отправление</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Турист</th>
                 <th class="px-4 py-2 text-left font-medium text-gray-500">Телефон</th>
@@ -80,8 +119,8 @@
             <tbody class="divide-y divide-gray-200">
               ${rows.map(r => `
                 <tr class="${r.viewed ? '' : 'bg-amber-50'}">
-                  <td class="px-4 py-2">${new Date(r.booking_date).toLocaleString()}</td>
-                  <td class="px-4 py-2">${r.departure_date ? new Date(r.departure_date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}</td>
+                  <td class="px-4 py-2">${formatDateWithOffset(r.booking_date, r.timezone_offset_min)}</td>
+                  <td class="px-4 py-2">${formatDepartureDate(r.departure_date, r.timezone_offset_min)}</td>
                   <td class="px-4 py-2">${r.customer_name}</td>
                   <td class="px-4 py-2">${r.customer_phone}</td>
                   <td class="px-4 py-2 text-center">${r.total_quantity}</td>

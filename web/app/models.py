@@ -104,7 +104,7 @@ class Tour(Base):
     # Optional additional metadata used for filtering / future geo features
     duration_minutes = mapped_column(Integer, nullable=True)
     # Normalised city FK instead of free-text string
-    city_id   = mapped_column(ForeignKey("cities.id"), nullable=True)
+    city_id   = mapped_column(ForeignKey("cities.id"))
     # -------- Recurrence ---------
     repeat_type = mapped_column(String(16), ForeignKey("repetition_types.code"), default="none", nullable=False, comment="none | daily | weekly")
     # For weekly repetition store list of weekday numbers 0=Mon .. 6=Sun
