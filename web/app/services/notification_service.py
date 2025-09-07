@@ -8,7 +8,7 @@ from sqlalchemy import select
 from datetime import datetime
 
 from ..core.base import BaseService
-from ..models import Purchase, TicketCategory, Departure, Tour, PurchaseItem, User
+from ..models import Purchase, TicketCategory, Departure, Tour, PurchaseItem, User, Apartment
 from .telegram_service import TelegramService
 
 logger = logging.getLogger(__name__)
@@ -130,4 +130,90 @@ class NotificationService(BaseService):
             )
         except Exception as e:
             logger.error(f"Failed to send message to admin {admin_tg_id}: {e}")
-            raise 
+            raise
+
+    async def notify_admins_new_booking(self, booking_id: int) -> None:
+        """Notify all admin users about a new booking via Telegram.
+        
+        Args:
+            booking_id: ID of the newly created booking
+        """
+        from sqlalchemy.orm import selectinload
+        from sqlalchemy import and_
+        
+        # Get the booking with all needed relationships
+        stmt = (
+            select(Purchase)
+            .where(Purchase.id == booking_id)
+            .options(
+                selectinload(Purchase.user),
+                selectinload(Purchase.items).selectinload(PurchaseItem.category),
+                selectinload(Purchase.departure).selectinload(Departure.tour).selectinload(Tour.city),
+                selectinload(Purchase.apartment)
+            )
+        )
+        
+        result = await self.session.execute(stmt)
+        purchase: Purchase | None = result.scalar_one_or_none()
+        
+        if not purchase:
+            logger.error("Purchase %s not found; cannot notify admins", booking_id)
+            return
+        
+        # Get all admin users with Telegram IDs
+        admin_stmt = select(User).where(
+            and_(
+                User.role == "admin",
+                User.tg_id.isnot(None)
+            )
+        )
+        admins = await self.session.scalars(admin_stmt)
+        
+        # Build notification message
+        user = purchase.user
+        user_info = f"{user.first or ''} {user.last or ''} (@{user.username or 'no_username'})"
+        
+        departure = purchase.departure
+        tour = departure.tour if departure else None
+        tour_name = tour.title if tour else "Unknown Tour"
+        city_name = tour.city.name if tour and tour.city else "Unknown City"
+        
+        # Format departure datetime
+        departure_datetime = departure.starts_at.strftime("%d.%m.%Y %H:%M") if departure else "Unknown"
+        
+        # Build items breakdown
+        items_text = []
+        for item in purchase.items:
+            cat = item.category
+            cat_name = cat.name if cat else "Unknown Category"
+            items_text.append(f"  • {cat_name}: {item.qty} шт. × {item.amount/item.qty:.2f} ₽")
+        items_block = "\n".join(items_text) if items_text else "No items"
+        
+        # Check if booking is from apartment referral
+        apartment_text = ""
+        if purchase.apartment_id and purchase.apartment:
+            apartment_text = f"\n🏠 <b>Источник:</b> Квартира #{purchase.apartment.id} ({purchase.apartment.name or 'Без названия'})"
+        
+        text = (
+            f"🎫 <b>Новое бронирование</b>\n\n"
+            f"<b>ID:</b> #{purchase.id}\n"
+            f"<b>Пользователь:</b> {user_info}\n"
+            f"<b>Телефон:</b> {user.phone or 'Не указан'}\n"
+            f"<b>Тур:</b> {tour_name}\n"
+            f"<b>Город:</b> {city_name}\n"
+            f"<b>Отправление:</b> {departure_datetime}\n"
+            f"<b>Статус:</b> {purchase.status}\n"
+            f"<b>Сумма:</b> {purchase.amount} ₽\n"
+            f"{apartment_text}\n\n"
+            f"<b>Состав заказа:</b>\n{items_block}"
+        )
+        
+        # Send to all admins
+        for admin in admins:
+            try:
+                await self.send_message_to_admin(
+                    admin_tg_id=admin.tg_id,
+                    text=text
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify admin {admin.id} about booking: {e}") 

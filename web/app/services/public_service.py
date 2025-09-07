@@ -850,6 +850,16 @@ class PublicService(BaseService):
         except Exception as exc:
             # Log but do not fail booking creation if notification fails
             logger.exception("Failed to send Telegram booking confirmation: %s", exc)
+        
+        # Notify admins about the new booking
+        try:
+            from .notification_service import NotificationService
+            notif_svc = NotificationService(self.session)
+            await notif_svc.notify_admins_new_booking(purchase.id)
+        except Exception as exc:
+            # Log but do not fail booking creation if admin notification fails
+            logger.exception("Failed to notify admins about new booking: %s", exc)
+        
         return {
             "booking_id": purchase.id,
             "total_amount": str(purchase.amount),
