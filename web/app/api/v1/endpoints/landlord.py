@@ -31,12 +31,17 @@ try:
     import qrcode
     from qrcode.image.pil import PilImage
     from reportlab.pdfgen import canvas as _canvas
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, A6
     from reportlab.lib.utils import ImageReader
+    from reportlab.lib.units import mm
     from PIL import Image as PILImage
     HAS_QR_SUPPORT = True
 except ImportError:
     HAS_QR_SUPPORT = False
+
+# A6 dimensions in points (for PDF generation)
+A6_WIDTH_PT = A6[0] if HAS_QR_SUPPORT else 297.64   # 105mm = 297.64 points
+A6_HEIGHT_PT = A6[1] if HAS_QR_SUPPORT else 419.53  # 148mm = 419.53 points
 
 router = APIRouter(
     tags=["landlord"],
@@ -65,6 +70,72 @@ def _bot_link(payload: str) -> str:
     server_host = os.getenv("SERVER_HOST", "http://localhost:8000")
     # Create absolute URL to our redirect endpoint
     return f"{server_host}/api/v1/public/redirect/apartment/{apt_id}"
+
+
+def _resize_to_a6(img: "PILImage.Image", target_dpi: int = 300) -> "PILImage.Image":
+    """
+    Resize and center-crop image to A6 format (105mm x 148mm) preserving quality.
+    Uses high-quality LANCZOS resampling to avoid blurriness.
+
+    Args:
+        img: PIL Image to resize
+        target_dpi: Target DPI for the output image (default 300 for print quality)
+
+    Returns:
+        PIL Image resized to A6 dimensions at specified DPI
+    """
+    # A6 dimensions in mm: 105 x 148
+    a6_width_mm = 105
+    a6_height_mm = 148
+
+    # Calculate target pixel dimensions at specified DPI
+    target_width = int(a6_width_mm * target_dpi / 25.4)   # ~1240 pixels at 300 DPI
+    target_height = int(a6_height_mm * target_dpi / 25.4)  # ~1748 pixels at 300 DPI
+
+    # A6 aspect ratio
+    target_aspect = target_width / target_height
+
+    # Original image dimensions
+    orig_width, orig_height = img.size
+    orig_aspect = orig_width / orig_height
+
+    # Determine how to crop/scale to match A6 aspect ratio (center crop)
+    if orig_aspect > target_aspect:
+        # Image is wider than A6 - crop sides
+        new_width = int(orig_height * target_aspect)
+        left = (orig_width - new_width) // 2
+        img = img.crop((left, 0, left + new_width, orig_height))
+    elif orig_aspect < target_aspect:
+        # Image is taller than A6 - crop top/bottom
+        new_height = int(orig_width / target_aspect)
+        top = (orig_height - new_height) // 2
+        img = img.crop((0, top, orig_width, top + new_height))
+
+    # Resize to target dimensions using high-quality LANCZOS resampling
+    img = img.resize((target_width, target_height), PILImage.Resampling.LANCZOS)
+
+    return img
+
+
+def _draw_cut_lines(pdf, page_width: float, page_height: float, a6_width: float, a6_height: float):
+    """
+    Draw thin cut lines between A6 images on the A4 page.
+
+    Args:
+        pdf: ReportLab canvas
+        page_width: A4 page width in points
+        page_height: A4 page height in points
+        a6_width: A6 width in points
+        a6_height: A6 height in points
+    """
+    pdf.setStrokeColorRGB(0.7, 0.7, 0.7)  # Light gray
+    pdf.setLineWidth(0.5)  # Thin line
+
+    # Vertical cut line (center)
+    pdf.line(a6_width, 0, a6_width, page_height)
+
+    # Horizontal cut line (center)
+    pdf.line(0, a6_height, page_width, a6_height)
 
 
 # Apartment Management
@@ -295,74 +366,136 @@ async def apartments_qr_pdf(
     
     # Generate PDF with template if available
     if qr_template_settings and qr_template_url:
-        # Template-based QR codes
+        # Template-based QR codes - 4 A6 images per A4 page
         try:
             from ....storage import presigned, client, BUCKET
             import tempfile
-            
-            # Use template settings for QR placement
-            qr_pos_x = int(qr_template_settings.get('position_x', 50))
-            qr_pos_y = int(qr_template_settings.get('position_y', 50))
-            qr_width = int(qr_template_settings.get('width', 200))
-            qr_height = int(qr_template_settings.get('height', 200))
-            
+
+            # Get template settings for QR placement (in original image pixels)
+            orig_qr_pos_x = int(qr_template_settings.get('position_x', 50))
+            orig_qr_pos_y = int(qr_template_settings.get('position_y', 50))
+            orig_qr_width = int(qr_template_settings.get('width', 200))
+            orig_qr_height = int(qr_template_settings.get('height', 200))
+
             # Get template image directly from S3, save to a temp file first
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
                 client.fget_object(BUCKET, qr_template_url, temp_file.name)
                 template_path = temp_file.name
-            
-            # Load the image from the temp file
+
+            # Load the image from the temp file at full quality
             template_pil = PILImage.open(template_path)
-            template_width, template_height = template_pil.size
-            
-            # Convert PIL image to a format ReportLab can use
-            template_io = io.BytesIO()
-            template_pil.save(template_io, format="PNG")
-            template_io.seek(0)
-            
-            # Generate one page per apartment with template background
+            orig_width, orig_height = template_pil.size
+
+            # Convert to RGBA if not already (for transparency support)
+            if template_pil.mode != 'RGBA':
+                template_pil = template_pil.convert('RGBA')
+
+            # Resize template to A6 format at 300 DPI while preserving quality
+            # This handles center-cropping if aspect ratio doesn't match A6
+            template_a6 = _resize_to_a6(template_pil, target_dpi=300)
+            a6_pixel_width, a6_pixel_height = template_a6.size
+
+            # Calculate scale factor for QR position (from original to A6)
+            scale_x = a6_pixel_width / orig_width
+            scale_y = a6_pixel_height / orig_height
+
+            # Calculate proportional QR position and size in A6 pixels
+            qr_pos_x_px = int(orig_qr_pos_x * scale_x)
+            qr_pos_y_px = int(orig_qr_pos_y * scale_y)
+            qr_width_px = int(orig_qr_width * scale_x)
+            qr_height_px = int(orig_qr_height * scale_y)
+
+            # Pre-generate composite images for each apartment
+            composite_images = []
             for apt in apartments:
                 payload = f"apt_{apt.id}"
                 url = _bot_link(payload)
-                
-                # Create QR code
-                qr_img = qrcode.make(url, image_factory=PilImage)
-                qr_io = io.BytesIO()
-                qr_img.save(qr_io, format="PNG")
-                qr_io.seek(0)
-                
-                # Add QR code at specified position
-                pdf.drawImage(
-                    ImageReader(qr_io), 
-                    qr_pos_x, 
-                    template_height - qr_pos_y - qr_height,  # Adjust Y coordinate from top-left to bottom-left
-                    width=qr_width, 
-                    height=qr_height
+
+                # Create high-resolution QR code
+                qr = qrcode.QRCode(
+                    version=None,
+                    error_correction=qrcode.constants.ERROR_CORRECT_H,
+                    box_size=10,
+                    border=2,
                 )
-                
-                # Add background template
-                # Draw the template first (as background) to respect transparency
-                pdf.drawImage(
-                    ImageReader(template_io), 
-                    0, 0, 
-                    width=template_width, 
-                    height=template_height,
-                    mask='auto'  # Use mask='auto' to preserve alpha transparency
-                )
-                
-                # New page for next apartment
-                if apt != apartments[-1]:
+                qr.add_data(url)
+                qr.make(fit=True)
+                qr_img = qr.make_image(image_factory=PilImage, fill_color="black", back_color="white")
+
+                # Resize QR code to target size with high quality
+                qr_img = qr_img.resize((qr_width_px, qr_height_px), PILImage.Resampling.LANCZOS)
+
+                # Create composite: paste QR onto template copy
+                composite = template_a6.copy()
+                # Convert QR to RGBA for proper pasting
+                if qr_img.mode != 'RGBA':
+                    qr_img = qr_img.convert('RGBA')
+                composite.paste(qr_img, (qr_pos_x_px, qr_pos_y_px))
+
+                composite_images.append(composite)
+
+            # Clean up temp file
+            os.unlink(template_path)
+
+            # Layout: 4 A6 images per A4 page (2 columns x 2 rows)
+            # A4 in points: 595.28 x 841.89
+            # A6 in points: 297.64 x 419.53
+            # So 2 A6 fit horizontally (297.64 * 2 = 595.28)
+            # And 2 A6 fit vertically (419.53 * 2 = 839.06, slightly less than 841.89)
+
+            page_w, page_h = A4
+            a6_w_pt = A6_WIDTH_PT
+            a6_h_pt = A6_HEIGHT_PT
+
+            # Grid positions for 4 A6 images on A4 (bottom-left origin)
+            # Row 1 (top): y = a6_h_pt, Row 0 (bottom): y = 0
+            # Col 0 (left): x = 0, Col 1 (right): x = a6_w_pt
+            positions = [
+                (0, a6_h_pt),           # Top-left
+                (a6_w_pt, a6_h_pt),     # Top-right
+                (0, 0),                  # Bottom-left
+                (a6_w_pt, 0),           # Bottom-right
+            ]
+
+            idx = 0
+            while idx < len(composite_images):
+                # Draw cut lines first (so they appear behind images if needed)
+                _draw_cut_lines(pdf, page_w, page_h, a6_w_pt, a6_h_pt)
+
+                # Place up to 4 images on this page
+                for pos_idx, (x, y) in enumerate(positions):
+                    if idx >= len(composite_images):
+                        break
+
+                    # Convert composite image to bytes for ReportLab
+                    img_io = io.BytesIO()
+                    composite_images[idx].save(img_io, format="PNG", optimize=False)
+                    img_io.seek(0)
+
+                    # Draw image at position with exact A6 dimensions
+                    pdf.drawImage(
+                        ImageReader(img_io),
+                        x, y,
+                        width=a6_w_pt,
+                        height=a6_h_pt,
+                        preserveAspectRatio=False
+                    )
+
+                    idx += 1
+
+                # Start new page if more images remain
+                if idx < len(composite_images):
                     pdf.showPage()
-                    template_io.seek(0)  # Reset template IO for next page
-        
+
         except Exception as e:
             # Fall back to standard QR code generation if template fails
             print(f"Error using QR template: {str(e)}")
+            import traceback
+            traceback.print_exc()
             _generate_standard_qr_pdf(pdf, apartments, font_name)
             # Clean up temporary file if it exists
             if 'template_path' in locals():
                 try:
-                    import os
                     os.unlink(template_path)
                 except Exception:
                     pass
